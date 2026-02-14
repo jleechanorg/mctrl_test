@@ -77,10 +77,10 @@ cp -r ~/.openclaw ~/Library/Mobile\ Documents/com~apple~CloudDocs/openclaw-backu
 ```bash
 # Create encrypted backup
 tar -czf - ~/.openclaw ~/Library/LaunchAgents/ai.openclaw.gateway.plist | \
-  openssl enc -aes-256-cbc -salt -out ~/openclaw-encrypted-backup.tar.gz.enc
+  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 -out ~/openclaw-encrypted-backup.tar.gz.enc
 
 # To restore encrypted backup:
-openssl enc -aes-256-cbc -d -in ~/openclaw-encrypted-backup.tar.gz.enc | \
+openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 -in ~/openclaw-encrypted-backup.tar.gz.enc | \
   tar -xzf - -C ~
 ```
 
@@ -122,7 +122,8 @@ cd ~/.openclaw
 git init
 echo "credentials/" >> .gitignore
 echo "logs/" >> .gitignore
-git add openclaw.json *.md *.sh
+echo "openclaw.json" >> .gitignore
+git add *.md *.sh
 git commit -m "OpenClaw configuration backup"
 
 # Push to private repo
@@ -138,7 +139,7 @@ git push -u origin main
 ```bash
 # Add to crontab (already configured via health-check)
 # Backups run daily at 2 AM
-0 2 * * * tar -czf ~/.openclaw/backups/backup-$(date +\%Y\%m\%d).tar.gz ~/.openclaw/
+0 2 * * * tar --exclude ~/.openclaw/backups -czf ~/.openclaw/backups/backup-$(date +\%Y\%m\%d).tar.gz ~/.openclaw/
 ```
 
 ---
@@ -148,7 +149,7 @@ git push -u origin main
 If you lose your Slack tokens:
 
 **Bot Token:**
-1. Go to: https://api.slack.com/apps/${SLACK_APP_ID}/install-on-team
+1. Go to: https://api.slack.com/apps/{SLACK_APP_ID}/install-on-team
 2. Reinstall app (or view existing installation)
 3. Copy Bot Token again
 

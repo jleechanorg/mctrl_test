@@ -12,18 +12,18 @@
 - **File:** `~/Library/LaunchAgents/ai.openclaw.gateway.plist`
 - **RunAtLoad:** `true` ← Starts automatically on macOS boot
 - **KeepAlive:** `true` ← Automatically restarts if crashes
-- **Current Status:** Loaded and running (PID: 35166)
+- **Current Status:** Loaded and running (PID: XXXXX)
 
 ### 2. **Startup Verification: LaunchAgent**
 - **File:** `~/Library/LaunchAgents/ai.openclaw.startup-check.plist`
 - **Purpose:** Sends WhatsApp confirmation after each login/restart
-- **Sends message to:** `${OPENCLAW_WHATSAPP_TARGET}`
+- **Sends message to:** `OPENCLAW_WHATSAPP_TARGET`
 - **Logs:** `~/.openclaw/logs/startup-check.log`
 
 ### 3. **Health Monitoring: Crontab**
 - **Schedule:** Every 5 minutes
 - **Script:** `~/.openclaw/health-check.sh`
-- **Purpose:** Monitors gateway health and auto-recovers if needed
+- **Purpose:** Monitors gateway health and auto-recovery if needed
 - **Logs:** `~/.openclaw/logs/health-check.log`
 
 ---
@@ -35,7 +35,7 @@
 launchctl list | grep openclaw
 ```
 **Expected Output:**
-```
+```text
 [PID]  0  ai.openclaw.gateway
 [PID]  0  ai.openclaw.startup-check
 ```
@@ -45,7 +45,7 @@ launchctl list | grep openclaw
 openclaw gateway status
 ```
 **Expected Output:**
-```
+```text
 Runtime: running (pid XXXXX)
 RPC probe: ok
 ```
@@ -55,12 +55,12 @@ RPC probe: ok
 openclaw channels list
 ```
 **Expected Output:**
-```
+```text
 WhatsApp default: linked, enabled
 ```
 
 ### Test 4: Check WhatsApp (You'll Receive a Message!)
-After each restart/login, you should automatically receive:
+After each restart/login, you should receive confirmation if `OPENCLAW_WHATSAPP_TARGET` is set:
 > 🚀 OpenClaw auto-started successfully (PID: XXXXX) ✅
 
 ---
@@ -205,11 +205,11 @@ echo "" && openclaw channels list
 ✅ **LaunchAgent installed** with RunAtLoad=true, KeepAlive=true
 ✅ **Startup verification** configured (sends WhatsApp confirmation)
 ✅ **Health monitoring** via cron (every 5 minutes)
-✅ **WhatsApp connected** to `${OPENCLAW_WHATSAPP_TARGET}`
+✅ **WhatsApp notification** configured via `OPENCLAW_WHATSAPP_TARGET`
 ✅ **Auto-recovery** enabled (restarts on crash)
 ✅ **Version:** v2026.2.12 (latest)
 
-**Next Restart:** You will automatically receive a WhatsApp message confirming OpenClaw started successfully! 🚀
+**Next Restart:** You will receive a WhatsApp message confirming OpenClaw started successfully if `OPENCLAW_WHATSAPP_TARGET` is set. 🚀
 
 ---
 

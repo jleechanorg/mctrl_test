@@ -1,7 +1,7 @@
 # Slack Setup Guide for OpenClaw
 
-**App ID:** YOUR_SLACK_APP_ID
-**Client ID:** YOUR_SLACK_CLIENT_ID
+**App ID:** `YOUR_SLACK_APP_ID`
+**Client ID:** `YOUR_SLACK_CLIENT_ID`
 **Status:** App created, awaiting OAuth installation
 
 ---
@@ -45,7 +45,7 @@ Click **"Bot Token Scopes"** and add:
 Run the setup script with your bot token:
 
 ```bash
-~/.openclaw/slack-setup.sh [REDACTED]
+./slack-setup.sh xoxb-YOUR-TOKEN-HERE
 ```
 
 **With Socket Mode (recommended):**
@@ -54,7 +54,7 @@ Run the setup script with your bot token:
 3. Generate token with `connections:write` scope
 4. Run:
 ```bash
-~/.openclaw/slack-setup.sh [REDACTED] xapp-YOUR-APP-TOKEN
+./slack-setup.sh xoxb-YOUR-BOT-TOKEN xapp-YOUR-APP-TOKEN
 ```
 
 ---
@@ -80,18 +80,16 @@ If the script doesn't work, configure manually:
 ```bash
 openclaw channels add \
   --channel slack \
-  --account default \
-  --bot-token [REDACTED]
+  --account default
 ```
 
 With Socket Mode:
 ```bash
 openclaw channels add \
   --channel slack \
-  --account default \
-  --bot-token [REDACTED] \
-  --app-token xapp-YOUR-APP-TOKEN
+  --account default
 ```
+
 
 ---
 

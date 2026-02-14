@@ -110,7 +110,24 @@
     }
   },
   "messages": {
-    "ackReactionScope": "group-mentions"
+    "ackReactionScope": "group-mentions",
+    "tts": {
+      "auto": "always",
+      "provider": "edge",
+      "edge": {
+        "enabled": true,
+        "voice": "en-US-MichelleNeural",
+        "lang": "en-US",
+        "outputFormat": "audio-24khz-48kbitrate-mono-mp3",
+        "rate": "+10%",
+        "pitch": "-5%"
+      },
+      "elevenlabs": {
+        "baseUrl": "https://api.elevenlabs.io",
+        "voiceId": "<SET_YOUR_11LABS_VOICE_ID_HERE>",
+        "modelId": "eleven_multilingual_v2"
+      }
+    }
   },
   "commands": {
     "native": "auto",
@@ -121,7 +138,7 @@
       "dmPolicy": "allowlist",
       "selfChatMode": true,
       "allowFrom": [
-        "+6502965127"
+        "+<YOUR_WHATSAPP_NUMBER>"
       ],
       "groupPolicy": "allowlist",
       "mediaMaxMb": 50,
