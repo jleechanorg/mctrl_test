@@ -99,7 +99,8 @@ for root, dirs, files in os.walk(SRC_DIR):
         rel = src_file.relative_to(SRC_DIR)
         dst_file = DST_DIR / rel
 
-        if src_file.suffix.lower() in EXCLUDE_SUFFIXES:
+        # Check if filename ends with any excluded suffix (handles both simple and compound suffixes like .log.1)
+        if any(src_file.name.lower().endswith(suffix) for suffix in EXCLUDE_SUFFIXES):
             continue
 
         if path_is_sensitive(src_file) and (is_binary(src_file) or src_file.suffix.lower() in {
@@ -119,12 +120,17 @@ for root, dirs, files in os.walk(SRC_DIR):
         try:
             text = src_file.read_text(encoding="utf-8")
         except Exception:
+            # Try latin-1 which accepts all byte values, still applying redaction
             try:
-                shutil.copy2(src_file, dst_file)
-            except (FileNotFoundError, OSError):
-                # Skip files that disappear during backup
-                pass
-            continue
+                text = src_file.read_text(encoding="latin-1")
+            except Exception:
+                # Only copy verbatim if even latin-1 fails
+                try:
+                    shutil.copy2(src_file, dst_file)
+                except (FileNotFoundError, OSError):
+                    # Skip files that disappear during backup
+                    pass
+                continue
 
         new = text
         for pattern in PATTERNS:
