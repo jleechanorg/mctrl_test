@@ -50,6 +50,11 @@ if ! grep -Fq "$CRON_MARKER" "$CRON_TMP"; then
   } >> "$CRON_TMP"
   crontab "$CRON_TMP"
   echo "Installed cron job: every 4 hours"
+elif ! grep -Fq "$CRON_CMD" "$CRON_TMP"; then
+  # Marker exists but path is stale; replace the cron line
+  sed -i.bak "/^0 \*\/4 \* \* \*/s|.*|0 */4 * * * $CRON_CMD|" "$CRON_TMP"
+  crontab "$CRON_TMP"
+  echo "Updated cron job path to $CRON_CMD"
 else
   echo "Cron job already present; skipping cron install."
 fi

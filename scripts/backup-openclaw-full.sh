@@ -157,5 +157,5 @@ if git diff --quiet --cached -- .openclaw-backups; then
   exit 0
 fi
 
-git commit -m "chore: backup ~/.openclaw snapshot $SNAPSHOT_TS"
+git commit -m "chore: backup ~/.openclaw snapshot $SNAPSHOT_TS" -- .openclaw-backups/
 

@@ -10,5 +10,6 @@ TS="$(date +"%Y-%m-%d %H:%M:%S")"
 {
   echo "[$TS] Starting ~/.openclaw backup"
   "$BACKUP_SCRIPT"
+  TS="$(date +"%Y-%m-%d %H:%M:%S")"
   echo "[$TS] Backup complete"
 } >> "$LOG_DIR/openclaw-backup.log" 2>&1
