@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
       <string>/bin/bash</string>
-      <string>/Users/jleechan/.openclaw/workspace/openclaw/scripts/run-openclaw-backup.sh</string>
+      <string>@REPO_ROOT@/scripts/run-openclaw-backup.sh</string>
     </array>
 
     <key>StartInterval</key>
@@ -18,12 +18,12 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/jleechan/Library/Logs/openclaw-backup/stdout.log</string>
+    <string>@HOME@/Library/Logs/openclaw-backup/stdout.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/jleechan/Library/Logs/openclaw-backup/stderr.log</string>
+    <string>@HOME@/Library/Logs/openclaw-backup/stderr.log</string>
 
     <key>WorkingDirectory</key>
-    <string>/Users/jleechan/.openclaw/workspace/openclaw</string>
+    <string>@REPO_ROOT@</string>
   </dict>
 </plist>

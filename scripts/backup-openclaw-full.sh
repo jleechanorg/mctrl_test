@@ -16,7 +16,7 @@ SNAPSHOT_DIR="$SNAP_BASE/$SNAPSHOT_TS"
 mkdir -p "$SNAP_BASE"
 mkdir -p "$SNAPSHOT_DIR"
 
-export SRC_DIR SNAPSHOT_DIR
+export SRC_DIR SNAPSHOT_DIR SNAPSHOT_TS
 python3 - <<'PY'
 from pathlib import Path
 import os
@@ -53,13 +53,13 @@ EXCLUDE_SUFFIXES = {
 
 PATTERNS = [
     re.compile(r"(?im)^[\t ]*(?:export[\t ]+)?(?:[A-Za-z_][A-Za-z0-9_]*_?(?:KEY|KEYS?|TOKEN|SECRET|PASS|PASSWORD)|API[_-]?KEY|CLIENT_SECRET|CLIENTID|CLIENT_ID|CLIENT_SECRET)\s*[:=].+$"),
-    re.compile(r"(?i)\\b(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|bearer\\s+token)\\b[^\n]*"),
+    re.compile(r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|bearer\s+token)\b[^\n]*"),
     re.compile(r"(?i)\"(?:botToken|appToken|token|apiKey|secret|password)\"\s*:\s*\"[^\"]+\""),
-    re.compile(r"(?i)\b(sk-[A-Za-z0-9]{10,}|xox[baprs]-[0-9A-Za-z\\-]{10,}|ghp_[A-Za-z0-9]{20,})\b"),
+    re.compile(r"(?i)\b(sk-[A-Za-z0-9]{10,}|xox[baprs]-[0-9A-Za-z\-]{10,}|ghp_[A-Za-z0-9]{20,})\b"),
     re.compile(r"(?i)xai-[A-Za-z0-9]{20,}"),
-    re.compile(r"(?i)https://hooks\\.slack\\.com/services/[A-Z0-9/]+"),
-    re.compile(r"(?i)pypi-[A-Za-z0-9_\\-]{60,}"),
-    re.compile(r"(?i)https?://[^:\\s]+:[^@\\s]+@"),
+    re.compile(r"(?i)https://hooks\.slack\.com/services/[A-Z0-9/]+"),
+    re.compile(r"(?i)pypi-[A-Za-z0-9_\-]{60,}"),
+    re.compile(r"(?i)https?://[^:\s]+:[^@\s]+@"),
 ]
 
 
@@ -136,9 +136,9 @@ for root, dirs, files in os.walk(SRC_DIR):
         except Exception:
             pass
 
-# Write manifest and redaction log in each snapshot for auditability
+# Write manifest in each snapshot for auditability
 (DST_DIR / "REDACTION_MANIFEST.txt").write_text(
-    "Source: {}\nTimestamp: {}\nStatus: redacted+mirrored\n".format(SRC_DIR, os.environ["SNAPSHOT_DIR"])
+    "Source: {}\nTimestamp: {}\nStatus: redacted+mirrored\n".format(SRC_DIR, os.environ["SNAPSHOT_TS"])
 )
 PY
 

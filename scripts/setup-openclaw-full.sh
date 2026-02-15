@@ -27,18 +27,12 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! command -v rsync >/dev/null 2>&1; then
-    echo "ERROR: rsync is required but not installed" >&2
-    exit 1
-fi
-
 if ! command -v git >/dev/null 2>&1; then
     echo "ERROR: git is required but not installed" >&2
     exit 1
 fi
 
 echo "  ✓ python3 found: $(python3 --version)"
-echo "  ✓ rsync found: $(rsync --version | head -1)"
 echo "  ✓ git found: $(git --version)"
 echo
 

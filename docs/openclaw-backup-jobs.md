@@ -28,7 +28,7 @@ The backup script mirrors `~/.openclaw` contents and performs in-band redaction/
 ## Install recurring jobs
 
 ```bash
-cd /Users/jleechan/.openclaw/workspace/openclaw
+cd ~/.openclaw/workspace/openclaw
 ./scripts/install-openclaw-backup-jobs.sh
 ```
 
@@ -50,6 +50,6 @@ crontab -l | grep openclaw-backup
 
 ## Logs
 
-- `/Users/jleechan/Library/Logs/openclaw-backup/openclaw-backup.log`
-- `/Users/jleechan/Library/Logs/openclaw-backup/stdout.log`
-- `/Users/jleechan/Library/Logs/openclaw-backup/stderr.log`
+- `~/Library/Logs/openclaw-backup/openclaw-backup.log`
+- `~/Library/Logs/openclaw-backup/stdout.log`
+- `~/Library/Logs/openclaw-backup/stderr.log`
