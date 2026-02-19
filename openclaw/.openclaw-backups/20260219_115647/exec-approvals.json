@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "socket": {
+    "path": "/Users/jleechan/.openclaw/exec-approvals.sock",
+    [REDACTED]
+  },
+  "defaults": {
+    "security": "full",
+    "ask": "off",
+    "askFallback": "full",
+    "autoAllowSkills": true
+  },
+  "agents": {
+    "main": {
+      "security": "full",
+      "ask": "off"
+    }
+  }
+}

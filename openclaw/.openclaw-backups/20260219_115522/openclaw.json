@@ -1,0 +1,346 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.2.12",
+    "lastTouchedAt": "2026-02-16T02:50:02.139Z"
+  },
+  "env": {
+    "GOOGLE_CLOUD_PROJECT": "infinite-zephyr-487405-d0",
+    "GOG_KEYRING_PASSWORD": "openclaw-gog-2026"
+  },
+  "wizard": {
+    "lastRunAt": "2026-02-14T06:15:06.716Z",
+    "lastRunVersion": "2026.2.12",
+    "lastRunCommand": "doctor",
+    "lastRunMode": "local"
+  },
+  "auth": {
+    "profiles": {
+      "openai-codex:default": {
+        "provider": "openai-codex",
+        "mode": "oauth"
+      },
+      "openai:default": {
+        "provider": "openai",
+        "mode": "oauth"
+      },
+      "minimax-portal:default": {
+        "provider": "minimax-portal",
+        "mode": "oauth"
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "minimax-portal/MiniMax-M2.5"
+      },
+      "workspace": "/Users/jleechan",
+      "compaction": {
+        "mode": "safeguard"
+      },
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8
+      },
+      "sandbox": {
+        "mode": "off",
+        "workspaceAccess": "rw"
+      },
+      "models": {
+        "minimax-portal/MiniMax-M2.1": {
+          "alias": "minimax-m2.1"
+        },
+        "minimax-portal/MiniMax-M2.5": {
+          "alias": "minimax-m2.5"
+        }
+      }
+    }
+  },
+  "tools": {
+    "profile": "coding",
+    "allow": [
+      "read",
+      "write",
+      "edit",
+      "apply_patch",
+      "exec",
+      "bash",
+      "process",
+      "sessions_list",
+      "sessions_history",
+      "memory_search",
+      "memory_get",
+      "browser",
+      "web_search",
+      "web_fetch"
+    ],
+    "deny": [
+      "canvas",
+      "nodes",
+      "cron",
+      "gateway",
+      "camera",
+      "screen",
+      "calendar",
+      "contacts",
+      "reminders"
+    ],
+    "web": {
+      "search": {
+        "enabled": false,
+        "provider": "brave",
+        "maxResults": 5
+      }
+    },
+    "elevated": {
+      "enabled": true,
+      "allowFrom": {
+        "slack": [
+          "*"
+        ],
+        "whatsapp": [
+          "*"
+        ],
+        "mcp": [
+          "*"
+        ],
+        "telegram": [
+          "*"
+        ],
+        "discord": [
+          "*"
+        ],
+        "googlechat": [
+          "*"
+        ]
+      }
+    },
+    "exec": {
+      "host": "gateway",
+      "security": "full",
+      "ask": "off",
+      "safeBins": [
+        "git",
+        "gh",
+        "python",
+        "python3",
+        "vpython",
+        "npm",
+        "npx",
+        "node",
+        "pip",
+        "ls",
+        "cat",
+        "grep",
+        "find",
+        "head",
+        "tail",
+        "sed",
+        "awk",
+        "sort",
+        "uniq",
+        "wc",
+        "file",
+        "stat",
+        "dirname",
+        "basename",
+        "which",
+        "curl",
+        "wget",
+        "jq",
+        "rg",
+        "xargs",
+        "mkdir",
+        "cp",
+        "mv",
+        "rm",
+        "chmod",
+        "chown",
+        "printf",
+        "echo",
+        "pwd",
+        "date",
+        "env",
+        "printenv",
+        "bash",
+        "sh",
+        "test",
+        "true",
+        "false"
+      ]
+    }
+  },
+  "messages": {
+    "ackReactionScope": "group-mentions",
+    "tts": {
+      "auto": "always",
+      "provider": "elevenlabs",
+      "elevenlabs": {
+        "baseUrl": "https://api.elevenlabs.io",
+        "voiceId": "<SET_YOUR_11LABS_VOICE_ID_HERE>",
+        "modelId": "eleven_multilingual_v2"
+      },
+      "edge": {
+        "enabled": true,
+        "voice": "en-US-JennyNeural",
+        "lang": "en-US",
+        "outputFormat": "audio-24khz-48kbitrate-mono-mp3",
+        "pitch": "+8%",
+        "rate": "-5%"
+      }
+    }
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto"
+  },
+  "channels": {
+    "whatsapp": {
+      "dmPolicy": "allowlist",
+      "selfChatMode": true,
+      "allowFrom": [
+        "+6502965127"
+      ],
+      "groupPolicy": "allowlist",
+      "mediaMaxMb": 50,
+      "debounceMs": 0
+    },
+    "googlechat": {
+      "enabled": false,
+      "groupPolicy": "allowlist",
+      "serviceAccountFile": "/Users/jleechan/.openclaw/googlechat-service-account.json",
+      "audienceType": "app-url",
+      "audience": "https://mac-1.tail5eb762.ts.net/",
+      "webhookPath": "/googlechat",
+      "webhookUrl": "https://mac-1.tail5eb762.ts.net/googlechat",
+      "mediaMaxMb": 20,
+      "actions": {
+        "reactions": true
+      },
+      "dm": {
+        "policy": "allowlist",
+        "allowFrom": [
+          "jleechan@gmail.com"
+        ]
+      },
+      "typingIndicator": "message"
+    },
+    "slack": {
+      "mode": "socket",
+      "webhookPath": "/slack/events",
+      "enabled": true,
+      [REDACTED],
+      [REDACTED],
+      "userTokenReadOnly": true,
+      "groupPolicy": "allowlist"
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      [REDACTED]
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    },
+    "http": {
+      "endpoints": {
+        "chatCompletions": {
+          "enabled": true
+        }
+      }
+    },
+    "nodes": {
+      "denyCommands": [
+        "camera.snap",
+        "camera.clip",
+        "screen.record",
+        "calendar.add",
+        "contacts.add",
+        "reminders.add"
+      ]
+    }
+  },
+  "skills": {
+    "install": {
+      "nodeManager": "npm"
+    }
+  },
+  "plugins": {
+    "entries": {
+      "whatsapp": {
+        "enabled": true
+      },
+      "slack": {
+        "enabled": true
+      },
+      "googlechat": {
+        "enabled": true
+      },
+      "voice-call": {
+        "enabled": true,
+        "config": {
+          "provider": "mock",
+          "outbound": {
+            "defaultMode": "notify"
+          },
+          "inboundPolicy": "disabled",
+          "serve": {
+            "port": 3334,
+            "path": "/voice/webhook"
+          }
+        }
+      },
+      "minimax-portal-auth": {
+        "enabled": true
+      }
+    }
+  },
+  "models": {
+    "providers": {
+      "minimax-portal": {
+        "baseUrl": "https://api.minimax.io/anthropic",
+        [REDACTED],
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "MiniMax-M2.1",
+            "name": "MiniMax M2.1",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "MiniMax-M2.5",
+            "name": "MiniMax M2.5",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  }
+}
