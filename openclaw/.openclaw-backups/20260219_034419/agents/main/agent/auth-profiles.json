@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "profiles": {
+    "openai-codex:default": {
+      "type": "oauth",
+      "provider": "openai-codex",
+      "access": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjE5MzQ0ZTY1LWJiYzktNDRkMS1hOWQwLWY5NTdiMDc5YmQwZSIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS92MSJdLCJjbGllbnRfaWQiOiJhcHBfRU1vYW1FRVo3M2YwQ2tYYVhwN2hyYW5uIiwiZXhwIjoxNzcxNjQxMjc5LCJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiOWI1ZTVjMjEtNDUzMi00ZTZkLThkMDQtYjJkMGU2MWJhNWYwIiwiY2hhdGdwdF9hY2NvdW50X3VzZXJfaWQiOiJ1c2VyLUxmQUpLdEFVbmJkU1JzY0FsUFBLY3dqd19fOWI1ZTVjMjEtNDUzMi00ZTZkLThkMDQtYjJkMGU2MWJhNWYwIiwiY2hhdGdwdF9jb21wdXRlX3Jlc2lkZW5jeSI6Im5vX2NvbnN0cmFpbnQiLCJjaGF0Z3B0X3BsYW5fdHlwZSI6InBybyIsImNoYXRncHRfdXNlcl9pZCI6InVzZXItTGZBSkt0QVVuYmRTUnNjQWxQUEtjd2p3IiwidXNlcl9pZCI6InVzZXItTGZBSkt0QVVuYmRTUnNjQWxQUEtjd2p3In0sImh0dHBzOi8vYXBpLm9wZW5haS5jb20vcHJvZmlsZSI6eyJlbWFpbCI6ImpsZWVjaGFuQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlfSwiaWF0IjoxNzcwNzc3Mjc5LCJpc3MiOiJodHRwczovL2F1dGgub3BlbmFpLmNvbSIsImp0aSI6IjAxZmI0ZDg3LTFhYjAtNDk3OC1hMTNmLTU3MWM2MTM0ODExOSIsIm5iZiI6MTc3MDc3NzI3OSwicHdkX2F1dGhfdGltZSI6MTc3MDc3NzI3NDk5Niwic2NwIjpbIm9wZW5pZCIsInByb2ZpbGUiLCJlbWFpbCIsIm9mZmxpbmVfYWNjZXNzIl0sInNlc3Npb25faWQiOiJhdXRoc2Vzc191bTM2RVI4Njg3dVJIbUdibXp4SU9TQmkiLCJzdWIiOiJnb29nbGUtb2F1dGgyfDExNjk4NzYzMDE5NTc4MjYwNzE4NSJ9.eoDSIyGNAWKb2asNC1W_j-kHKILbUXv_gRnrmSCzWO8_gXzBHPilLH3QGP5zzK7o0txpr3J649nTJEMZqtDsMswHSsvJyKoPtEg6nKNu9io3W9kCAhFloQlF5gr6OZ6RjQ8iMW1RHmLq3-PWweSdC-OPyM58QIlHzM7s8FmSLB_aiBtoB-CoWyqaq8BVZ-PNGz8VW_EvCxKMKar9hWoTJyDHx5voozgGDVWywIn-yY1X6C3MupCJ2krBYRRYucCqB-dd1qu_WmiRKzoPYw52Vb7BNCaW16jmogSPSxJlZARw_pXGKwAnmusNIkQ8N8pCi8-7-ZvEiimIIXyB7o-EMnxNsyHxiak7TFV2xrguTU-jiqQb8gJU37UfzJzE1cL2c3oJUKn0KXlU2mh3U0W1tmWfIdmxI4nJ-wdhmAx9p7B2XFP0zrr3yjXvqhMEYuiHi9T5Shy5Gi8zfcwbrO8aChZsqu21vE73nmLhBiWJ-SuJuUmfhUi2TWXHsN0pvBqvD3XQZgskJHGkl7oiDapEpkoL8O7asALhODSWpsM45RuHwa-WZL9LEPibWD7RSVS0PzPLArKdEo4Ikz7HJvUoSA5MmM4VQCSap8Cq5DviV1CUV9y56L7f7PzfxeFTWGqvobbacVkzVSkjkizZQJ6iocat2W0Ju8nXCcEy6Mi4m80",
+      "refresh": "rt_NJNaFp2ImmTehIdc9pqgVYCzAnUKcFSiVJlCMQgTbKU.WYpJBaofuq8EEY9zee7ZTkfECaom1-5T7v-jBfSd6l4",
+      "expires": 1771641876466,
+      "accountId": "9b5e5c21-4532-4e6d-8d04-b2d0e61ba5f0"
+    },
+    "minimax-portal:default": {
+      "type": "oauth",
+      "provider": "minimax-portal",
+      "access": "sk-cp-Rg64VbM5FkwJrZkiTYazH3PXihEFIaY4ohU5r-zg-aAyPN60puG0IaWTQ9AJXdbGpzTlqcozbsIEhpquqkg3GA9qTeN-C_SXTJsOSYWQhPuFhIPPuULgs1I",
+      "refresh": "pFU43hH1GwCrWpStl2yCNbfhgBtQ3DRSvfnqneLaAr4=",
+      "expires": 1802746203254
+    }
+  },
+  "lastGood": {
+    "openai-codex": "openai-codex:default",
+    "minimax-portal": "minimax-portal:default"
+  },
+  "usageStats": {
+    "openai-codex:default": {
+      "lastUsed": 1771209296673,
+      "errorCount": 0,
+      "lastFailureAt": 1771209296665
+    },
+    "minimax-portal:default": {
+      "lastUsed": 1771501120483,
+      "errorCount": 0,
+      "lastFailureAt": 1771498957969
+    }
+  }
+}

@@ -1,0 +1,260 @@
+{
+  "entries": [
+    {
+      "containerName": "openclaw-sbx-agent-main-main-thread-177103583-49730c81",
+      "sessionKey": "agent:main:main:thread:1771035831.201989",
+      "createdAtMs": 1771036413239,
+      "lastUsedAtMs": 1771036413239,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-main-thread-177103224-a64e4904",
+      "sessionKey": "agent:main:main:thread:1771032249.648599",
+      "createdAtMs": 1771036430884,
+      "lastUsedAtMs": 1771036430884,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-953e3142-7aa4--59fd4ab1",
+      "sessionKey": "agent:main:openai:953e3142-7aa4-426d-9c6d-054915264502",
+      "createdAtMs": 1771038710769,
+      "lastUsedAtMs": 1771038710769,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-main-thread-177103686-31c30e60",
+      "sessionKey": "agent:main:main:thread:1771036868.619069",
+      "createdAtMs": 1771038744791,
+      "lastUsedAtMs": 1771038744791,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-main-thread-177103873-bc4134f6",
+      "sessionKey": "agent:main:main:thread:1771038735.825219",
+      "createdAtMs": 1771038752631,
+      "lastUsedAtMs": 1771038752631,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-12a88779-5cae--cb816504",
+      "sessionKey": "agent:main:openai:12a88779-5cae-47e7-8c02-ca1def71afbc",
+      "createdAtMs": 1771038995412,
+      "lastUsedAtMs": 1771038995412,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-ec5f6e3b-1ac6--a233fcf2",
+      "sessionKey": "agent:main:openai:ec5f6e3b-1ac6-4b9a-8523-99b9e4302d49",
+      "createdAtMs": 1771039314468,
+      "lastUsedAtMs": 1771039314468,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-5160b04b-b18f--13543378",
+      "sessionKey": "agent:main:openai:5160b04b-b18f-46c4-b9d2-382bb8e7b10a",
+      "createdAtMs": 1771039365856,
+      "lastUsedAtMs": 1771039365856,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-cabf58d1-a88c--a393d967",
+      "sessionKey": "agent:main:openai:cabf58d1-a88c-4a88-af16-5297b7a3423c",
+      "createdAtMs": 1771040184616,
+      "lastUsedAtMs": 1771040184616,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-beee09ea-f9c0--9c615614",
+      "sessionKey": "agent:main:openai:beee09ea-f9c0-420d-972c-012ac3b38f5e",
+      "createdAtMs": 1771040242772,
+      "lastUsedAtMs": 1771040242772,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-413a9b5a-40cc--67240505",
+      "sessionKey": "agent:main:openai:413a9b5a-40cc-4781-8e4e-c6396fd965d5",
+      "createdAtMs": 1771040314922,
+      "lastUsedAtMs": 1771040314922,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-main-thread-177103916-81ef2c18",
+      "sessionKey": "agent:main:main:thread:1771039163.010979",
+      "createdAtMs": 1771039447804,
+      "lastUsedAtMs": 1771041577209,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-d8b61593-7c44--4ae01a7a",
+      "sessionKey": "agent:main:openai:d8b61593-7c44-4aff-83cd-8be7e09c251a",
+      "createdAtMs": 1771041588131,
+      "lastUsedAtMs": 1771041588131,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-db738b1e-c089--58fd63da",
+      "sessionKey": "agent:main:openai:db738b1e-c089-4bb9-ae78-6ea2b71f500d",
+      "createdAtMs": 1771041665982,
+      "lastUsedAtMs": 1771041665982,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-b7dafdea-7803--cc3bdc72",
+      "sessionKey": "agent:main:openai:b7dafdea-7803-4b5e-905c-0e99da058944",
+      "createdAtMs": 1771041676495,
+      "lastUsedAtMs": 1771041676495,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-3549a337-3871--d8ade7b7",
+      "sessionKey": "agent:main:openai:3549a337-3871-4e91-b92d-9da5ce415d27",
+      "createdAtMs": 1771041780785,
+      "lastUsedAtMs": 1771041780785,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-879826c2-225e--fd1d9dde",
+      "sessionKey": "agent:main:openai:879826c2-225e-4b35-b779-3e23195b7513",
+      "createdAtMs": 1771043063185,
+      "lastUsedAtMs": 1771043063185,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-b7130ae4-c426--b63f1ca4",
+      "sessionKey": "agent:main:openai:b7130ae4-c426-40fb-b875-ddc13af64624",
+      "createdAtMs": 1771043112970,
+      "lastUsedAtMs": 1771043112970,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-a111709f-7235--e8bc326f",
+      "sessionKey": "agent:main:openai:a111709f-7235-4795-a154-5b4a1a513dad",
+      "createdAtMs": 1771043126320,
+      "lastUsedAtMs": 1771043126320,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-33fa618c-552b--e7eb8524",
+      "sessionKey": "agent:main:openai:33fa618c-552b-4c12-9e73-a787893173d4",
+      "createdAtMs": 1771043154826,
+      "lastUsedAtMs": 1771043154826,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-1e6d62a5-5c61--e9e12654",
+      "sessionKey": "agent:main:openai:1e6d62a5-5c61-43b1-9215-84b6cd601106",
+      "createdAtMs": 1771043164260,
+      "lastUsedAtMs": 1771043164260,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-c8a58123-c9c1--82f6e884",
+      "sessionKey": "agent:main:openai:c8a58123-c9c1-4c12-8c09-986a9ae59789",
+      "createdAtMs": 1771043177314,
+      "lastUsedAtMs": 1771043177314,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-892478aa-3422--ce4dabfb",
+      "sessionKey": "agent:main:openai:892478aa-3422-4f67-a27b-abdd37e39195",
+      "createdAtMs": 1771043188355,
+      "lastUsedAtMs": 1771043188355,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-ae5a23ce-0a7e--90aa865c",
+      "sessionKey": "agent:main:openai:ae5a23ce-0a7e-4c34-bd95-0bed9146ab2f",
+      "createdAtMs": 1771043202390,
+      "lastUsedAtMs": 1771043202390,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-e5300add-07e8--727233b7",
+      "sessionKey": "agent:main:openai:e5300add-07e8-4d80-a635-51605cbe00d5",
+      "createdAtMs": 1771043212103,
+      "lastUsedAtMs": 1771043212103,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-75bc556f-2b0c--b12567c6",
+      "sessionKey": "agent:main:openai:75bc556f-2b0c-4bfb-96ae-8615ae37da7f",
+      "createdAtMs": 1771043224051,
+      "lastUsedAtMs": 1771043224051,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-c3646040-f24f--0044dada",
+      "sessionKey": "agent:main:openai:c3646040-f24f-484d-942b-f9dfa6557d9f",
+      "createdAtMs": 1771043237281,
+      "lastUsedAtMs": 1771043237281,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-5dfd1d07-11f5--9ae5a370",
+      "sessionKey": "agent:main:openai:5dfd1d07-11f5-454c-bd7c-5d77d4c9de2f",
+      "createdAtMs": 1771043275127,
+      "lastUsedAtMs": 1771043275127,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-99e5e926-fa65--c4a2119f",
+      "sessionKey": "agent:main:openai:99e5e926-fa65-4107-933a-967ef1f470cc",
+      "createdAtMs": 1771043296574,
+      "lastUsedAtMs": 1771043296574,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-77b766c6-e082--ee8c8741",
+      "sessionKey": "agent:main:openai:77b766c6-e082-43e5-9bf2-c96aae70f62c",
+      "createdAtMs": 1771043307038,
+      "lastUsedAtMs": 1771043307038,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-dbb14771-6b3b--6be5e262",
+      "sessionKey": "agent:main:openai:dbb14771-6b3b-4db6-b8de-49d6a104aeb6",
+      "createdAtMs": 1771043345767,
+      "lastUsedAtMs": 1771043345767,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    },
+    {
+      "containerName": "openclaw-sbx-agent-main-openai-55d1fa1f-a713--6825a47e",
+      "sessionKey": "agent:main:openai:55d1fa1f-a713-4440-8e00-675bc7c1f648",
+      "createdAtMs": 1771043563960,
+      "lastUsedAtMs": 1771043563960,
+      "image": "openclaw-sandbox:bookworm-slim",
+      "configHash": "486323429716ef6f085e965ff3d332bac1f9f0b6"
+    }
+  ]
+}
