@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "522e23a7-c7c1-41f2-b117-a3af05661578",
+      "name": "Daily Slack Check-in 9AM",
+      "enabled": true,
+      "createdAtMs": 1771063632572,
+      "updatedAtMs": 1771434100862,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 9 * * *",
+        "tz": "America/Los_Angeles"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run a Slack check-in summary using only the latest inbox + calendar signals.\n\nUse these exact commands (in order):\n1) gog gmail search --json --plain --max 50 \"is:unread in:inbox newer_than:1d\"\n2) gog gmail search --json --plain --max 50 \"is:unread in:inbox is:important older_than:2d\"\n3) gog calendar events --all --today --json\n4) gog calendar events --all --days 1 --from=now --json\n\nThen send a Slack-ready summary in plain text with these sections and bullet points:\n- What I need to do today\n- Important emails I forgot to act on\n- Upcoming calendar events\n- Suggested priorities\n\nUse short, actionable items only. If any section is empty, say \"None\". Keep it concise and skip noise. Prioritize items that are urgent or have deadlines."
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "slack",
+        "to": "user:U09GH5BR3QU",
+        "bestEffort": true
+      },
+      "state": {
+        "nextRunAtMs": 1771520400000,
+        "lastRunAtMs": 1771434000009,
+        "lastStatus": "ok",
+        "lastDurationMs": 100853,
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "id": "7424ea0d-2c8a-4a59-b58e-09b242c6c58e",
+      "name": "Daily Slack Check-in 12PM",
+      "enabled": true,
+      "createdAtMs": 1771063634366,
+      "updatedAtMs": 1771444931141,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 12 * * *",
+        "tz": "America/Los_Angeles"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run a Slack check-in summary using only the latest inbox + calendar signals.\n\nUse these exact commands (in order):\n1) gog gmail search --json --plain --max 50 \"is:unread in:inbox newer_than:1d\"\n2) gog gmail search --json --plain --max 50 \"is:unread in:inbox is:important older_than:2d\"\n3) gog calendar events --all --today --json\n4) gog calendar events --all --days 1 --from=now --json\n\nThen send a Slack-ready summary in plain text with these sections and bullet points:\n- What I need to do today\n- Important emails I forgot to act on\n- Upcoming calendar events\n- Suggested priorities\n\nUse short, actionable items only. If any section is empty, say \"None\". Keep it concise and skip noise. Prioritize items that are urgent or have deadlines."
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "slack",
+        "to": "user:U09GH5BR3QU",
+        "bestEffort": true
+      },
+      "state": {
+        "nextRunAtMs": 1771531200000,
+        "lastRunAtMs": 1771444800069,
+        "lastStatus": "ok",
+        "lastDurationMs": 131072,
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "id": "5192e214-2754-49d5-b567-07c7b24cb116",
+      "name": "Daily Slack Check-in 6PM",
+      "enabled": true,
+      "createdAtMs": 1771063637710,
+      "updatedAtMs": 1771466470849,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 18 * * *",
+        "tz": "America/Los_Angeles"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run a Slack check-in summary using only the latest inbox + calendar signals.\n\nUse these exact commands (in order):\n1) gog gmail search --json --plain --max 50 \"is:unread in:inbox newer_than:1d\"\n2) gog gmail search --json --plain --max 50 \"is:unread in:inbox is:important older_than:2d\"\n3) gog calendar events --all --today --json\n4) gog calendar events --all --days 1 --from=now --json\n\nThen send a Slack-ready summary in plain text with these sections and bullet points:\n- What I need to do today\n- Important emails I forgot to act on\n- Upcoming calendar events\n- Suggested priorities\n\nUse short, actionable items only. If any section is empty, say \"None\". Keep it concise and skip noise. Prioritize items that are urgent or have deadlines."
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "slack",
+        "to": "user:U09GH5BR3QU",
+        "bestEffort": true
+      },
+      "state": {
+        "nextRunAtMs": 1771552800000,
+        "lastRunAtMs": 1771466400009,
+        "lastStatus": "ok",
+        "lastDurationMs": 70840,
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "id": "f44e55e8-2af2-4e8a-91c3-4d64842eceb0",
+      "name": "review-p-every-10m",
+      "enabled": true,
+      "createdAtMs": 1771240069966,
+      "updatedAtMs": 1771502278184,
+      "schedule": {
+        "kind": "every",
+        "everyMs": 600000,
+        "anchorMs": 1771240069966
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "🔔 Reminder: Review P (every 10 min until ack)"
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "slack"
+      },
+      "state": {
+        "nextRunAtMs": 1771502869966,
+        "lastRunAtMs": 1771502269980,
+        "lastStatus": "ok",
+        "lastDurationMs": 8204,
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "id": "a21afa7a-6ccb-4772-acb7-d4834130d8d6",
+      "name": "Remind call Ghazi recurring",
+      "description": "Remind every 10min to call Ghazi until user replies ACK",
+      "enabled": true,
+      "createdAtMs": 1771397302659,
+      "updatedAtMs": 1771502318065,
+      "schedule": {
+        "kind": "every",
+        "everyMs": 600000,
+        "anchorMs": 1771397302659
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Reminder: Call Ghazi (recurring until ACK)"
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "slack",
+        "to": "U09GH5BR3QU"
+      },
+      "state": {
+        "nextRunAtMs": 1771502902659,
+        "lastRunAtMs": 1771502302669,
+        "lastStatus": "ok",
+        "lastDurationMs": 15396,
+        "consecutiveErrors": 0
+      }
+    }
+  ]
+}

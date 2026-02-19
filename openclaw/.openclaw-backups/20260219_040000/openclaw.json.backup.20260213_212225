@@ -1,0 +1,227 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.2.12",
+    "lastTouchedAt": "2026-02-14T05:02:49.902Z"
+  },
+  "wizard": {
+    "lastRunAt": "2026-02-13T19:18:36.973Z",
+    "lastRunVersion": "2026.2.12",
+    "lastRunCommand": "doctor",
+    "lastRunMode": "local"
+  },
+  "auth": {
+    "profiles": {
+      "openai-codex:default": {
+        "provider": "openai-codex",
+        "mode": "oauth"
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openai-codex/gpt-5.3-codex-spark"
+      },
+      "workspace": "/Users/jleechan",
+      "compaction": {
+        "mode": "safeguard"
+      },
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8
+      },
+      "sandbox": {
+        "mode": "off",
+        "workspaceAccess": "rw"
+      }
+    }
+  },
+  "tools": {
+    "profile": "coding",
+    "allow": [
+      "read",
+      "write",
+      "edit",
+      "apply_patch",
+      "exec",
+      "bash",
+      "process",
+      "sessions_list",
+      "sessions_history",
+      "memory_search",
+      "memory_get",
+      "browser",
+      "web_search",
+      "web_fetch"
+    ],
+    "deny": [
+      "canvas",
+      "nodes",
+      "cron",
+      "gateway",
+      "camera",
+      "screen",
+      "calendar",
+      "contacts",
+      "reminders"
+    ],
+    "web": {
+      "search": {
+        "enabled": false,
+        "provider": "brave",
+        "maxResults": 5
+      }
+    },
+    "elevated": {
+      "enabled": true,
+      "allowFrom": {
+        "slack": ["*"],
+        "whatsapp": ["*"],
+        "mcp": ["*"]
+      }
+    },
+    "exec": {
+      "host": "gateway",
+      "ask": "off",
+      "safeBins": [
+        "git",
+        "gh",
+        "python",
+        "python3",
+        "vpython",
+        "npm",
+        "npx",
+        "node",
+        "pip",
+        "ls",
+        "cat",
+        "grep",
+        "find",
+        "head",
+        "tail",
+        "sed",
+        "awk",
+        "sort",
+        "uniq",
+        "wc",
+        "file",
+        "stat",
+        "dirname",
+        "basename",
+        "playwright",
+        "which",
+        "curl",
+        "wget",
+        "jq",
+        "rg",
+        "xargs",
+        "mkdir",
+        "cp",
+        "mv",
+        "chmod",
+        "chown",
+        "printf",
+        "ssh",
+        "websearch",
+        "pwd",
+        "echo",
+        "date",
+        "env",
+        "printenv"
+      ]
+    }
+  },
+  "messages": {
+    "ackReactionScope": "group-mentions"
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto"
+  },
+  "channels": {
+    "whatsapp": {
+      "dmPolicy": "allowlist",
+      "selfChatMode": true,
+      "allowFrom": [
+        "+6502965127"
+      ],
+      "groupPolicy": "allowlist",
+      "mediaMaxMb": 50,
+      "debounceMs": 0
+    },
+    "googlechat": {
+      "enabled": false,
+      "groupPolicy": "allowlist",
+      "serviceAccountFile": "/Users/jleechan/.openclaw/googlechat-service-account.json",
+      "audienceType": "app-url",
+      "audience": "https://YOUR-DOMAIN/googlechat",
+      "webhookPath": "/googlechat",
+      "mediaMaxMb": 20,
+      "actions": {
+        "reactions": true
+      },
+      "dm": {
+        "policy": "allowlist",
+        "allowFrom": []
+      },
+      "typingIndicator": "message"
+    },
+    "slack": {
+      "mode": "socket",
+      "webhookPath": "/slack/events",
+      "enabled": true,
+      [REDACTED],
+      [REDACTED],
+      "userTokenReadOnly": true,
+      "groupPolicy": "allowlist"
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      [REDACTED]
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    },
+    "http": {
+      "endpoints": {
+        "chatCompletions": {
+          "enabled": true
+        }
+      }
+    },
+    "nodes": {
+      "denyCommands": [
+        "camera.snap",
+        "camera.clip",
+        "screen.record",
+        "calendar.add",
+        "contacts.add",
+        "reminders.add"
+      ]
+    }
+  },
+  "skills": {
+    "install": {
+      "nodeManager": "npm"
+    }
+  },
+  "plugins": {
+    "entries": {
+      "whatsapp": {
+        "enabled": true
+      },
+      "slack": {
+        "enabled": true
+      },
+      "googlechat": {
+        "enabled": false
+      }
+    }
+  }
+}
