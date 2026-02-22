@@ -80,9 +80,32 @@ def path_is_sensitive(path: Path) -> bool:
     return False
 
 
+def is_nested_git_root(path: Path) -> bool:
+    git_dir = path / ".git"
+    if not git_dir.exists():
+        return False
+
+    if git_dir.is_dir():
+        return True
+
+    if git_dir.is_file():
+        try:
+            return git_dir.read_text(encoding="utf-8", errors="ignore").lstrip().startswith("gitdir:")
+        except Exception:
+            return True
+
+    return False
+
+
 for root, dirs, files in os.walk(SRC_DIR):
     src_root = Path(root)
     rel_root = src_root.relative_to(SRC_DIR)
+
+    if rel_root != Path(".") and is_nested_git_root(src_root):
+        # Skip nested repositories so detached/no-checkout trees are not mirrored.
+        dirs[:] = []
+        files[:] = []
+        continue
 
     # Skip backup directory to prevent recursive backup
     dirs[:] = [d for d in dirs if d != '.openclaw-backups']
@@ -158,4 +181,40 @@ if git diff --quiet --cached -- .openclaw-backups; then
 fi
 
 git commit -m "chore: backup ~/.openclaw snapshot $SNAPSHOT_TS" -- .openclaw-backups/
+git fetch --quiet origin main
+COMMIT_SHA="$(git rev-parse HEAD)"
+REMOTE_URL="$(git remote get-url origin)"
+if [ -z "${REMOTE_URL}" ]; then
+  echo "No origin remote found; skipping push."
+  exit 0
+fi
+REMOTE_HEAD="$(git rev-parse origin/main)"
 
+if ! git merge-base --is-ancestor "$REMOTE_HEAD" "$COMMIT_SHA"; then
+  if git merge-base --is-ancestor "$COMMIT_SHA" "$REMOTE_HEAD"; then
+    echo "Local branch is behind origin/main; rebasing before push."
+    git pull --rebase origin main
+    COMMIT_SHA="$(git rev-parse HEAD)"
+  else
+    echo "Local and origin/main histories diverged. Aborting push."
+    echo "Run: git pull --rebase origin main"
+    exit 1
+  fi
+fi
+
+if ! git push origin "HEAD:main"; then
+  echo "Push to origin main failed."
+  exit 1
+fi
+
+if [[ "$REMOTE_URL" == "git@github.com:"* ]]; then
+  REPO_PATH="${REMOTE_URL#git@github.com:}"
+  REPO_PATH="${REPO_PATH%.git}"
+  COMMIT_URL="https://github.com/${REPO_PATH}/commit/${COMMIT_SHA}"
+elif [[ "$REMOTE_URL" == "https://github.com/"* ]]; then
+  COMMIT_URL="${REMOTE_URL%.git}/commit/${COMMIT_SHA}"
+else
+  COMMIT_URL="${REMOTE_URL}"
+fi
+
+echo "Backup pushed to remote origin/main: ${COMMIT_URL}"
