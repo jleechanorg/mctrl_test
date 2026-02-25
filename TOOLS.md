@@ -2,34 +2,51 @@
 
 Skills define _how_ tools work. This file is for _your_ specifics — the stuff that's unique to your setup.
 
-## What Goes Here
+## MCP Servers
 
-Things like:
+### Active MCPs
+- **mcp_mail** - Agent coordination via mail-like messages
+- **chrome-superpower** - Browser automation
+- **second-opinion-tool** - Multi-model AI consultation
+- **context7** - Documentation lookup
+- **beads** - Task tracking (requires bd CLI install)
+- **openclaw** - OpenClaw agent control
 
-- Camera names and locations
-- SSH hosts and aliases
-- Preferred voices for TTS
-- Speaker/room names
-- Device nicknames
-- Anything environment-specific
+### Extensions
+- `voice-call` - Voice call functionality
 
-## Examples
+## Project Context [CRITICAL]
 
-```markdown
-### Cameras
+Projects requiring special handling:
+- **beads** (jleechanorg/beads) - Task tracking system, uses beads CLI
+- **ai_universe** (jleechanorg/ai_universe) - MCP backend with Firebase + Cerebras
+- **worldarchitect.ai** (jleechanorg/worldarchitect.ai) - Main project, AI RPG, 6k+ commits
 
-- living-room → Main area, 180° wide angle
-- front-door → Entrance, motion-triggered
+## Common Commands
 
-### SSH
+| Context | Command | Notes |
+|---------|---------|-------|
+| openclaw dev | `pnpm openclaw ...` | Use bun or pnpm |
+| worldarchitect.ai | `pnpm build`, `pnpm test` | Full test suite |
+| Claude Code | `claude --dangerously-skip-permissions` | Use sparingly |
 
-- home-server → 192.168.1.100, user: admin
+## Infrastructure
 
-### TTS
+### Exe.dev VMs
+- Access via `ssh exe.dev` then `ssh <vm-name>`
+- Gateway: `openclaw gateway run --bind loopback --port 18789 --force`
 
-- Preferred voice: "Nova" (warm, slightly British)
-- Default speaker: Kitchen HomePod
-```
+### Credentials
+- Stored in: `~/.openclaw/credentials/`
+- Re-run `openclaw login` if logged out
+
+## Failure Modes
+
+| Tool | Common Issue | Fix |
+|------|--------------|-----|
+| openclaw gateway | Won't start | Check port, kill old process |
+| MCP servers | Not responding | Restart Claude Code |
+| Tests | Flaky | Check for pre-existing failures |
 
 ## Why Separate?
 
