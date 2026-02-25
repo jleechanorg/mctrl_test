@@ -1,3 +1,19 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Repository Purpose
+
+This repo (`jleechanorg/openclaw`) is a **personal backup and workspace** for `~/.openclaw` configuration. It is NOT intended for PRs against the real [openclaw/openclaw](https://github.com/openclaw/openclaw) repo — that would be pointless as they won't accept them.
+
+What this repo contains:
+- Personal OpenClaw configuration and workspace files
+- Backup snapshots of `~/.openclaw`
+- Custom tools and scripts for personal use
+- Development workspace for jleechan's OpenClaw setup
+
+---
+
 # Repository Guidelines
 
 - Repo: https://github.com/openclaw/openclaw
@@ -171,6 +187,7 @@ Before deleting any file:
 
 ### PR & Merge Protocols
 
+- **NEVER make PRs to openclaw/openclaw** — this is a personal backup repo; the real repo won't accept contributions
 - **NEVER merge PRs without explicit user approval**
 - **MANDATORY: ALL CI tests must pass before merge** - Any failing test is a blocker, no exceptions
   - `mergeable: "MERGEABLE"` only means no conflicts - does NOT mean tests pass
