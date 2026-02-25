@@ -84,3 +84,9 @@ USER.md
 !.agent/workflows/
 /local/
 package-lock.json
+
+# Python
+src/.venv/
+src/*.egg-info/
+__pycache__/
+*.pyc
