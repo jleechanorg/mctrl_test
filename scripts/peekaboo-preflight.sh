@@ -58,7 +58,7 @@ if command -v peekaboo >/dev/null 2>&1; then
   # The JSON lists objects with "name" and "isGranted" fields.
   perm_granted() {
     echo "$PERMS" | awk -v perm="$1" '
-      /"name"/ { found = ($0 ~ perm) }
+      /"name"/ { found = 0; if ($0 ~ perm) found = 1 }
       /"isGranted"/ && found { if ($0 ~ /true/) exit 0; else exit 1 }
     '
   }
