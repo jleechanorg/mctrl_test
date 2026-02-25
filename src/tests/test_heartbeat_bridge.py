@@ -9,6 +9,7 @@ from orchestration.heartbeat_bridge import (
     list_tmux_sessions,
     sync_agents_to_mission_control,
     HeartbeatBridge,
+    HeartbeatPoller,
 )
 
 
@@ -102,3 +103,39 @@ class TestSyncAgents:
     def test_failure_is_silent(self, mock_urlopen, mock_list):
         """Heartbeat failures must be silent — never block."""
         sync_agents_to_mission_control()  # Should not raise
+
+
+# ---------------------------------------------------------------------------
+# HeartbeatPoller
+# ---------------------------------------------------------------------------
+
+
+class TestHeartbeatPoller:
+    def test_creation(self):
+        poller = HeartbeatPoller(webhook_url="http://localhost:8080", interval_seconds=60)
+        assert poller.interval_seconds == 60
+        assert poller.is_running is False
+
+    def test_start_stop(self):
+        poller = HeartbeatPoller(webhook_url="http://localhost:8080", interval_seconds=60)
+        poller.start()
+        assert poller.is_running is True
+        poller.stop()
+        assert poller.is_running is False
+
+    def test_double_start_idempotent(self):
+        poller = HeartbeatPoller(webhook_url="http://localhost:8080", interval_seconds=60)
+        poller.start()
+        poller.start()  # Should not error
+        assert poller.is_running is True
+        poller.stop()
+
+    def test_stop_when_not_running(self):
+        poller = HeartbeatPoller(webhook_url="http://localhost:8080", interval_seconds=60)
+        poller.stop()  # Should not error
+        assert poller.is_running is False
+
+    def test_bridge_tracks_agents(self):
+        poller = HeartbeatPoller(webhook_url="http://localhost:8080", interval_seconds=60)
+        assert isinstance(poller.bridge, HeartbeatBridge)
+

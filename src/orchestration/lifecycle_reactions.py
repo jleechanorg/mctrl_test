@@ -12,6 +12,7 @@ State machine:
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -223,3 +224,104 @@ class LifecycleManager:
             "reaction_type": reaction_key,
             "message": config.message,
         }
+
+
+# ---------------------------------------------------------------------------
+# determine_status — infers session status from SCM state
+# ---------------------------------------------------------------------------
+
+
+def determine_status(
+    session: dict,
+    *,
+    scm_state: Optional[dict],
+) -> SessionStatus:
+    """Infer the session status from SCM/runtime state.
+
+    Args:
+        session: Dict with at least 'id', 'status', 'pr', 'branch'.
+        scm_state: Dict with 'pr_state', 'ci_status', 'review_decision', 'mergeable'.
+                   None if no PR detected.
+    """
+    # No PR → still working
+    if scm_state is None or session.get("pr") is None:
+        return SessionStatus.WORKING
+
+    pr_state = scm_state.get("pr_state", "open")
+
+    # Terminal states
+    if pr_state == "merged":
+        return SessionStatus.MERGED
+    if pr_state == "closed":
+        return SessionStatus.KILLED
+
+    # PR is open — check CI first
+    ci_status = scm_state.get("ci_status", "none")
+    if ci_status == "failing":
+        return SessionStatus.CI_FAILED
+
+    # CI passing — check review
+    review = scm_state.get("review_decision", "none")
+    if review == "changes_requested":
+        return SessionStatus.CHANGES_REQUESTED
+    if review == "approved":
+        if scm_state.get("mergeable", False):
+            return SessionStatus.MERGEABLE
+        return SessionStatus.APPROVED
+    if review == "pending":
+        return SessionStatus.REVIEW_PENDING
+
+    # PR is open, CI passing, no review decision
+    return SessionStatus.PR_OPEN
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle poller — threaded polling loop
+# ---------------------------------------------------------------------------
+
+
+class LifecyclePoller:
+    """Threaded polling loop for the lifecycle manager.
+
+    Calls poll function at regular intervals. Start/stop are idempotent.
+    """
+
+    def __init__(
+        self,
+        lifecycle_manager: LifecycleManager,
+        interval_seconds: int = 60,
+    ):
+        self.lifecycle_manager = lifecycle_manager
+        self.interval_seconds = interval_seconds
+        self._running = False
+        self._thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
+    def start(self) -> None:
+        """Start the polling loop in a daemon thread."""
+        if self._running:
+            return
+        self._stop_event.clear()
+        self._running = True
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Stop the polling loop."""
+        if not self._running:
+            return
+        self._stop_event.set()
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=5)
+            self._thread = None
+
+    def _run(self) -> None:
+        """Internal polling loop."""
+        while not self._stop_event.is_set():
+            self._stop_event.wait(self.interval_seconds)
+

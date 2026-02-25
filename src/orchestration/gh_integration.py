@@ -446,3 +446,97 @@ def get_merge_readiness(pr: PRInfo) -> MergeReadiness:
         no_conflicts=no_conflicts,
         blockers=blockers,
     )
+
+
+# ---------------------------------------------------------------------------
+# PR write operations
+# ---------------------------------------------------------------------------
+
+
+def merge_pr(pr: PRInfo, method: str = "squash") -> None:
+    """Merge a PR. Default squash merge with branch deletion.
+
+    Args:
+        pr: The PR to merge.
+        method: 'squash', 'rebase', or 'merge'.
+    """
+    flag = {"rebase": "--rebase", "merge": "--merge"}.get(method, "--squash")
+    gh(["pr", "merge", str(pr.number), "--repo", _repo_flag(pr), flag, "--delete-branch"])
+
+
+def close_pr(pr: PRInfo) -> None:
+    """Close a PR without merging."""
+    gh(["pr", "close", str(pr.number), "--repo", _repo_flag(pr)])
+
+
+# ---------------------------------------------------------------------------
+# PR summary
+# ---------------------------------------------------------------------------
+
+
+def get_pr_summary(pr: PRInfo) -> dict:
+    """Get PR summary with additions/deletions."""
+    raw = gh([
+        "pr", "view", str(pr.number),
+        "--repo", _repo_flag(pr),
+        "--json", "state,title,additions,deletions",
+    ])
+    data = json.loads(raw)
+    state_raw = data["state"].upper()
+    state = "merged" if state_raw == "MERGED" else "closed" if state_raw == "CLOSED" else "open"
+    return {
+        "state": state,
+        "title": data.get("title", ""),
+        "additions": data.get("additions", 0),
+        "deletions": data.get("deletions", 0),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Automated comments
+# ---------------------------------------------------------------------------
+
+
+def get_automated_comments(pr: PRInfo) -> list[dict]:
+    """Get bot/automated review comments via REST API.
+
+    Filters to only BOT_AUTHORS. Infers severity from body content.
+    """
+    try:
+        raw = gh([
+            "api",
+            "-F", "per_page=100",
+            f"repos/{_repo_flag(pr)}/pulls/{pr.number}/comments",
+        ])
+        comments = json.loads(raw)
+
+        result = []
+        for c in comments:
+            login = (c.get("user") or {}).get("login", "")
+            if login not in BOT_AUTHORS:
+                continue
+
+            # Determine severity from body
+            body_lower = (c.get("body") or "").lower()
+            if any(k in body_lower for k in ("error", "bug", "critical", "potential issue")):
+                severity = "error"
+            elif any(k in body_lower for k in ("warning", "suggest", "consider")):
+                severity = "warning"
+            else:
+                severity = "info"
+
+            result.append({
+                "id": str(c["id"]),
+                "bot_name": login,
+                "body": c.get("body", ""),
+                "path": c.get("path") or None,
+                "line": c.get("line") or c.get("original_line"),
+                "severity": severity,
+                "created_at": c.get("created_at"),
+                "url": c.get("html_url"),
+            })
+
+        return result
+    except Exception:
+        return []
+

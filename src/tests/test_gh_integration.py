@@ -16,12 +16,16 @@ from orchestration.gh_integration import (
     gh,
     detect_pr,
     get_pr_state,
+    get_pr_summary,
     get_ci_checks,
     get_ci_summary,
     get_reviews,
     get_review_decision,
     get_pending_comments,
+    get_automated_comments,
     get_merge_readiness,
+    merge_pr,
+    close_pr,
 )
 
 
@@ -425,3 +429,127 @@ class TestGetMergeReadiness:
         result = get_merge_readiness(pr)
         assert result.mergeable is False
         assert any("conflict" in b.lower() for b in result.blockers)
+
+
+# ---------------------------------------------------------------------------
+# merge_pr()
+# ---------------------------------------------------------------------------
+
+
+class TestMergePR:
+    @patch("orchestration.gh_integration.gh")
+    def test_squash_merge(self, mock_gh):
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        merge_pr(pr)
+        call_args = mock_gh.call_args[0][0]
+        assert "--squash" in call_args
+        assert "--delete-branch" in call_args
+
+    @patch("orchestration.gh_integration.gh")
+    def test_rebase_merge(self, mock_gh):
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        merge_pr(pr, method="rebase")
+        call_args = mock_gh.call_args[0][0]
+        assert "--rebase" in call_args
+
+    @patch("orchestration.gh_integration.gh")
+    def test_merge_commit(self, mock_gh):
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        merge_pr(pr, method="merge")
+        call_args = mock_gh.call_args[0][0]
+        assert "--merge" in call_args
+
+
+# ---------------------------------------------------------------------------
+# close_pr()
+# ---------------------------------------------------------------------------
+
+
+class TestClosePR:
+    @patch("orchestration.gh_integration.gh")
+    def test_closes_pr(self, mock_gh):
+        pr = PRInfo(number=42, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        close_pr(pr)
+        call_args = mock_gh.call_args[0][0]
+        assert "close" in call_args
+        assert "42" in call_args
+
+
+# ---------------------------------------------------------------------------
+# get_pr_summary()
+# ---------------------------------------------------------------------------
+
+
+class TestGetPRSummary:
+    @patch("orchestration.gh_integration.gh")
+    def test_returns_summary(self, mock_gh):
+        mock_gh.return_value = json.dumps({
+            "state": "OPEN", "title": "Fix bug",
+            "additions": 50, "deletions": 10,
+        })
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        summary = get_pr_summary(pr)
+        assert summary["state"] == "open"
+        assert summary["title"] == "Fix bug"
+        assert summary["additions"] == 50
+        assert summary["deletions"] == 10
+
+    @patch("orchestration.gh_integration.gh")
+    def test_merged_state(self, mock_gh):
+        mock_gh.return_value = json.dumps({
+            "state": "MERGED", "title": "Done",
+            "additions": 100, "deletions": 0,
+        })
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        summary = get_pr_summary(pr)
+        assert summary["state"] == "merged"
+
+
+# ---------------------------------------------------------------------------
+# get_automated_comments()
+# ---------------------------------------------------------------------------
+
+
+class TestGetAutomatedComments:
+    @patch("orchestration.gh_integration.gh")
+    def test_returns_bot_comments(self, mock_gh):
+        mock_gh.return_value = json.dumps([
+            {"id": 1, "user": {"login": "codecov[bot]"}, "body": "Coverage report",
+             "path": "a.py", "line": 10, "original_line": None,
+             "created_at": "2026-01-01T00:00:00Z", "html_url": "https://..."},
+            {"id": 2, "user": {"login": "human-dev"}, "body": "Looks good",
+             "path": "b.py", "line": 5, "original_line": None,
+             "created_at": "2026-01-01T00:00:00Z", "html_url": "https://..."},
+        ])
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        comments = get_automated_comments(pr)
+        assert len(comments) == 1
+        assert comments[0]["bot_name"] == "codecov[bot]"
+
+    @patch("orchestration.gh_integration.gh")
+    def test_severity_detection(self, mock_gh):
+        mock_gh.return_value = json.dumps([
+            {"id": 1, "user": {"login": "sonarcloud[bot]"},
+             "body": "Bug: potential issue found in this code",
+             "path": "a.py", "line": 10, "original_line": None,
+             "created_at": "2026-01-01T00:00:00Z", "html_url": "https://..."},
+        ])
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        comments = get_automated_comments(pr)
+        assert comments[0]["severity"] == "error"
+
+    @patch("orchestration.gh_integration.gh", side_effect=RuntimeError("fail"))
+    def test_error_returns_empty(self, mock_gh):
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        comments = get_automated_comments(pr)
+        assert comments == []
+

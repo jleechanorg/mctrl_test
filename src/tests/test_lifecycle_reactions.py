@@ -8,6 +8,8 @@ from orchestration.lifecycle_reactions import (
     ReactionConfig,
     ReactionTracker,
     LifecycleManager,
+    LifecyclePoller,
+    determine_status,
     status_to_event_type,
     event_to_reaction_key,
     infer_priority,
@@ -236,3 +238,105 @@ class TestLifecycleManager:
         lm.record_state("s1", SessionStatus.CI_FAILED)
         result = lm.execute_reaction("s1", "ci-failed")  # should be attempt 1 again
         assert result["escalated"] is False
+
+
+# ---------------------------------------------------------------------------
+# determine_status()
+# ---------------------------------------------------------------------------
+
+
+class TestDetermineStatus:
+    """Tests for determine_status() — infers session status from SCM state."""
+
+    def test_no_pr_returns_working(self):
+        session = {"id": "s1", "status": "working", "pr": None, "branch": "feat-x"}
+        result = determine_status(session, scm_state=None)
+        assert result == SessionStatus.WORKING
+
+    def test_pr_merged(self):
+        session = {"id": "s1", "status": "pr_open", "pr": {"number": 1}, "branch": "feat-x"}
+        scm = {"pr_state": "merged"}
+        result = determine_status(session, scm_state=scm)
+        assert result == SessionStatus.MERGED
+
+    def test_pr_closed(self):
+        session = {"id": "s1", "status": "pr_open", "pr": {"number": 1}, "branch": "feat-x"}
+        scm = {"pr_state": "closed"}
+        result = determine_status(session, scm_state=scm)
+        assert result == SessionStatus.KILLED
+
+    def test_ci_failed(self):
+        session = {"id": "s1", "status": "pr_open", "pr": {"number": 1}, "branch": "feat-x"}
+        scm = {"pr_state": "open", "ci_status": "failing"}
+        result = determine_status(session, scm_state=scm)
+        assert result == SessionStatus.CI_FAILED
+
+    def test_changes_requested(self):
+        session = {"id": "s1", "status": "pr_open", "pr": {"number": 1}, "branch": "feat-x"}
+        scm = {"pr_state": "open", "ci_status": "passing", "review_decision": "changes_requested"}
+        result = determine_status(session, scm_state=scm)
+        assert result == SessionStatus.CHANGES_REQUESTED
+
+    def test_approved_and_mergeable(self):
+        session = {"id": "s1", "status": "pr_open", "pr": {"number": 1}, "branch": "feat-x"}
+        scm = {"pr_state": "open", "ci_status": "passing",
+               "review_decision": "approved", "mergeable": True}
+        result = determine_status(session, scm_state=scm)
+        assert result == SessionStatus.MERGEABLE
+
+    def test_approved_not_mergeable(self):
+        session = {"id": "s1", "status": "pr_open", "pr": {"number": 1}, "branch": "feat-x"}
+        scm = {"pr_state": "open", "ci_status": "passing",
+               "review_decision": "approved", "mergeable": False}
+        result = determine_status(session, scm_state=scm)
+        assert result == SessionStatus.APPROVED
+
+    def test_review_pending(self):
+        session = {"id": "s1", "status": "pr_open", "pr": {"number": 1}, "branch": "feat-x"}
+        scm = {"pr_state": "open", "ci_status": "passing", "review_decision": "pending"}
+        result = determine_status(session, scm_state=scm)
+        assert result == SessionStatus.REVIEW_PENDING
+
+    def test_pr_open_no_review(self):
+        session = {"id": "s1", "status": "pr_open", "pr": {"number": 1}, "branch": "feat-x"}
+        scm = {"pr_state": "open", "ci_status": "passing", "review_decision": "none"}
+        result = determine_status(session, scm_state=scm)
+        assert result == SessionStatus.PR_OPEN
+
+
+# ---------------------------------------------------------------------------
+# LifecyclePoller
+# ---------------------------------------------------------------------------
+
+
+class TestLifecyclePoller:
+    """Tests for the polling loop wrapper."""
+
+    def test_creation(self):
+        lm = LifecycleManager(reactions={})
+        poller = LifecyclePoller(lifecycle_manager=lm, interval_seconds=60)
+        assert poller.interval_seconds == 60
+        assert poller.is_running is False
+
+    def test_start_stop(self):
+        lm = LifecycleManager(reactions={})
+        poller = LifecyclePoller(lifecycle_manager=lm, interval_seconds=60)
+        poller.start()
+        assert poller.is_running is True
+        poller.stop()
+        assert poller.is_running is False
+
+    def test_double_start_idempotent(self):
+        lm = LifecycleManager(reactions={})
+        poller = LifecyclePoller(lifecycle_manager=lm, interval_seconds=60)
+        poller.start()
+        poller.start()  # Should not error
+        assert poller.is_running is True
+        poller.stop()
+
+    def test_stop_when_not_running(self):
+        lm = LifecycleManager(reactions={})
+        poller = LifecyclePoller(lifecycle_manager=lm, interval_seconds=60)
+        poller.stop()  # Should not error
+        assert poller.is_running is False
+

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
 from urllib.request import Request, urlopen
 
 
@@ -94,3 +95,61 @@ def sync_agents_to_mission_control() -> None:
             urlopen(req, timeout=5)
         except Exception:
             pass  # Never block — fire and forget
+
+
+# ---------------------------------------------------------------------------
+# Heartbeat poller — threaded polling loop
+# ---------------------------------------------------------------------------
+
+
+class HeartbeatPoller:
+    """Threaded polling loop for heartbeat syncing.
+
+    Periodically lists tmux sessions and syncs to Mission Control.
+    Start/stop are idempotent.
+    """
+
+    def __init__(self, webhook_url: str, interval_seconds: int = 60):
+        self.webhook_url = webhook_url
+        self.interval_seconds = interval_seconds
+        self.bridge = HeartbeatBridge(webhook_url=webhook_url)
+        self._running = False
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
+    def start(self) -> None:
+        """Start the polling loop in a daemon thread."""
+        if self._running:
+            return
+        self._stop_event.clear()
+        self._running = True
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Stop the polling loop."""
+        if not self._running:
+            return
+        self._stop_event.set()
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=5)
+            self._thread = None
+
+    def _run(self) -> None:
+        """Internal polling loop — syncs tmux sessions at interval."""
+        while not self._stop_event.is_set():
+            try:
+                sessions = list_tmux_sessions()
+                disappeared = self.bridge.detect_disappeared(sessions)
+                new = self.bridge.detect_new(sessions)
+                self.bridge.update_known(sessions)
+                sync_agents_to_mission_control()
+            except Exception:
+                pass  # Never crash the polling loop
+            self._stop_event.wait(self.interval_seconds)
+
