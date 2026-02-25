@@ -100,6 +100,10 @@ def gh(args: list[str]) -> str:
         raise RuntimeError(
             f"gh {' '.join(args[:3])} failed: {exc.stderr or exc}"
         ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"gh {' '.join(args[:3])} timed out after 30s"
+        ) from exc
 
 
 def _repo_flag(pr: PRInfo) -> str:
@@ -276,7 +280,7 @@ def get_reviews(pr: PRInfo) -> list[dict]:
         state = state_map.get(state_raw, "commented")
 
         result.append({
-            "author": r.get("author", {}).get("login", "unknown"),
+            "author": (r.get("author") or {}).get("login", "unknown"),
             "state": state,
             "body": r.get("body") or None,
             "submitted_at": r.get("submittedAt"),

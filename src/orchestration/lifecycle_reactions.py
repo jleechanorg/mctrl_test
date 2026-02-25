@@ -175,7 +175,7 @@ class LifecycleManager:
         old_status = self._states.get(session_id)
         if old_status == new_status:
             return None
-        return (old_status, new_status) if old_status else (new_status, new_status)
+        return (old_status, new_status)
 
     def execute_reaction(
         self,

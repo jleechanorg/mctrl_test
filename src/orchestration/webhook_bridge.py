@@ -36,9 +36,10 @@ def notify_mission_control(event: WebhookEvent | str, payload: dict) -> None:
         req = Request(
             webhook_url,
             data=body,
-            headers={"Content-type": "application/json"},
+            headers={"Content-Type": "application/json"},
             method="POST",
         )
-        urlopen(req, timeout=5)
+        with urlopen(req, timeout=5) as resp:
+            resp.read()  # Drain response to fully close connection
     except Exception:
         pass  # Never block orchestration for dashboard

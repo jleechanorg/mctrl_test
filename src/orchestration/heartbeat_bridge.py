@@ -89,7 +89,7 @@ def sync_agents_to_mission_control() -> None:
             req = Request(
                 webhook_url,
                 data=body,
-                headers={"Content-type": "application/json"},
+                headers={"Content-Type": "application/json"},
                 method="POST",
             )
             urlopen(req, timeout=5)

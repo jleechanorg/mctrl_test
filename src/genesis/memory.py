@@ -25,8 +25,8 @@ _DEFAULT_SEED = """\
 ## Key Paths
 - OpenClaw workspace: ~/.openclaw/workspace/
 - OpenClaw config: ~/.openclaw/openclaw.json
-- jleechanclaw repo: /Users/jleechan/project_jleechanclaw/jleechanclaw
-- worldarchitect.ai: /Users/jleechan/projects/worldarchitect.ai
+- jleechanclaw repo: ~/project_jleechanclaw/jleechanclaw
+- worldarchitect.ai: ~/projects/worldarchitect.ai
 
 ## Current Goals
 - Get first 100 users for worldarchitect.ai (AI RPG)
@@ -65,7 +65,11 @@ def generate_seed_content(
             continue
         result.append(line)
 
-    return "\n".join(result)
+    # Preserve original trailing newline
+    text = "\n".join(result)
+    if not text.endswith("\n"):
+        text += "\n"
+    return text
 
 
 def parse_memory_sections(content: str) -> dict[str, str]:

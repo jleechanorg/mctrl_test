@@ -30,7 +30,9 @@ class TestNotifyMissionControl:
     @patch.dict("os.environ", {"MISSION_CONTROL_WEBHOOK_URL": "http://localhost:8080/webhook"})
     @patch("orchestration.webhook_bridge.urlopen")
     def test_successful_post(self, mock_urlopen):
-        mock_urlopen.return_value = MagicMock()
+        mock_response = MagicMock()
+        mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_response)
+        mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
         notify_mission_control(
             WebhookEvent.AGENT_STARTED,
             {"agent_name": "claude-1", "task": "Fix bug #42"},
@@ -61,6 +63,7 @@ class TestNotifyMissionControl:
             WebhookEvent.AGENT_FAILED,
             {"agent_name": "codex-2", "exit_code": 1},
         )
+        mock_urlopen.assert_called_once()
 
     @patch.dict("os.environ", {"MISSION_CONTROL_WEBHOOK_URL": "http://localhost:8080/webhook"})
     @patch("orchestration.webhook_bridge.urlopen")
@@ -77,10 +80,12 @@ class TestNotifyMissionControl:
     def test_timeout_is_set(self, mock_urlopen):
         notify_mission_control(WebhookEvent.AGENT_KILLED, {"reason": "manual"})
         call_args = mock_urlopen.call_args
-        assert call_args[1].get("timeout", call_args[0][1] if len(call_args[0]) > 1 else None) is not None
+        # Timeout is passed as kwarg to urlopen
+        assert call_args[1].get("timeout") == 5
 
     @patch.dict("os.environ", {"MISSION_CONTROL_WEBHOOK_URL": "http://localhost:8080/webhook"})
     @patch("orchestration.webhook_bridge.urlopen", side_effect=TimeoutError("timed out"))
     def test_timeout_is_silent(self, mock_urlopen):
         """Timeout must not raise."""
         notify_mission_control(WebhookEvent.AGENT_STARTED, {"agent_name": "test"})
+        mock_urlopen.assert_called_once()
