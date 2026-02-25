@@ -41,16 +41,6 @@ EXCLUDE_FILES = {
     ".DS_Store",
 }
 
-EXCLUDE_SUFFIXES = {
-    ".sqlite",
-    ".sqlite3",
-    ".db",
-    ".ipynb",
-    ".log",
-    ".log.1",
-    ".jsonl",
-}
-
 PATTERNS = [
     re.compile(r"(?im)^[\t ]*(?:export[\t ]+)?(?:[A-Za-z_][A-Za-z0-9_]*_?(?:KEY|KEYS?|TOKEN|SECRET|PASS|PASSWORD)|API[_-]?KEY|CLIENT_SECRET|CLIENTID|CLIENT_ID|CLIENT_SECRET)\s*[:=].+$"),
     re.compile(r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|bearer\s+token)\b[^\n]*"),
@@ -80,35 +70,12 @@ def path_is_sensitive(path: Path) -> bool:
     return False
 
 
-def is_nested_git_root(path: Path) -> bool:
-    git_dir = path / ".git"
-    if not git_dir.exists():
-        return False
-
-    if git_dir.is_dir():
-        return True
-
-    if git_dir.is_file():
-        try:
-            return git_dir.read_text(encoding="utf-8", errors="ignore").lstrip().startswith("gitdir:")
-        except Exception:
-            return True
-
-    return False
-
-
 for root, dirs, files in os.walk(SRC_DIR):
     src_root = Path(root)
     rel_root = src_root.relative_to(SRC_DIR)
 
-    if rel_root != Path(".") and is_nested_git_root(src_root):
-        # Skip nested repositories so detached/no-checkout trees are not mirrored.
-        dirs[:] = []
-        files[:] = []
-        continue
-
-    # Skip backup directory to prevent recursive backup
-    dirs[:] = [d for d in dirs if d != '.openclaw-backups']
+    # Skip backup directory to prevent recursive backup; skip .git dirs inside nested repos
+    dirs[:] = [d for d in dirs if d != '.openclaw-backups' and d != '.git']
 
     # Do not skip directories by default; this is a full mirror.
     # Sensitive paths are copied, then redacted where possible.
@@ -121,10 +88,6 @@ for root, dirs, files in os.walk(SRC_DIR):
         src_file = src_root / name
         rel = src_file.relative_to(SRC_DIR)
         dst_file = DST_DIR / rel
-
-        # Check if filename ends with any excluded suffix (handles both simple and compound suffixes like .log.1)
-        if any(src_file.name.lower().endswith(suffix) for suffix in EXCLUDE_SUFFIXES):
-            continue
 
         if path_is_sensitive(src_file) and (is_binary(src_file) or src_file.suffix.lower() in {
             ".pem", ".key", ".p12", ".pfx", ".crt", ".cer", ".der"

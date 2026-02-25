@@ -41,16 +41,6 @@ EXCLUDE_FILES = {
     ".DS_Store",
 }
 
-EXCLUDE_SUFFIXES = {
-    ".sqlite",
-    ".sqlite3",
-    ".db",
-    ".ipynb",
-    ".log",
-    ".log.1",
-    # Keep .jsonl for sessions - will redact tokens in content
-}
-
 PATTERNS = [
     re.compile(r"(?im)^[\t ]*(?:export[\t ]+)?(?:[A-Za-z_][A-Za-z0-9_]*_?(?:KEY|KEYS?|TOKEN|SECRET|PASS|PASSWORD)|API[_-]?KEY|CLIENT_SECRET|CLIENTID|CLIENT_ID|CLIENT_SECRET)\s*[:=].+$"),
     re.compile(r"(?i)\\b(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|bearer\\s+token)\\b[^\n]*"),
@@ -84,8 +74,8 @@ for root, dirs, files in os.walk(SRC_DIR):
     src_root = Path(root)
     rel_root = src_root.relative_to(SRC_DIR)
 
-    # Skip backup directory to prevent recursive backup
-    dirs[:] = [d for d in dirs if d != '.openclaw-backups']
+    # Skip backup directory to prevent recursive backup; skip .git dirs inside nested repos
+    dirs[:] = [d for d in dirs if d != '.openclaw-backups' and d != '.git']
 
     # Do not skip directories by default; this is a full mirror.
     # Sensitive paths are copied, then redacted where possible.
@@ -98,9 +88,6 @@ for root, dirs, files in os.walk(SRC_DIR):
         src_file = src_root / name
         rel = src_file.relative_to(SRC_DIR)
         dst_file = DST_DIR / rel
-
-        if src_file.suffix.lower() in EXCLUDE_SUFFIXES:
-            continue
 
         if path_is_sensitive(src_file) and (is_binary(src_file) or src_file.suffix.lower() in {
             ".pem", ".key", ".p12", ".pfx", ".crt", ".cer", ".der"
