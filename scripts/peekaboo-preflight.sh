@@ -54,8 +54,16 @@ echo ""
 echo "2) macOS Permissions"
 if command -v peekaboo >/dev/null 2>&1; then
   PERMS=$(peekaboo permissions --json 2>/dev/null || echo '{}')
+  # Parse permission status using awk to handle multi-line JSON.
+  # The JSON lists objects with "name" and "isGranted" fields.
+  perm_granted() {
+    echo "$PERMS" | awk -v perm="$1" '
+      /"name"/ { found = ($0 ~ perm) }
+      /"isGranted"/ && found { if ($0 ~ /true/) exit 0; else exit 1 }
+    '
+  }
   # Check Accessibility
-  if echo "$PERMS" | grep -q '"accessibility".*true'; then
+  if perm_granted "Accessibility"; then
     printf "  ✅  Accessibility granted\n"
     PASS=$((PASS + 1))
   else
@@ -64,7 +72,7 @@ if command -v peekaboo >/dev/null 2>&1; then
     FAIL=$((FAIL + 1))
   fi
   # Check Screen Recording
-  if echo "$PERMS" | grep -q '"screenRecording".*true'; then
+  if perm_granted "Screen Recording"; then
     printf "  ✅  Screen Recording granted\n"
     PASS=$((PASS + 1))
   else
