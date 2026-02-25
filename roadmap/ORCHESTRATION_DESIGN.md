@@ -45,6 +45,41 @@ Two orchestration systems with different state models:
 
 Running both creates split-brain state. Gemini's review called this "an architectural death sentence."
 
+## Beads Tracker
+
+All work items tracked via beads (`bd list`). Design doc sections reference bead IDs.
+
+### Epic
+| ID | Title | Priority | Status |
+|----|-------|----------|--------|
+| ORCH-3h2 | jleechanclaw + Mission Control + ai_orch Integration | P1 | open |
+
+### Implementation Phases
+| ID | Title | Priority | Depends On |
+|----|-------|----------|------------|
+| ORCH-x3o | Phase 1: Webhook Bridge | P1 | ORCH-3h2 |
+| ORCH-0a9 | Phase 2: Heartbeat Integration | P1 | ORCH-x3o |
+| ORCH-hab | Phase 3: Task Assignment from Dashboard | P2 | ORCH-0a9 |
+| ORCH-7zk | Phase 4: State Unification | P3 | ORCH-hab |
+
+### Ports from agent-orchestrator
+| ID | Title | Priority | Depends On |
+|----|-------|----------|------------|
+| ORCH-l6o | Port GitHub SCM logic → `gh_integration.py` | P1 | ORCH-3h2 |
+| ORCH-y77 | Port lifecycle reaction engine → `lifecycle_reactions.py` | P1 | ORCH-l6o |
+| ORCH-azl | Evaluate Claude Code PostToolUse hook pattern | P2 | — |
+
+### Superpowers
+| ID | Title | Priority | Depends On |
+|----|-------|----------|------------|
+| ORCH-2oy | Superpower 1: Auto-Triage GitHub Notifications | P2 | ORCH-3h2 |
+| ORCH-04k | Superpower 2: Self-Improving Prompts | P2 | ORCH-3h2 |
+| ORCH-6k1 | Superpower 3: Parallel Agent Swarms | P2 | ORCH-3h2 |
+| ORCH-vvh | Superpower 4: Cost Dashboard | P3 | ORCH-3h2 |
+| ORCH-431 | Superpower 5: Replay Failed Agents | P2 | ORCH-3h2 |
+| ORCH-8z2 | Superpower 6: Cross-Repo Coordination | P2 | ORCH-3h2 |
+| ORCH-7et | Superpower 7: Approval Gates for Production | P2 | ORCH-3h2 |
+
 ## Design Decision: Phased Integration (Not Rewrite)
 
 Gemini recommends nuking one system. That's the clean answer but ignores reality:
@@ -102,7 +137,7 @@ Gemini recommends nuking one system. That's the clean answer but ignores reality
 
 ## Implementation Phases
 
-### Phase 1: Webhook Bridge (This Week)
+### Phase 1: Webhook Bridge (ORCH-x3o)
 
 **Goal**: ai_orch reports events to Mission Control. Dashboard shows what's happening.
 
@@ -143,7 +178,7 @@ Mission Control setup:
 
 **No changes to Mission Control code.** Webhooks are a built-in feature.
 
-### Phase 2: Heartbeat Integration (Next)
+### Phase 2: Heartbeat Integration (ORCH-0a9)
 
 **Goal**: Mission Control knows which agents are alive in real-time.
 
@@ -167,7 +202,7 @@ def sync_agents_to_mission_control():
             post_agent_event("agent_failed", known, reason="session_disappeared")
 ```
 
-### Phase 3: Task Assignment from Dashboard (Later)
+### Phase 3: Task Assignment from Dashboard (ORCH-hab)
 
 **Goal**: Create tasks in Mission Control UI, jleechanclaw picks them up and dispatches.
 
@@ -184,7 +219,7 @@ For each task:
 
 This closes the loop: humans create tasks in the dashboard, jleechanclaw executes them autonomously.
 
-### Phase 4: State Unification (Future)
+### Phase 4: State Unification (ORCH-7zk)
 
 **Goal**: Single source of truth for agent state.
 
@@ -225,26 +260,102 @@ Each phase is independently useful:
 
 Ideas beyond the core integration:
 
-### Superpower 1: Auto-Triage GitHub Notifications
-jleechanclaw scans GitHub notifications across all 20+ repos every morning. Failing CI, open PRs needing review, stale issues — triaged into Mission Control tasks automatically. No human scanning required.
+### Superpower 1: Auto-Triage GitHub Notifications (ORCH-2oy)
+jleechanclaw scans GitHub notifications across all 20+ repos every morning. Failing CI, open PRs needing review, stale issues — triaged into Mission Control tasks automatically via `gh` CLI. No human scanning required.
 
-### Superpower 2: Self-Improving Prompts
+### Superpower 2: Self-Improving Prompts (ORCH-04k)
 When an agent succeeds (CI passes, PR merged), log the prompt that worked. When it fails, log what went wrong. Over time, jleechanclaw builds a prompt library: "For auth bugs, always include the middleware file paths. For UI tasks, start with Gemini design spec."
 
-### Superpower 3: Parallel Agent Swarms
+### Superpower 3: Parallel Agent Swarms (ORCH-6k1)
 For large tasks, jleechanclaw decomposes into subtasks and spawns 3-5 agents simultaneously — each on its own worktree/branch. Mission Control shows the swarm as linked tasks with dependencies. Merge order enforced by task dependency blocking.
 
-### Superpower 4: Cost Dashboard
+### Superpower 4: Cost Dashboard (ORCH-vvh)
 Track API spend per agent per task. Mission Control custom fields store token counts. jleechanclaw learns which tasks are expensive (Codex for deep reasoning) vs cheap (Claude for git ops) and optimizes agent selection.
 
-### Superpower 5: "Replay" Failed Agents
-When an agent fails, Mission Control stores the full context (prompt, output, error). jleechanclaw can "replay" with a better prompt — injecting the failure context so the retry agent knows what went wrong. Not just retry — informed retry.
+### Superpower 5: "Replay" Failed Agents (ORCH-431)
+When an agent fails, Mission Control stores the full context (prompt, output, error). jleechanclaw can "replay" with a better prompt — injecting the failure context so the retry agent knows what went wrong. Not just retry — informed retry. Note: the lifecycle reaction engine (ORCH-y77) implements the automated version of this as a state machine with configurable retry limits.
 
-### Superpower 6: Cross-Repo Coordination
+### Superpower 6: Cross-Repo Coordination (ORCH-8z2)
 A feature that spans worldarchitect.ai (backend) + ai_universe (MCP server) + ai_universe_frontend (UI). jleechanclaw creates three linked tasks in Mission Control, spawns three agents, and blocks the frontend task until backend + server are merged. Mission Control's dependency system handles the blocking.
 
-### Superpower 7: Approval Gates for Production
+### Superpower 7: Approval Gates for Production (ORCH-7et)
 For production deployments or security-sensitive changes, Mission Control's approval workflow requires Jeffrey's explicit sign-off before the agent can proceed. jleechanclaw requests approval, Jeffrey clicks "Approve" in the dashboard, agent continues.
+
+## Reference Repos & Credits
+
+This design was informed by studying these open-source projects:
+
+| Repo | URL | What We Studied |
+|------|-----|-----------------|
+| **agent-orchestrator** (Composio) | https://github.com/ComposioHQ/agent-orchestrator | GitHub SCM integration, lifecycle state machine, reaction engine, plugin architecture |
+| **openclaw-mission-control** | https://github.com/abhi1693/openclaw-mission-control | Dashboard architecture, boards/tasks/approvals, webhook ingestion, SSE streaming |
+| **openclaw** | https://github.com/openclaw/openclaw | Agent runtime, memory system, gateway, cron jobs, workspace management |
+
+### What We're Reusing from agent-orchestrator
+
+Composio's agent-orchestrator is a TypeScript monorepo for spawning and managing fleets of parallel AI coding agents. Its plugin-based architecture (8 swappable slots: Runtime, Agent, Workspace, Tracker, SCM, Notifier, Terminal, Lifecycle) is well-designed. We're porting select logic patterns — not adopting the framework.
+
+**Porting to ai_orch (Python):**
+
+#### 1. GitHub SCM Logic → `gh_integration.py` (ORCH-l6o)
+
+The `scm-github` plugin (`packages/plugins/scm-github/src/index.ts`) has ~300 lines of `gh` CLI wrappers that solve the "after the agent creates a PR, what happens?" problem. Functions to port:
+
+| Function | What It Does | gh Command |
+|----------|-------------|------------|
+| `detect_pr(branch, repo)` | Find PR by branch name (no ID tracking needed) | `gh pr list --head <branch> --json number,url,title,isDraft` |
+| `get_ci_checks(pr, repo)` | Parse CI status with fail-closed logic | `gh pr checks <num> --json name,state,link` |
+| `get_pending_comments(pr, repo)` | Fetch unresolved review threads, exclude bots | GraphQL via `gh api graphql -f` (injection-safe variable passing) |
+| `get_reviews(pr, repo)` | Get review decisions (approved/changes_requested) | `gh pr view <num> --json reviews` |
+| `get_merge_readiness(pr, repo)` | Aggregate CI + approvals + conflicts into `blockers[]` | Composition of above |
+
+Key design choices we're preserving:
+- **PR detection by branch name** — agents don't need to report PR IDs; we discover them
+- **Fail-closed error handling** — CI fetch failure → report as "failing" not "none"
+- **GraphQL `-f` flag** — safe variable passing prevents injection from repo names with special chars
+- **Bot filtering** — hardcoded list of known bot logins (github-actions, dependabot, codecov)
+
+#### 2. Lifecycle Reaction Engine → `lifecycle_reactions.py` (ORCH-y77)
+
+The lifecycle manager (`packages/core/src/lifecycle-manager.ts`) runs a polling loop every 5-30s that auto-detects state transitions and triggers reactions. State machine:
+
+```
+working → pr_open → ci_failed ──(auto-retry)──→ working
+                  → review_pending → changes_requested ──(auto-retry)──→ working
+                  → approved → mergeable → merged
+
+Terminal states: stuck, needs_input, errored, killed, done
+```
+
+Reaction patterns to port:
+- `ci_failed` → fetch CI logs, auto-send to agent via tmux: "CI failing. Logs at [link]. Fix and push."
+- `changes_requested` → fetch review comments (GraphQL), auto-send to agent
+- `approved + ci_passing` → notify human "PR ready to merge" (or auto-merge if configured)
+- Escalation: after N retries or duration, stop auto-fixing and alert human
+
+This is effectively "Superpower 5: Replay Failed Agents" implemented as a state machine.
+
+#### 3. PostToolUse Hook Pattern (ORCH-azl, evaluation)
+
+agent-orchestrator's Claude Code plugin installs a bash hook that watches for `gh pr create` / `git checkout -b` and auto-updates session metadata — no tmux pane scraping needed. Worth evaluating as an alternative to ai_orch's current tmux output monitoring for Claude Code agents.
+
+### What We're NOT Reusing
+
+| Component | Why Skip |
+|-----------|----------|
+| Plugin architecture (8 TypeScript interfaces) | Over-engineered for our setup; we have 2 systems already |
+| Flat-file metadata (key=value) | We're moving toward PostgreSQL (Phase 4), opposite direction |
+| tmux runtime plugin | ai_orch's tmux management has 78 releases of battle-testing |
+| Next.js web dashboard | Mission Control is more feature-rich for our needs |
+| workspace-worktree plugin | ai_orch already handles worktree isolation |
+
+### What We're Reusing from openclaw-mission-control
+
+The full dashboard layer — boards, tasks, approvals, activity timeline, webhook ingestion, SSE streaming. Used as-is (Phase 1 webhook bridge), not forked.
+
+### What We're Reusing from openclaw
+
+The agent runtime itself — memory system, gateway, cron jobs, session management, workspace. jleechanclaw runs as an OpenClaw agent. See `roadmap/GENESIS_DESIGN.md` for the Genesis (OpenClaw config layer) design.
 
 ## Open Questions
 
@@ -278,3 +389,7 @@ For production deployments or security-sensitive changes, Mission Control's appr
 | Mission Control reference | `/Users/jleechan/projects_reference/openclaw-mission-control/` |
 | jleechanclaw repo | `/Users/jleechan/project_jleechanclaw/jleechanclaw/` |
 | Original Genesis design | `jleechanclaw/docs/GENESIS_DESIGN.md` (historical) |
+| agent-orchestrator reference | `/Users/jleechan/projects_reference/agent-orchestrator/` |
+| agent-orchestrator SCM plugin | `agent-orchestrator/packages/plugins/scm-github/src/index.ts` |
+| agent-orchestrator lifecycle | `agent-orchestrator/packages/core/src/lifecycle-manager.ts` |
+| agent-orchestrator types | `agent-orchestrator/packages/core/src/types.ts` |
