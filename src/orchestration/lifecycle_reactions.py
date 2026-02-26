@@ -86,7 +86,7 @@ def event_to_reaction_key(event_type: str) -> Optional[str]:
 
 def infer_priority(event_type: str) -> str:
     """Infer a reasonable priority from event type."""
-    if "stuck" in event_type or "needs_input" in event_type or "errored" in event_type:
+    if any(k in event_type for k in ("stuck", "needs_input", "errored", "killed")):
         return "urgent"
     if event_type.startswith("summary."):
         return "info"
@@ -107,7 +107,7 @@ class ReactionConfig:
     """Configuration for an automated reaction."""
     action: str  # "send-to-agent", "notify", "auto-merge"
     retries: Optional[int] = None
-    escalate_after: Optional[str] = None  # duration like "10m"
+    escalate_after: Optional[str] = None  # Reserved for future time-based escalation (e.g. "10m")
     message: Optional[str] = None
     priority: str = "info"
     auto: bool = True
@@ -283,16 +283,19 @@ def determine_status(
 class LifecyclePoller:
     """Threaded polling loop for the lifecycle manager.
 
-    Calls poll function at regular intervals. Start/stop are idempotent.
+    Calls a user-provided poll function at regular intervals.
+    Start/stop are idempotent.
     """
 
     def __init__(
         self,
         lifecycle_manager: LifecycleManager,
         interval_seconds: int = 60,
+        poll_fn: Optional[callable] = None,
     ):
         self.lifecycle_manager = lifecycle_manager
         self.interval_seconds = interval_seconds
+        self._poll_fn = poll_fn
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -321,7 +324,12 @@ class LifecyclePoller:
             self._thread = None
 
     def _run(self) -> None:
-        """Internal polling loop."""
+        """Internal polling loop — calls poll_fn at each interval."""
         while not self._stop_event.is_set():
+            try:
+                if self._poll_fn is not None:
+                    self._poll_fn(self.lifecycle_manager)
+            except Exception:
+                pass  # Never crash the polling loop
             self._stop_event.wait(self.interval_seconds)
 

@@ -1,7 +1,8 @@
 """Heartbeat bridge — syncs tmux agent sessions to Mission Control.
 
 Periodically lists running tmux sessions and POSTs heartbeats.
-Detects disappeared sessions and reports agent_failed events.
+Detects disappeared sessions and emits agent_failed events via webhook.
+Detects new sessions and emits agent_started events via webhook.
 """
 
 from __future__ import annotations
@@ -67,13 +68,33 @@ class HeartbeatBridge:
 # ---------------------------------------------------------------------------
 
 
-def sync_agents_to_mission_control() -> None:
+def _post_event(webhook_url: str, event: str, agent_name: str) -> None:
+    """POST a single event to Mission Control. Silent on failure."""
+    try:
+        body = json.dumps({
+            "event": event,
+            "agent_name": agent_name,
+        }).encode("utf-8")
+        req = Request(
+            webhook_url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(req, timeout=5) as resp:
+            resp.read()
+    except Exception:
+        pass  # Never block — fire and forget
+
+
+def sync_agents_to_mission_control(webhook_url: str | None = None) -> None:
     """One-shot sync: list tmux sessions, POST heartbeats.
 
-    Reads MISSION_CONTROL_WEBHOOK_URL from env. Silent on failure.
+    Args:
+        webhook_url: Optional explicit URL. Falls back to env var.
     """
-    webhook_url = os.environ.get("MISSION_CONTROL_WEBHOOK_URL")
-    if not webhook_url:
+    url = webhook_url or os.environ.get("MISSION_CONTROL_WEBHOOK_URL")
+    if not url:
         return
 
     sessions = list_tmux_sessions()
@@ -81,20 +102,7 @@ def sync_agents_to_mission_control() -> None:
         return
 
     for session_name in sessions:
-        try:
-            body = json.dumps({
-                "event": "agent_heartbeat",
-                "agent_name": session_name,
-            }).encode("utf-8")
-            req = Request(
-                webhook_url,
-                data=body,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            urlopen(req, timeout=5)
-        except Exception:
-            pass  # Never block — fire and forget
+        _post_event(url, "agent_heartbeat", session_name)
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +113,8 @@ def sync_agents_to_mission_control() -> None:
 class HeartbeatPoller:
     """Threaded polling loop for heartbeat syncing.
 
-    Periodically lists tmux sessions and syncs to Mission Control.
+    Periodically lists tmux sessions, detects disappeared/new agents,
+    emits agent_failed/agent_started events, and syncs heartbeats.
     Start/stop are idempotent.
     """
 
@@ -145,11 +154,21 @@ class HeartbeatPoller:
         while not self._stop_event.is_set():
             try:
                 sessions = list_tmux_sessions()
+
+                # Emit agent_failed for disappeared sessions
                 disappeared = self.bridge.detect_disappeared(sessions)
+                for agent in disappeared:
+                    _post_event(self.webhook_url, "agent_failed", agent)
+
+                # Emit agent_started for new sessions
                 new = self.bridge.detect_new(sessions)
+                for agent in new:
+                    _post_event(self.webhook_url, "agent_started", agent)
+
                 self.bridge.update_known(sessions)
-                sync_agents_to_mission_control()
+
+                # POST heartbeats for all live sessions
+                sync_agents_to_mission_control(webhook_url=self.webhook_url)
             except Exception:
                 pass  # Never crash the polling loop
             self._stop_event.wait(self.interval_seconds)
-

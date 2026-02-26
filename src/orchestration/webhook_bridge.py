@@ -32,7 +32,7 @@ def notify_mission_control(event: WebhookEvent | str, payload: dict) -> None:
         return
 
     try:
-        body = json.dumps({"event": str(event), **payload}).encode("utf-8")
+        body = json.dumps({**payload, "event": str(event)}).encode("utf-8")
         req = Request(
             webhook_url,
             data=body,

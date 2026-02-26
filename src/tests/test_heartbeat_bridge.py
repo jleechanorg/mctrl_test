@@ -1,7 +1,7 @@
 """Tests for orchestration.heartbeat_bridge — tmux-to-Mission Control sync."""
 
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 
 import pytest
 
@@ -10,6 +10,7 @@ from orchestration.heartbeat_bridge import (
     sync_agents_to_mission_control,
     HeartbeatBridge,
     HeartbeatPoller,
+    _post_event,
 )
 
 
@@ -76,6 +77,25 @@ class TestHeartbeatBridge:
 
 
 # ---------------------------------------------------------------------------
+# _post_event()
+# ---------------------------------------------------------------------------
+
+
+class TestPostEvent:
+    @patch("orchestration.heartbeat_bridge.urlopen")
+    def test_posts_event(self, mock_urlopen):
+        mock_resp = MagicMock()
+        mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_resp)
+        mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
+        _post_event("http://localhost:8080", "agent_failed", "agent-1")
+        mock_urlopen.assert_called_once()
+
+    @patch("orchestration.heartbeat_bridge.urlopen", side_effect=Exception("fail"))
+    def test_failure_is_silent(self, mock_urlopen):
+        _post_event("http://localhost:8080", "agent_failed", "agent-1")
+
+
+# ---------------------------------------------------------------------------
 # sync_agents_to_mission_control()
 # ---------------------------------------------------------------------------
 
@@ -83,26 +103,34 @@ class TestHeartbeatBridge:
 class TestSyncAgents:
     @patch("orchestration.heartbeat_bridge.list_tmux_sessions", return_value=["agent-1"])
     @patch("orchestration.heartbeat_bridge.urlopen")
+    def test_heartbeat_posted_with_explicit_url(self, mock_urlopen, mock_list):
+        mock_resp = MagicMock()
+        mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_resp)
+        mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
+        sync_agents_to_mission_control(webhook_url="http://localhost:8080/webhook")
+        mock_urlopen.assert_called()
+
+    @patch("orchestration.heartbeat_bridge.list_tmux_sessions", return_value=["agent-1"])
+    @patch("orchestration.heartbeat_bridge.urlopen")
     @patch.dict("os.environ", {"MISSION_CONTROL_WEBHOOK_URL": "http://localhost:8080/webhook"})
-    def test_heartbeat_posted(self, mock_urlopen, mock_list):
-        mock_urlopen.return_value = MagicMock()
+    def test_heartbeat_posted_from_env(self, mock_urlopen, mock_list):
+        mock_resp = MagicMock()
+        mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_resp)
+        mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
         sync_agents_to_mission_control()
         mock_urlopen.assert_called()
 
     @patch("orchestration.heartbeat_bridge.list_tmux_sessions", return_value=[])
     @patch("orchestration.heartbeat_bridge.urlopen")
-    @patch.dict("os.environ", {"MISSION_CONTROL_WEBHOOK_URL": "http://localhost:8080/webhook"})
     def test_no_sessions_no_post(self, mock_urlopen, mock_list):
-        sync_agents_to_mission_control()
-        # No heartbeat to post when no sessions
+        sync_agents_to_mission_control(webhook_url="http://localhost:8080/webhook")
         mock_urlopen.assert_not_called()
 
     @patch("orchestration.heartbeat_bridge.list_tmux_sessions", return_value=["agent-1"])
     @patch("orchestration.heartbeat_bridge.urlopen", side_effect=Exception("network error"))
-    @patch.dict("os.environ", {"MISSION_CONTROL_WEBHOOK_URL": "http://localhost:8080/webhook"})
     def test_failure_is_silent(self, mock_urlopen, mock_list):
         """Heartbeat failures must be silent — never block."""
-        sync_agents_to_mission_control()  # Should not raise
+        sync_agents_to_mission_control(webhook_url="http://localhost:8080/webhook")
 
 
 # ---------------------------------------------------------------------------
@@ -139,3 +167,6 @@ class TestHeartbeatPoller:
         poller = HeartbeatPoller(webhook_url="http://localhost:8080", interval_seconds=60)
         assert isinstance(poller.bridge, HeartbeatBridge)
 
+    def test_uses_explicit_webhook_url(self):
+        poller = HeartbeatPoller(webhook_url="http://example.com/hook", interval_seconds=30)
+        assert poller.webhook_url == "http://example.com/hook"

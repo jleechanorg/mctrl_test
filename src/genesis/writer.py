@@ -38,7 +38,7 @@ def write_memory_md(
 
     _ensure_parent(path)
     content = generate_seed_content(goals=goals)
-    Path(path).write_text(content)
+    Path(path).write_text(content, encoding="utf-8")
     return True
 
 
@@ -58,7 +58,7 @@ def write_openclaw_config(
     """
     _ensure_parent(path)
     config = build_openclaw_config(extra_paths=extra_paths)
-    Path(path).write_text(json.dumps(config, indent=2) + "\n")
+    Path(path).write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     return True
 
 
@@ -73,7 +73,7 @@ def write_cron_jobs(path: str) -> bool:
     """
     _ensure_parent(path)
     jobs = build_all_jobs()
-    Path(path).write_text(json.dumps(jobs, indent=2) + "\n")
+    Path(path).write_text(json.dumps(jobs, indent=2) + "\n", encoding="utf-8")
     return True
 
 

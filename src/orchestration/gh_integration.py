@@ -104,6 +104,10 @@ def gh(args: list[str]) -> str:
         raise RuntimeError(
             f"gh {' '.join(args[:3])} timed out after 30s"
         ) from exc
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "gh CLI not found — install from https://cli.github.com/"
+        ) from exc
 
 
 def _repo_flag(pr: PRInfo) -> str:
@@ -228,13 +232,13 @@ def get_ci_summary(pr: PRInfo) -> CIStatus:
     """
     try:
         checks = get_ci_checks(pr)
-    except RuntimeError:
+    except (RuntimeError, json.JSONDecodeError, KeyError, TypeError):
         # Before fail-closing, check if PR is merged/closed
         try:
             state = get_pr_state(pr)
             if state in ("merged", "closed"):
                 return CIStatus.NONE
-        except RuntimeError:
+        except (RuntimeError, json.JSONDecodeError, KeyError, TypeError):
             pass
         # Fail closed for open PRs
         return CIStatus.FAILING
@@ -331,7 +335,7 @@ def get_pending_comments(pr: PRInfo) -> list[dict]:
                 "      reviewThreads(first: 100) {"
                 "        nodes {"
                 "          isResolved"
-                "          comments(first: 1) {"
+                "          comments(first: 10) {"
                 "            nodes {"
                 "              id"
                 "              author { login }"
@@ -359,10 +363,16 @@ def get_pending_comments(pr: PRInfo) -> list[dict]:
             comments = t["comments"]["nodes"]
             if not comments:
                 continue
-            c = comments[0]
-            author = (c.get("author") or {}).get("login", "unknown")
-            if author in BOT_AUTHORS:
+            # Find first non-bot comment in thread
+            c = None
+            for candidate in comments:
+                author = (candidate.get("author") or {}).get("login", "unknown")
+                if author not in BOT_AUTHORS:
+                    c = candidate
+                    break
+            if c is None:
                 continue
+            author = (c.get("author") or {}).get("login", "unknown")
             result.append({
                 "id": c["id"],
                 "author": author,
