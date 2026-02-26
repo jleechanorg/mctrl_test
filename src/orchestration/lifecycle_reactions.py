@@ -86,7 +86,7 @@ def event_to_reaction_key(event_type: str) -> Optional[str]:
 
 def infer_priority(event_type: str) -> str:
     """Infer a reasonable priority from event type."""
-    if any(k in event_type for k in ("stuck", "needs_input", "errored", "killed")):
+    if any(k in event_type for k in ("stuck", "needs_input", "errored", "killed", "exited")):
         return "urgent"
     if event_type.startswith("summary."):
         return "info"
@@ -167,10 +167,11 @@ class LifecycleManager:
         self,
         session_id: str,
         new_status: SessionStatus,
-    ) -> Optional[tuple[SessionStatus, SessionStatus]]:
+    ) -> Optional[tuple[Optional[SessionStatus], SessionStatus]]:
         """Check if a state transition occurred.
 
         Returns (old_status, new_status) if transition detected, None if same.
+        For first observation, old_status is None.
         """
         old_status = self._states.get(session_id)
         if old_status == new_status:

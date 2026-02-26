@@ -25,8 +25,8 @@ _DEFAULT_SEED = """\
 ## Key Paths
 - OpenClaw workspace: ~/.openclaw/workspace/
 - OpenClaw config: ~/.openclaw/openclaw.json
-- jleechanclaw repo: ~/project_jleechanclaw/jleechanclaw
-- worldarchitect.ai: ~/projects/worldarchitect.ai
+- jleechanclaw repo: ~/project_jleechanclaw/jleechanclaw/
+- worldarchitect.ai: ~/projects/worldarchitect.ai/
 
 ## Current Goals
 - Get first 100 users for worldarchitect.ai (AI RPG)

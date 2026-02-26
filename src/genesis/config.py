@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import os
 from typing import Optional
 
-# Default extra paths for memory search indexing
+# Default extra paths for memory search indexing.
+# Stored as ~-relative strings; consumers expand at runtime.
 DEFAULT_EXTRA_PATHS = [
-    os.path.expanduser("~/projects/worldarchitect.ai/.claude/learnings.md"),
-    os.path.expanduser("~/projects/worldarchitect.ai/CLAUDE.md"),
+    "~/projects/worldarchitect.ai/.claude/learnings.md",
+    "~/projects/worldarchitect.ai/CLAUDE.md",
 ]
 
 

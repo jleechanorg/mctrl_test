@@ -130,6 +130,12 @@ class TestInferPriority:
     def test_working_is_info(self):
         assert infer_priority("session.working") == "info"
 
+    def test_killed_is_urgent(self):
+        assert infer_priority("session.killed") == "urgent"
+
+    def test_exited_is_urgent(self):
+        assert infer_priority("session.exited") == "urgent"
+
 
 # ---------------------------------------------------------------------------
 # ReactionConfig
@@ -196,6 +202,15 @@ class TestLifecycleManager:
         lm.record_state("session-1", SessionStatus.WORKING)
         result = lm.check_transition("session-1", SessionStatus.WORKING)
         assert result is None
+
+    def test_first_observation_returns_none_old(self):
+        """First observation of a session should have None as old_status."""
+        lm = LifecycleManager(reactions={})
+        result = lm.check_transition("new-session", SessionStatus.WORKING)
+        assert result is not None
+        old, new = result
+        assert old is None
+        assert new == SessionStatus.WORKING
 
     def test_reaction_tracking(self):
         reactions = {

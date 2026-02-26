@@ -1,7 +1,5 @@
 """Tests for genesis.memory — MEMORY.md seed content generator."""
 
-import pytest
-
 from genesis.memory import generate_seed_content, parse_memory_sections
 
 

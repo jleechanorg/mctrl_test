@@ -86,7 +86,5 @@ USER.md
 package-lock.json
 
 # Python
-src/.venv/
-src/*.egg-info/
-__pycache__/
-*.pyc
+.venv/
+**/*.egg-info/
