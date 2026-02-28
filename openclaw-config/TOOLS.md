@@ -37,4 +37,38 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 ---
 
+## AI Coding Agents
+
+**All coding tasks go through `ai_orch`.** Never write code yourself when asked to implement something — always delegate to an agent via `ai_orch run`.
+
+### Agent Priority (try in order)
+
+1. **codexs** — Codex with Spark model + high reasoning. Best for most tasks.
+2. **clauded** — Claude Sonnet with full permissions. Use if codexs fails or is unavailable.
+3. **codex** — Vanilla Codex. Final fallback.
+
+### Commands
+
+```bash
+# 1st choice: codexs (Codex Spark, high reasoning effort)
+CODEX_MODEL=gpt-5.3-codex-spark ai_orch run --agent-cli codex "task description"
+
+# 2nd choice: clauded (Claude Sonnet, skip-permissions)
+ai_orch run --agent-cli claude --model sonnet "task description"
+
+# 3rd choice: codex (vanilla)
+ai_orch run --agent-cli codex "task description"
+```
+
+### Rules
+
+- Always pass the full task context in the description string (repo path, what to change, acceptance criteria)
+- Run from the relevant repo directory, or include the path in the task description
+- After dispatching, tell the user: agent is running in tmux, attach with `ai_orch attach <session>`
+- Do NOT wait for the agent to finish before responding — it runs async
+
+### What counts as a coding task
+
+Everything that involves writing, modifying, or testing code: bug fixes, new features, refactors, tests, scripts. Even "small" tasks go through ai_orch — consistency matters more than overhead.
+
 Add whatever helps you do your job. This is your cheat sheet.
