@@ -88,3 +88,4 @@ package-lock.json
 # Python
 .venv/
 **/*.egg-info/
+.beads/dolt-config.log
