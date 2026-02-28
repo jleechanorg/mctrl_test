@@ -105,3 +105,27 @@ class TestNotifyMissionControl:
         mock_urlopen.assert_called_once()
         req = mock_urlopen.call_args[0][0]
         assert "explicit.example.com" in req.full_url
+
+    @patch.dict("os.environ", {"MISSION_CONTROL_WEBHOOK_URL": "http://localhost:8080/webhook"})
+    @patch("orchestration.webhook_bridge.urlopen")
+    def test_request_payload_captures_all_fields(self, mock_urlopen):
+        """Full request body: event merged at top level, all caller fields preserved."""
+        mock_response = MagicMock()
+        mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_response)
+        mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
+        caller_payload = {
+            "agent_name": "claude-1",
+            "task": "Fix bug #42",
+            "worktree": "/tmp/wt-1",
+            "branch": "fix/bug-42",
+        }
+        notify_mission_control(WebhookEvent.AGENT_STARTED, caller_payload)
+        req = mock_urlopen.call_args[0][0]
+        body = json.loads(req.data)
+        assert body["event"] == "agent_started"
+        assert body["agent_name"] == "claude-1"
+        assert body["task"] == "Fix bug #42"
+        assert body["worktree"] == "/tmp/wt-1"
+        assert body["branch"] == "fix/bug-42"
+        # No unexpected keys injected beyond what caller passed + "event"
+        assert set(body.keys()) == {"event", "agent_name", "task", "worktree", "branch"}

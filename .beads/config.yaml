@@ -40,3 +40,9 @@ issue-prefix: "ORCH"
 # - linear.api-key
 # - github.org
 # - github.repo
+
+dolt.host: 127.0.0.1
+
+dolt.port: 3307
+
+dolt.database: "beads_ORCH"

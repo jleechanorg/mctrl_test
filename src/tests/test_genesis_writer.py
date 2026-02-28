@@ -104,6 +104,31 @@ class TestWriteAll:
         assert os.path.exists(config)
         assert os.path.exists(cron)
 
+    def test_production_path_layout(self, tmp_path):
+        """write_all round-trips through a production-mirrored directory structure.
+
+        Production layout:
+            ~/.openclaw/workspace/MEMORY.md
+            ~/.openclaw/openclaw.json
+            ~/.openclaw/cron/jobs.json
+        """
+        workspace = tmp_path / ".openclaw" / "workspace"
+        openclaw_config = tmp_path / ".openclaw" / "openclaw.json"
+        cron_dir = tmp_path / ".openclaw" / "cron"
+
+        results = write_all(
+            memory_path=str(workspace / "MEMORY.md"),
+            config_path=str(openclaw_config),
+            cron_path=str(cron_dir / "jobs.json"),
+        )
+
+        assert results["memory"] is True
+        assert results["config"] is True
+        assert results["cron"] is True
+        assert (workspace / "MEMORY.md").exists()
+        assert openclaw_config.exists()
+        assert (cron_dir / "jobs.json").exists()
+
     def test_unknown_kwarg_raises_type_error(self, tmp_path):
         """write_all uses explicit params; unknown kwargs raise TypeError (ORCH-i8y).
 
@@ -114,6 +139,6 @@ class TestWriteAll:
             write_all(
                 memory_path=str(tmp_path / "MEMORY.md"),
                 config_path=str(tmp_path / "openclaw.json"),
-                cron_path=str(tmp_path / "cron.json"),
+                cron_path=str(tmp_path / "jobs.json"),
                 unknown_param="should_fail",
             )
