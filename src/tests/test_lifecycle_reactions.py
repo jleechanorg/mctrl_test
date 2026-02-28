@@ -324,6 +324,85 @@ class TestDetermineStatus:
 # ---------------------------------------------------------------------------
 
 
+class TestLifecycleIntegration:
+    """Integration test: determine_status → check_transition → execute_reaction."""
+
+    def test_full_lifecycle_flow(self):
+        """Simulate: working → PR open → CI fail → retry → CI pass → approved → merged."""
+        reactions = {
+            "ci-failed": ReactionConfig(action="send-to-agent", retries=2, message="Fix CI"),
+            "approved-and-green": ReactionConfig(action="notify", message="Ready to merge"),
+        }
+        lm = LifecycleManager(reactions=reactions)
+        session = {"id": "s1", "status": "working", "pr": None, "branch": "feat-x"}
+
+        # 1. Agent starts working — no PR yet
+        status = determine_status(session, scm_state=None)
+        assert status == SessionStatus.WORKING
+        lm.record_state("s1", status)
+
+        # 2. Agent opens a PR — CI starts
+        session["pr"] = {"number": 42}
+        scm = {"pr_state": "open", "ci_status": "pending", "review_decision": "none"}
+        status = determine_status(session, scm_state=scm)
+        assert status == SessionStatus.PR_OPEN
+        transition = lm.check_transition("s1", status)
+        assert transition == (SessionStatus.WORKING, SessionStatus.PR_OPEN)
+        lm.record_state("s1", status)
+
+        # 3. CI fails
+        scm["ci_status"] = "failing"
+        status = determine_status(session, scm_state=scm)
+        assert status == SessionStatus.CI_FAILED
+        lm.record_state("s1", status)
+        event = status_to_event_type(SessionStatus.PR_OPEN, status)
+        assert event == "ci.failing"
+        rk = event_to_reaction_key(event)
+        assert rk == "ci-failed"
+        result = lm.execute_reaction("s1", rk)
+        assert result["action"] == "send-to-agent"
+        assert result["escalated"] is False
+
+        # 4. Agent fixes, CI passes, review approved + mergeable
+        scm["ci_status"] = "passing"
+        scm["review_decision"] = "approved"
+        scm["mergeable"] = True
+        status = determine_status(session, scm_state=scm)
+        assert status == SessionStatus.MERGEABLE
+        lm.record_state("s1", status)
+        event = status_to_event_type(SessionStatus.CI_FAILED, status)
+        assert event == "merge.ready"
+        rk = event_to_reaction_key(event)
+        assert rk == "approved-and-green"
+        result = lm.execute_reaction("s1", rk)
+        assert result["action"] == "notify"
+
+        # 5. PR merged
+        scm["pr_state"] = "merged"
+        status = determine_status(session, scm_state=scm)
+        assert status == SessionStatus.MERGED
+        lm.record_state("s1", status)
+
+    def test_escalation_after_repeated_ci_failures(self):
+        """After max retries, escalation fires instead of send-to-agent."""
+        reactions = {
+            "ci-failed": ReactionConfig(action="send-to-agent", retries=2, message="Fix CI"),
+        }
+        lm = LifecycleManager(reactions=reactions)
+        lm.record_state("s1", SessionStatus.CI_FAILED)
+
+        # Retry 1 and 2 — normal action
+        r1 = lm.execute_reaction("s1", "ci-failed")
+        assert r1["action"] == "send-to-agent"
+        r2 = lm.execute_reaction("s1", "ci-failed")
+        assert r2["action"] == "send-to-agent"
+
+        # Retry 3 — escalated
+        r3 = lm.execute_reaction("s1", "ci-failed")
+        assert r3["escalated"] is True
+        assert r3["action"] == "escalated"
+
+
 class TestLifecyclePoller:
     """Tests for the polling loop wrapper."""
 

@@ -89,3 +89,19 @@ class TestNotifyMissionControl:
         """Timeout must not raise."""
         notify_mission_control(WebhookEvent.AGENT_STARTED, {"agent_name": "test"})
         mock_urlopen.assert_called_once()
+
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("orchestration.webhook_bridge.urlopen")
+    def test_explicit_url_overrides_env(self, mock_urlopen):
+        """Explicit webhook_url param should work even without env var."""
+        mock_response = MagicMock()
+        mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_response)
+        mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
+        notify_mission_control(
+            WebhookEvent.AGENT_STARTED,
+            {"agent_name": "claude-1"},
+            webhook_url="http://explicit.example.com/webhook",
+        )
+        mock_urlopen.assert_called_once()
+        req = mock_urlopen.call_args[0][0]
+        assert "explicit.example.com" in req.full_url

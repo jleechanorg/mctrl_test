@@ -16,7 +16,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Optional
+from typing import Callable, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +107,8 @@ class ReactionConfig:
     """Configuration for an automated reaction."""
     action: str  # "send-to-agent", "notify", "auto-merge"
     retries: Optional[int] = None
-    escalate_after: Optional[str] = None  # Reserved for future time-based escalation (e.g. "10m")
+    # TODO: implement time-based escalation (e.g. "10m") — currently only retries-based
+    escalate_after: Optional[str] = None
     message: Optional[str] = None
     priority: str = "info"
     auto: bool = True
@@ -292,7 +293,7 @@ class LifecyclePoller:
         self,
         lifecycle_manager: LifecycleManager,
         interval_seconds: int = 60,
-        poll_fn: Optional[callable] = None,
+        poll_fn: Optional[Callable[[LifecycleManager], None]] = None,
     ):
         self.lifecycle_manager = lifecycle_manager
         self.interval_seconds = interval_seconds

@@ -1,6 +1,7 @@
 """Tests for orchestration.heartbeat_bridge — tmux-to-Mission Control sync."""
 
 import json
+import threading
 from unittest.mock import patch, MagicMock, call
 
 import pytest
@@ -170,3 +171,28 @@ class TestHeartbeatPoller:
     def test_uses_explicit_webhook_url(self):
         poller = HeartbeatPoller(webhook_url="http://example.com/hook", interval_seconds=30)
         assert poller.webhook_url == "http://example.com/hook"
+
+    def test_all_disappeared_agents_get_failed_event(self):
+        """Per-agent isolation: all disappeared agents receive agent_failed, not just the first."""
+        notified: list[tuple[str, str]] = []
+        done = threading.Event()
+
+        def record_post(url: str, event: str, agent: str) -> None:
+            notified.append((event, agent))
+            if len(notified) >= 2:
+                done.set()
+
+        poller = HeartbeatPoller(webhook_url="http://test/hook", interval_seconds=100)
+        poller.bridge.update_known(["agent-a", "agent-b"])
+
+        with (
+            patch("orchestration.heartbeat_bridge._post_event", side_effect=record_post),
+            patch("orchestration.heartbeat_bridge.list_tmux_sessions", return_value=[]),
+            patch("orchestration.heartbeat_bridge.sync_agents_to_mission_control"),
+        ):
+            poller.start()
+            done.wait(timeout=2)
+            poller.stop()
+
+        failed_agents = {ag for ev, ag in notified if ev == "agent_failed"}
+        assert failed_agents == {"agent-a", "agent-b"}

@@ -82,15 +82,25 @@ def write_all(
     memory_path: str,
     config_path: str,
     cron_path: str,
-    **kwargs,
+    goals: Optional[list[str]] = None,
+    overwrite: bool = True,
+    extra_paths: Optional[list[str]] = None,
 ) -> dict[str, bool]:
     """Write all Genesis config files to disk.
+
+    Args:
+        memory_path: Target path for MEMORY.md.
+        config_path: Target path for openclaw.json.
+        cron_path: Target path for cron jobs JSON.
+        goals: Optional custom goals for MEMORY.md.
+        overwrite: If False, skip MEMORY.md if it exists.
+        extra_paths: Additional paths for memory search config.
 
     Returns:
         Dict mapping file type to success boolean.
     """
     return {
-        "memory": write_memory_md(memory_path, **{k: v for k, v in kwargs.items() if k in ("goals", "overwrite")}),
-        "config": write_openclaw_config(config_path, **{k: v for k, v in kwargs.items() if k == "extra_paths"}),
+        "memory": write_memory_md(memory_path, goals=goals, overwrite=overwrite),
+        "config": write_openclaw_config(config_path, extra_paths=extra_paths),
         "cron": write_cron_jobs(cron_path),
     }

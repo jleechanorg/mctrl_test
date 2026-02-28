@@ -103,3 +103,17 @@ class TestWriteAll:
         assert os.path.exists(workspace + "/MEMORY.md")
         assert os.path.exists(config)
         assert os.path.exists(cron)
+
+    def test_unknown_kwarg_raises_type_error(self, tmp_path):
+        """write_all uses explicit params; unknown kwargs raise TypeError (ORCH-i8y).
+
+        Previously **kwargs silently ignored unknown keys. The explicit signature
+        is intentional — callers must use known params only.
+        """
+        with pytest.raises(TypeError):
+            write_all(
+                memory_path=str(tmp_path / "MEMORY.md"),
+                config_path=str(tmp_path / "openclaw.json"),
+                cron_path=str(tmp_path / "cron.json"),
+                unknown_param="should_fail",
+            )

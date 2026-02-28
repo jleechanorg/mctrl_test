@@ -20,14 +20,19 @@ class WebhookEvent(StrEnum):
     AGENT_KILLED = "agent_killed"
 
 
-def notify_mission_control(event: WebhookEvent | str, payload: dict) -> None:
+def notify_mission_control(
+    event: WebhookEvent | str,
+    payload: dict,
+    webhook_url: str | None = None,
+) -> None:
     """POST an event to Mission Control webhook. Best-effort, never blocks.
 
     Args:
         event: The event type string.
         payload: Dict of event-specific data (agent_name, task, etc.)
+        webhook_url: Optional explicit URL. Falls back to env var.
     """
-    webhook_url = os.environ.get("MISSION_CONTROL_WEBHOOK_URL")
+    webhook_url = webhook_url or os.environ.get("MISSION_CONTROL_WEBHOOK_URL")
     if not webhook_url:
         return
 
