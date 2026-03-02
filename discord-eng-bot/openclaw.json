@@ -1,0 +1,88 @@
+{
+  "channels": {
+    "discord": {
+      "enabled": true,
+      "token": "${DISCORD_BOT_TOKEN}",
+      "groupPolicy": "allowlist",
+      "guilds": {
+        "000000000000000000": {
+          "requireMention": true
+        }
+      },
+      "commands": {
+        "native": true
+      },
+      "replyToMode": "off"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "sandbox": {
+        "mode": "non-main",
+        "workspaceAccess": "none"
+      },
+      "model": {
+        "primary": "openai-codex/gpt-5.3-codex",
+        "fallbacks": [
+          "openai-codex/gpt-5.3-codex-spark",
+          "minimax-portal/MiniMax-M2.5"
+        ]
+      }
+    },
+    "list": [
+      {
+        "id": "eng_qa",
+        "name": "Engineering Q&A Bot",
+        "identity": {
+          "name": "Engineering Bot",
+          "emoji": "🤖",
+          "theme": "helpful engineering assistant"
+        },
+        "groupChat": {
+          "mentionPatterns": [
+            "@engbot",
+            "@engineering",
+            "@eng-qa-bot"
+          ]
+        }
+      }
+    ]
+  },
+  "plugins": {
+    "entries": {
+      "discord": {
+        "enabled": true
+      }
+    }
+  },
+  "tools": {
+    "deny": [
+      "read",
+      "write",
+      "edit",
+      "apply_patch",
+      "exec",
+      "bash",
+      "process",
+      "browser",
+      "canvas",
+      "nodes",
+      "cron",
+      "gateway",
+      "discord",
+      "sessions_send",
+      "sessions_spawn"
+    ],
+    "allow": [
+      "web_search",
+      "web_fetch",
+      "mcp__second-opinion-tool__agent_second_opinion",
+      "mcp__second-opinion-tool__rate_limit_status",
+      "mcp__second-opinion-tool__health-check"
+    ],
+    "profile": "minimal"
+  },
+  "messages": {
+    "responsePrefix": "[Engineering Bot] "
+  }
+}

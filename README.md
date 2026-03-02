@@ -93,6 +93,7 @@ Context windows are zero-sum. Fill it with code and there's no room for business
 | Path | Purpose |
 |------|---------|
 | `openclaw-config/` | Baseline OpenClaw configuration templates |
+| `.openclaw/` | Sync boundary contract for `openclaw-config/` vs repo-only custom artifacts |
 | `.openclaw-backups/` | Timestamped snapshots of `~/.openclaw/` (redacted) |
 
 ### Documentation

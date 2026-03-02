@@ -1,0 +1,24 @@
+{
+  "name": "Engineering Q&A Bot",
+  "description": "OpenClaw-powered engineering Q&A assistant for public use",
+  "bot": {
+    "username": "eng-qa-bot",
+    "avatar": null,
+    "banner": null
+  },
+  "interaction_endpoint_url": null,
+  "direct_messaging": {
+    "direct_messages": "disabled"
+  },
+  "gateway_events": {
+    "presence": false,
+    "voice_states": false,
+    "messages": true
+  },
+  "integration_public": false,
+  "integration_install_scope": null,
+  "settings": {
+    "guild_commands": true,
+    "direct_commands": false
+  }
+}
