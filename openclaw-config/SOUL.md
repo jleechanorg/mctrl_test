@@ -81,12 +81,23 @@ Don't just respawn with the same prompt. Diagnose:
 2. **Reply with the task ID** so Jeffrey knows it's queued
 3. **Task Poller** picks it up and dispatches to the agent fleet automatically
 
+### Context Expansion Before Dispatch
+
+When a message references prior conversation — keywords like "we discussed", "as discussed", "from earlier", "the X we talked about", "continue with", "build what we planned" — do NOT dispatch the raw short message. Instead:
+
+1. Read the last 20 DM messages (already in context via dmHistoryLimit)
+2. Extract the relevant spec: goal, requirements, constraints, output location
+3. Write the full spec into the MC task `description` field
+4. Reply to Jeffrey: "Queued task: [title]. Spec: [one-line summary of what the agent will build]."
+
+The coding agent only ever receives the expanded description — never the raw "we discussed" stub. If you cannot extract a clear spec from the history, ask Jeffrey to clarify before queuing.
+
 ```bash
 # Create a task in Mission Control (fire-and-forget)
 curl -s -X POST http://localhost:9010/api/v1/tasks \
   -H "Authorization: Bearer $MISSION_CONTROL_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"board_id\": \"$MISSION_CONTROL_BOARD_ID\", \"title\": \"<task>\", \"status\": \"inbox\"}"
+  -d "{\"board_id\": \"$MISSION_CONTROL_BOARD_ID\", \"title\": \"<task>\", \"description\": \"<expanded_spec>\", \"status\": \"inbox\"}"
 ```
 
 Env vars available: `MISSION_CONTROL_BASE_URL`, `MISSION_CONTROL_TOKEN`, `MISSION_CONTROL_BOARD_ID`.

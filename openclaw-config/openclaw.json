@@ -9,7 +9,9 @@
         "PATH": "/Users/jleechan/.nvm/versions/node/v22.22.0/bin:/Users/jleechan/.local/bin:/usr/local/bin:/usr/bin:/bin",
         "MISSION_CONTROL_BASE_URL": "http://localhost:9010",
         "MISSION_CONTROL_TOKEN": "your-local-auth-token-here",
-        "MISSION_CONTROL_BOARD_ID": "aa68f729-d5e0-4d44-8c99-51bcebc0b8bc"
+        "MISSION_CONTROL_BOARD_ID": "aa68f729-d5e0-4d44-8c99-51bcebc0b8bc",
+        "OPENCLAW_RAW_STREAM": "1",
+        "OPENCLAW_RAW_STREAM_PATH": "/tmp/openclaw/raw-stream.jsonl"
     },
     "wizard": {
         "lastRunAt": "2026-02-26T07:30:56.102Z",
@@ -79,10 +81,8 @@
     "agents": {
         "defaults": {
             "model": {
-                "primary": "openai-codex/gpt-5.3-codex-spark",
+                "primary": "openai/gpt-5.2",
                 "fallbacks": [
-                    "openai-codex/gpt-5.3-codex",
-                    "minimax-portal/MiniMax-M2.1",
                     "minimax-portal/MiniMax-M2.5",
                     "openai/gpt-4o"
                 ]
@@ -96,7 +96,8 @@
                 },
                 "openai-codex/gpt-5.3-codex": {},
                 "openai/gpt-4o": {},
-                "openai-codex/gpt-5.3-codex-spark": {}
+                "openai-codex/gpt-5.3-codex-spark": {},
+                "openai/gpt-5.2": {}
             },
             "workspace": "/Users/jleechan",
             "memorySearch": {
@@ -147,7 +148,8 @@
             "sandbox": {
                 "mode": "off",
                 "workspaceAccess": "rw"
-            }
+            },
+            "bootstrapMaxChars": 50000
         }
     },
     "tools": {
@@ -156,7 +158,6 @@
             "read",
             "write",
             "edit",
-            "apply_patch",
             "exec",
             "bash",
             "process",
@@ -164,7 +165,6 @@
             "sessions_history",
             "memory_search",
             "memory_get",
-            "web_search",
             "web_fetch"
         ],
         "deny": [
@@ -334,8 +334,8 @@
             "mode": "socket",
             "webhookPath": "/slack/events",
             "enabled": true,
-            "botToken": "xoxb-9541820692839-10509415881058-L1ZGmeXYa5B9OxbmRj7pgi9K",
-            "appToken": "xapp-1-A0AESRKA7L3-10565244160849-0f9dfa43f0d3bbed96adcc8a2d27c9cac9d265190da027285d495810d3dda9d1",
+            "botToken": "PLACEHOLDER-botToken",
+            "appToken": "PLACEHOLDER-appToken",
             "userTokenReadOnly": true,
             "allowBots": false,
             "groupPolicy": "allowlist",
@@ -414,5 +414,18 @@
                 "enabled": true
             }
         }
+    },
+    "logging": {
+        "level": "debug",
+        "consoleLevel": "info",
+        "consoleStyle": "pretty",
+        "redactSensitive": "tools"
+    },
+    "diagnostics": {
+        "flags": [
+            "agent.*",
+            "gateway.*",
+            "slack.*"
+        ]
     }
 }
