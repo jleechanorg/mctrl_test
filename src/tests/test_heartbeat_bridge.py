@@ -196,3 +196,106 @@ class TestHeartbeatPoller:
 
         failed_agents = {ag for ev, ag in notified if ev == "agent_failed"}
         assert failed_agents == {"agent-a", "agent-b"}
+
+
+# ---------------------------------------------------------------------------
+# register_or_heartbeat_agent()
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterOrHeartbeatAgent:
+    """Tests for register_or_heartbeat_agent function."""
+
+    def test_returns_none_when_unconfigured(self):
+        """Returns None when client is not configured."""
+        from orchestration.heartbeat_bridge import register_or_heartbeat_agent
+        from orchestration.mc_client import MissionControlClient
+
+        client = MissionControlClient(base_url=None, token=None)
+
+        result = register_or_heartbeat_agent("session-1", "board-123", client)
+
+        assert result is None
+
+    @patch("orchestration.heartbeat_bridge._agent_id_cache", {})
+    def test_registers_and_returns_agent_id(self):
+        """Returns agent ID after successful registration."""
+        from orchestration.heartbeat_bridge import register_or_heartbeat_agent
+        from orchestration.mc_client import MissionControlClient
+
+        with patch.dict("os.environ", {
+            "MISSION_CONTROL_BASE_URL": "http://localhost:8000",
+            "MISSION_CONTROL_TOKEN": "test-token",
+        }):
+            client = MissionControlClient()
+            client._post = MagicMock(return_value={"id": "mc-agent-123"})
+
+            result = register_or_heartbeat_agent("session-1", "board-123", client)
+
+            assert result == "mc-agent-123"
+            client._post.assert_called_once_with(
+                "/api/v1/agents/heartbeat",
+                {"name": "session-1", "board_id": "board-123"},
+            )
+
+    @patch("orchestration.heartbeat_bridge._agent_id_cache", {})
+    def test_caches_agent_id(self):
+        """Agent ID is cached after first registration."""
+        from orchestration.heartbeat_bridge import register_or_heartbeat_agent, _agent_id_cache
+        from orchestration.mc_client import MissionControlClient
+
+        with patch.dict("os.environ", {
+            "MISSION_CONTROL_BASE_URL": "http://localhost:8000",
+            "MISSION_CONTROL_TOKEN": "test-token",
+        }):
+            client = MissionControlClient()
+            client._post = MagicMock(return_value={"id": "mc-agent-123"})
+
+            # First call
+            result1 = register_or_heartbeat_agent("session-1", "board-123", client)
+            assert result1 == "mc-agent-123"
+
+            # Second call also sends heartbeat (cache is fallback only, not early exit)
+            result2 = register_or_heartbeat_agent("session-1", "board-123", client)
+            assert result2 == "mc-agent-123"
+
+            # _post called once per invocation — heartbeat sent every time
+            assert client._post.call_count == 2
+
+    @patch("orchestration.heartbeat_bridge._agent_id_cache", {"board-123:session-1": "cached-agent-id"})
+    def test_cached_id_does_not_short_circuit_heartbeat(self):
+        """Cache hit does not prevent sending a heartbeat request."""
+        from orchestration.heartbeat_bridge import register_or_heartbeat_agent
+        from orchestration.mc_client import MissionControlClient
+
+        with patch.dict("os.environ", {
+            "MISSION_CONTROL_BASE_URL": "http://localhost:8000",
+            "MISSION_CONTROL_TOKEN": "test-token",
+        }):
+            client = MissionControlClient()
+            client._post = MagicMock(return_value={"id": "mc-agent-123"})
+
+            result = register_or_heartbeat_agent("session-1", "board-123", client)
+
+            assert result == "mc-agent-123"
+            client._post.assert_called_once_with(
+                "/api/v1/agents/heartbeat",
+                {"name": "session-1", "board_id": "board-123"},
+            )
+
+    @patch("orchestration.heartbeat_bridge._agent_id_cache", {})
+    def test_returns_none_on_error(self):
+        """Returns None when registration fails."""
+        from orchestration.heartbeat_bridge import register_or_heartbeat_agent
+        from orchestration.mc_client import MissionControlClient, MissionControlError
+
+        with patch.dict("os.environ", {
+            "MISSION_CONTROL_BASE_URL": "http://localhost:8000",
+            "MISSION_CONTROL_TOKEN": "test-token",
+        }):
+            client = MissionControlClient()
+            client._post = MagicMock(side_effect=MissionControlError("Connection failed"))
+
+            result = register_or_heartbeat_agent("session-1", "board-123", client)
+
+            assert result is None

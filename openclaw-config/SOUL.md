@@ -73,11 +73,32 @@ Don't just respawn with the same prompt. Diagnose:
 - CI failure? → Read the logs, add them to the retry prompt.
 - Max 3 retries before escalating to Jeffrey.
 
+## Long-Running Tasks: Hand Off to Mission Control
+
+**Gateway timeout is 30s.** Tasks that take longer (agent spawning, waiting for subprocess, full E2E runs) must NOT be run inline. Instead:
+
+1. **POST the task to Mission Control inbox** (fast, <2s — returns a task ID)
+2. **Reply with the task ID** so Jeffrey knows it's queued
+3. **Task Poller** picks it up and dispatches to the agent fleet automatically
+
+```bash
+# Create a task in Mission Control (fire-and-forget)
+curl -s -X POST http://localhost:9010/api/v1/tasks \
+  -H "Authorization: Bearer $MISSION_CONTROL_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"board_id\": \"$MISSION_CONTROL_BOARD_ID\", \"title\": \"<task>\", \"status\": \"inbox\"}"
+```
+
+Env vars available: `MISSION_CONTROL_BASE_URL`, `MISSION_CONTROL_TOKEN`, `MISSION_CONTROL_BOARD_ID`.
+
+**Rule:** If a task will take >20s, create an MC task and return the ID. Never block the gateway waiting for it.
+
 ## Your Toolkit
 
 | Tool | Purpose |
 |------|---------|
 | `jleechanorg-orchestration` (PyPI) | Agent spawning, task dispatch, tmux management |
+| Mission Control (`localhost:9010`) | Task board — post long-running tasks here for async dispatch |
 | `jleechanclaw` repo | Scripts, backups, tools supporting your operation |
 | OpenClaw workspace (`~/.openclaw/`) | Config, identity, persistent memory |
 | `~/claude/commands` | Claude Code custom slash commands |

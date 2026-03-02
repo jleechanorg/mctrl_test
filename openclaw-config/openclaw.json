@@ -6,7 +6,10 @@
     "env": {
         "GOOGLE_CLOUD_PROJECT": "infinite-zephyr-487405-d0",
         "GOG_KEYRING_PASSWORD": "openclaw-gog-2026",
-        "PATH": "/Users/jleechan/.nvm/versions/node/v22.22.0/bin:/Users/jleechan/.local/bin:/usr/local/bin:/usr/bin:/bin"
+        "PATH": "/Users/jleechan/.nvm/versions/node/v22.22.0/bin:/Users/jleechan/.local/bin:/usr/local/bin:/usr/bin:/bin",
+        "MISSION_CONTROL_BASE_URL": "http://localhost:9010",
+        "MISSION_CONTROL_TOKEN": "your-local-auth-token-here",
+        "MISSION_CONTROL_BOARD_ID": "aa68f729-d5e0-4d44-8c99-51bcebc0b8bc"
     },
     "wizard": {
         "lastRunAt": "2026-02-26T07:30:56.102Z",

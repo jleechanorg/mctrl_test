@@ -1,0 +1,145 @@
+{
+  "project": "jleechanclaw Phase 10 \u2014 Slack user-token post + minimax orchestration loop",
+  "branchName": "dev1772258150",
+  "description": "Phase 8: iterate /copilot + CodeRabbit re-review loop until all PR comments resolved and CodeRabbit approves. Skeptical subagent reviews test quality.",
+  "qualityCheck": "PYTHONPATH=src python -m pytest src/tests/ --tb=short -q",
+  "exitCriteria": [
+    "All tests pass (262+)",
+    "Skeptical subagent reviews src/tests/ and outputs REVIEW_PASS",
+    "PR #10 has no unresolved CRITICAL or BLOCKING comments",
+    "CodeRabbit latest review is 'Approved' or has 0 actionable comments",
+    "PR description tracking table updated with all comments addressed"
+  ],
+  "context": {
+    "pr_number": "10",
+    "branch": "dev1772258150",
+    "repo": "jleechanorg/jleechanclaw",
+    "copilot_cmd": "run /copilot to process PR comments",
+    "coderabbit_trigger": "post a comment on PR #10 tagging @coderabbitai[bot] asking it to re-review",
+    "test_path": "src/tests/",
+    "review_criteria": "verify tests are non-trivial, cover real logic, have assertions, use proper mocking"
+  },
+  "userStories": [
+    {
+      "id": "PR8-1",
+      "title": "Skeptical subagent review of test suite",
+      "description": "Launch a code-review subagent to review src/tests/ thoroughly. The subagent must: 1) read all test files in src/tests/ 2) verify tests have real assertions (not just pass or empty bodies) 3) verify mocks are set up correctly (returncode, side_effect, etc.) 4) verify test isolation (env patching with clear=True) 5) confirm 262 tests all pass via PYTHONPATH=src python -m pytest src/tests/ --tb=short -q. Output REVIEW_PASS or REVIEW_FAIL with specific evidence. Only mark passes=true when subagent outputs REVIEW_PASS.",
+      "acceptanceCriteria": [
+        "Subagent outputs REVIEW_PASS",
+        "No empty test bodies (just pass with no assertions)",
+        "All mocks properly configured",
+        "262 tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "wave": 1
+    },
+    {
+      "id": "PR8-2",
+      "title": "Post /copilot reply and update PR tracking table",
+      "description": "Run the /copilot workflow on PR #10: 1) fetch all comments with commentfetch 2) categorize by severity 3) verify recent direct fixes (commit 19e2cbe7a) cover: RQ_REDIS_URL, .gitignore, ralph.sh codex path, watch-ralph.sh stat portability, agent_registry atomic writes + lock, run_e2e.py live stub 4) generate responses.json with FIXED/ACKNOWLEDGED status for each resolved comment 5) post consolidated [AI responder] summary comment on PR #10 6) update PR description with tracking table. Commit message must use [copilot] prefix.",
+      "acceptanceCriteria": [
+        "Consolidated [AI responder] comment posted on PR #10",
+        "PR description tracking table updated",
+        "responses.json created at /tmp/jleechanclaw/<branch>/copilot/responses.json",
+        "All CRITICAL/BLOCKING comments have commit evidence"
+      ],
+      "priority": 2,
+      "passes": true,
+      "wave": 2
+    },
+    {
+      "id": "PR8-3",
+      "title": "Ask CodeRabbit to re-review and confirm approval",
+      "description": "Post a comment on PR #10 that: 1) tags @coderabbitai[bot] 2) states that all actionable comments have been addressed (list the commit hashes) 3) asks CodeRabbit to do a fresh review. Then wait for CodeRabbit response (poll gh pr reviews every 30s, up to 5 minutes). If CodeRabbit still has actionable comments, fix them and loop. If CodeRabbit approves or has 0 actionable comments, mark passes=true.",
+      "acceptanceCriteria": [
+        "@coderabbitai[bot] comment posted on PR #10",
+        "CodeRabbit latest review state is APPROVED or comment count is 0 actionable",
+        "No new CRITICAL/BLOCKING comments from CodeRabbit"
+      ],
+      "priority": 3,
+      "passes": true,
+      "wave": 3
+    },
+    {
+      "id": "PR9-1",
+      "title": "Verify Phase 9 bug fixes pass full test suite",
+      "description": "Run PYTHONPATH=src python -m pytest src/tests/ --tb=short -q. Confirm 262+ tests pass. Check that test_agent_registry.py covers lookup() and list_all() with concurrent access, test_heartbeat_bridge.py expects _post called every invocation (not cached), and test_task_poller.py counts only successful dispatches. If any test fails, fix the code and re-run until green.",
+      "acceptanceCriteria": [
+        "262+ tests pass with zero failures",
+        "test_heartbeat_bridge.py::test_caches_agent_id expects _post.call_count == 2",
+        "No import errors or collection errors"
+      ],
+      "priority": 1,
+      "passes": true,
+      "wave": 1
+    },
+    {
+      "id": "PR9-2",
+      "title": "Trigger CodeRabbit re-review of Phase 9 bug fix commit",
+      "description": "Post a GitHub comment on PR #10 that: 1) tags @coderabbitai[bot] 2) lists the Phase 9 bug fixes from commit ce49fb06 (lock on lookup/list_all, fd sentinel, heartbeat cache removed, dispatch bool return) 3) asks CodeRabbit to re-review. Then run: gh pr checks 10 --repo jleechanorg/jleechanclaw to confirm CodeRabbit status. If CodeRabbit flags new issues, fix them. Mark passes=true when CodeRabbit shows SUCCESS.",
+      "acceptanceCriteria": [
+        "@coderabbitai[bot] comment posted referencing commit ce49fb06",
+        "gh pr checks shows CodeRabbit state=SUCCESS",
+        "No new CRITICAL comments from CodeRabbit"
+      ],
+      "priority": 2,
+      "passes": true,
+      "wave": 2
+    },
+    {
+      "id": "PR10-1",
+      "title": "Post test message to #worldai as jleechan via user token",
+      "description": "Use curl to POST to https://slack.com/api/chat.postMessage with Authorization: Bearer $SLACK_USER_TOKEN. Channel: C0AH3RY3DK6. Message: '<@U0AEZC7RX1Q> user-token test from jleechan \u2014 please confirm you see this and reply'. Verify response JSON has ok:true and message.user == U09GH5BR3QU. Mark passes=true only when confirmed.",
+      "acceptanceCriteria": [
+        "curl returns ok:true",
+        "message.user == U09GH5BR3QU (jleechan, not bot)",
+        "Message visible in #worldai"
+      ],
+      "priority": 1,
+      "passes": true,
+      "wave": 1
+    },
+    {
+      "id": "PR10-2",
+      "title": "Trigger minimax claude orchestration via Slack and confirm it runs",
+      "description": "Post a message to #worldai as jleechan (using SLACK_USER_TOKEN env var via curl) tagging @openclaw: '<@U0AEZC7RX1Q> orchestrate a single minimax agent: run PYTHONPATH=src python -m pytest src/tests/ --tb=short -q in /Users/jleechan/project_jleechanclaw/jleechanclaw and post the result back here'. Then poll gh pr checks or slack channel history (GET https://slack.com/api/conversations.history?channel=C0AH3RY3DK6&limit=10 with bot token) every 30s for up to 5 minutes to see if openclaw responds with test results. Mark passes=true when openclaw posts a reply containing test count or PASSED.",
+      "acceptanceCriteria": [
+        "Message posted as jleechan (U09GH5BR3QU)",
+        "openclaw bot replies in #worldai within 5 minutes",
+        "Reply contains test results or confirmation"
+      ],
+      "priority": 2,
+      "passes": true,
+      "wave": 2
+    },
+    {
+      "id": "AMZN-1",
+      "title": "Scaffold Amazon clone site in /tmp/amazon-clone",
+      "description": "Create /tmp/amazon-clone/ directory and write all 5 files: index.html (homepage with product grid), product.html (product detail page), cart.html (shopping cart page), style.css (Amazon-style: dark #131921 top nav, search bar, orange buy button, product cards with stars), app.js (products array with 8 items, addToCart/removeFromCart using localStorage, search filter, cart badge counter, renderProducts function). Each product must have: id, name, price, rating (1-5), reviewCount, imageUrl (use placeholder.com), category. index.html must import style.css and app.js. Run verification: ls -la /tmp/amazon-clone/ must show all 5 files, wc -l /tmp/amazon-clone/*.html must show 20+ lines each.",
+      "acceptanceCriteria": [
+        "ls /tmp/amazon-clone shows index.html, product.html, cart.html, style.css, app.js",
+        "All 5 files have 20+ lines each",
+        "app.js contains products array with 8+ items",
+        "style.css has #131921 dark nav color"
+      ],
+      "priority": 1,
+      "passes": true,
+      "wave": 1
+    },
+    {
+      "id": "AMZN-2",
+      "title": "Verify Amazon clone is complete and functional",
+      "description": "Verify the /tmp/amazon-clone site is complete. Check: 1) grep -c 'addToCart' /tmp/amazon-clone/app.js returns 1+. 2) grep 'localStorage' /tmp/amazon-clone/app.js must find cart persistence. 3) grep 'search\\|filter' /tmp/amazon-clone/app.js must find search logic. 4) index.html must have a search input and product grid div. 5) cart.html must display cart items and subtotal. Post a summary to #worldai as jleechan: 'Amazon clone built at /tmp/amazon-clone/ \u2014 N files, products: [list 3 product names]'. Use curl with $SLACK_USER_TOKEN environment variable to channel C0AH3RY3DK6.",
+      "acceptanceCriteria": [
+        "grep addToCart app.js returns match",
+        "grep localStorage app.js returns match",
+        "grep search app.js returns match",
+        "Summary posted to #worldai as jleechan"
+      ],
+      "priority": 2,
+      "passes": true,
+      "wave": 2
+    }
+  ]
+}

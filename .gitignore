@@ -89,3 +89,7 @@ package-lock.json
 .venv/
 **/*.egg-info/
 .beads/dolt-config.log
+
+# Ralph tooling output
+ralph-output.log
+orch-test/

@@ -8,10 +8,18 @@ Detects new sessions and emits agent_started events via webhook.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import threading
 from urllib.request import Request, urlopen
+
+from orchestration.mc_client import MissionControlClient
+
+logger = logging.getLogger(__name__)
+
+# Cache for agent IDs to avoid repeated creates
+_agent_id_cache: dict[str, str] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -87,18 +95,81 @@ def _post_event(webhook_url: str, event: str, agent_name: str) -> None:
         pass  # Never block — fire and forget
 
 
-def sync_agents_to_mission_control(webhook_url: str | None = None) -> None:
+# ---------------------------------------------------------------------------
+# Agent registration via Mission Control client
+# ---------------------------------------------------------------------------
+
+
+def register_or_heartbeat_agent(
+    agent_name: str,
+    board_id: str,
+    client: MissionControlClient,
+) -> str | None:
+    """Register or heartbeat an agent in Mission Control.
+
+    Calls POST /api/v1/agents/heartbeat with name + board_id to lazily
+    create or update the agent. Returns the agent_id or None if unconfigured.
+
+    Args:
+        agent_name: Name of the tmux session/agent.
+        board_id: Mission Control board UUID.
+        client: MissionControlClient instance.
+
+    Returns:
+        Agent ID string, or None if unconfigured/error.
+    """
+    # Cache key includes board_id to support multi-board processes
+    cache_key = f"{board_id}:{agent_name}"
+
+    if not client.is_configured:
+        return None
+
+    try:
+        result = client._post(
+            "/api/v1/agents/heartbeat",
+            {"name": agent_name, "board_id": board_id},
+        )
+        if result and "id" in result:
+            agent_id = result["id"]
+            _agent_id_cache[cache_key] = agent_id
+            logger.info(f"Heartbeat sent for agent {agent_name} (ID {agent_id})")
+            return agent_id
+    except Exception as e:
+        logger.error(f"Failed to heartbeat agent {agent_name}: {e}")
+
+    # Return cached ID as fallback so callers can still reference the agent
+    return _agent_id_cache.get(cache_key)
+
+
+def sync_agents_to_mission_control(
+    webhook_url: str | None = None,
+    board_id: str | None = None,
+    client: MissionControlClient | None = None,
+) -> None:
     """One-shot sync: list tmux sessions, POST heartbeats.
+
+    Supports two modes:
+    1. Legacy webhook mode: uses webhook_url (fire-and-forget)
+    2. MC client mode: uses client + board_id (register agents)
 
     Args:
         webhook_url: Optional explicit URL. Falls back to env var.
+        board_id: Optional board UUID for MC client registration.
+        client: Optional MissionControlClient for registration.
     """
-    url = webhook_url or os.environ.get("MISSION_CONTROL_WEBHOOK_URL")
-    if not url:
-        return
-
     sessions = list_tmux_sessions()
     if not sessions:
+        return
+
+    # MC client mode (new - registers agents)
+    if board_id and client:
+        for session_name in sessions:
+            register_or_heartbeat_agent(session_name, board_id, client)
+        return
+
+    # Legacy webhook mode
+    url = webhook_url or os.environ.get("MISSION_CONTROL_WEBHOOK_URL")
+    if not url:
         return
 
     for session_name in sessions:

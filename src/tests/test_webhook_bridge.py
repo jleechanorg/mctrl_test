@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from orchestration.webhook_bridge import notify_mission_control, WebhookEvent
+from orchestration.webhook_bridge import notify_mission_control, notify_tool_use, WebhookEvent
 
 
 class TestWebhookEvent:
@@ -129,3 +129,41 @@ class TestNotifyMissionControl:
         assert body["branch"] == "fix/bug-42"
         # No unexpected keys injected beyond what caller passed + "event"
         assert set(body.keys()) == {"event", "agent_name", "task", "worktree", "branch"}
+
+
+class TestNotifyToolUse:
+    """Tests for notify_tool_use()."""
+
+    @patch.dict("os.environ", {"MISSION_CONTROL_WEBHOOK_URL": "http://localhost:8080/webhook"})
+    @patch("orchestration.webhook_bridge.urlopen")
+    def test_notifies_on_git_and_gh_commands(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_response)
+        mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
+
+        payload = {
+            "tool_name": "bash",
+            "tool_input": {"command": "git status"},
+            "agent_name": "claude-1",
+        }
+        sent = notify_tool_use(json.dumps(payload), repo="owner/repo")
+
+        assert sent is True
+        req = mock_urlopen.call_args[0][0]
+        body = json.loads(req.data)
+        assert body["event"] == "tool_use"
+        assert body["command"] == "git status"
+        assert body["repo"] == "owner/repo"
+
+    @patch.dict("os.environ", {"MISSION_CONTROL_WEBHOOK_URL": "http://localhost:8080/webhook"})
+    @patch("orchestration.webhook_bridge.urlopen")
+    def test_filters_non_supported_tool_use_commands(self, mock_urlopen):
+        payload = {
+            "tool_name": "bash",
+            "tool_input": {"command": "ls"},
+            "agent_name": "claude-1",
+        }
+        sent = notify_tool_use(payload)
+
+        assert sent is False
+        mock_urlopen.assert_not_called()

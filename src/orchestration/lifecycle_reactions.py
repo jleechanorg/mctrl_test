@@ -227,6 +227,36 @@ class LifecycleManager:
             "message": config.message,
         }
 
+    def manual_replay(self, session_id: str, reaction_key: str) -> dict:
+        """Retry a reaction manually, bypassing automatic retry limits.
+
+        Args:
+            session_id: Session identifier.
+            reaction_key: Reaction configuration key.
+
+        Returns:
+            Reaction result.
+        """
+        config = self._reactions.get(reaction_key)
+        if config is None:
+            return {
+                "success": False,
+                "action": None,
+                "escalated": False,
+                "reaction_type": reaction_key,
+                "error": "Unknown reaction key",
+            }
+
+        tracker_key = f"{session_id}:{reaction_key}"
+        tracker = self._trackers.get(tracker_key)
+        if tracker is None:
+            tracker = ReactionTracker()
+            self._trackers[tracker_key] = tracker
+
+        # Reset attempts so manual replay can proceed regardless of prior auto-retry cap.
+        tracker.attempts = 0
+        return self.execute_reaction(session_id, reaction_key)
+
 
 # ---------------------------------------------------------------------------
 # determine_status — infers session status from SCM state
@@ -334,4 +364,3 @@ class LifecyclePoller:
             except Exception:
                 pass  # Never crash the polling loop
             self._stop_event.wait(self.interval_seconds)
-

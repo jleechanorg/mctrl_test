@@ -238,6 +238,26 @@ class TestLifecycleManager:
         result = lm.execute_reaction("session-1", "nonexistent")
         assert result["success"] is False
 
+    def test_manual_replay_resets_retry_count(self):
+        reactions = {
+            "ci-failed": ReactionConfig(action="send-to-agent", retries=1, message="Fix CI"),
+        }
+        lm = LifecycleManager(reactions=reactions)
+        lm.execute_reaction("session-1", "ci-failed")  # attempt 1
+        lm.execute_reaction("session-1", "ci-failed")  # attempt 2 -> escalated
+        escalated = lm.execute_reaction("session-1", "ci-failed")
+        assert escalated["escalated"] is True
+
+        replay = lm.manual_replay("session-1", "ci-failed")
+        assert replay["escalated"] is False
+        assert replay["action"] == "send-to-agent"
+
+    def test_manual_replay_unknown_key(self):
+        lm = LifecycleManager(reactions={})
+        result = lm.manual_replay("session-1", "nonexistent")
+        assert result["success"] is False
+        assert result["error"] == "Unknown reaction key"
+
     def test_clear_tracker_on_state_change(self):
         reactions = {
             "ci-failed": ReactionConfig(action="send-to-agent", retries=2,
@@ -433,4 +453,3 @@ class TestLifecyclePoller:
         poller = LifecyclePoller(lifecycle_manager=lm, interval_seconds=60)
         poller.stop()  # Should not error
         assert poller.is_running is False
-
