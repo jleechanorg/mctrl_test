@@ -85,19 +85,26 @@ Don't just respawn with the same prompt. Diagnose:
 
 When a message references prior conversation — keywords like "we discussed", "as discussed", "from earlier", "the X we talked about", "continue with", "build what we planned" — do NOT dispatch the raw short message. Instead:
 
-1. Read the last 20 DM messages (already in context via dmHistoryLimit)
-2. Extract the relevant spec: goal, requirements, constraints, output location
-3. Write the full spec into the MC task `description` field
-4. Reply to Jeffrey: "Queued task: [title]. Spec: [one-line summary of what the agent will build]."
+1. Read all available DM messages in context (up to dmHistoryLimit — currently 50)
+2. **Redact secrets/PII**: scan for API keys, tokens, credentials, emails, long hex strings — replace with `[REDACTED]` before extracting anything. If redaction removes details needed for the spec, stop and ask Jeffrey to re-describe without the sensitive content.
+3. Extract the relevant spec from the redacted history: goal, requirements, constraints, output location
+4. Write the full spec into the MC task `description` field
+5. Reply to Jeffrey: "Queued task: [title]. Task ID: [id]. Spec: [one-line summary of what the agent will build]."
 
 The coding agent only ever receives the expanded description — never the raw "we discussed" stub. If you cannot extract a clear spec from the history, ask Jeffrey to clarify before queuing.
 
 ```bash
 # Create a task in Mission Control (fire-and-forget)
-curl -s -X POST http://localhost:9010/api/v1/tasks \
+# Use jq -n to safely handle quotes and newlines in the description
+TITLE="<task title>"
+DESCRIPTION="<expanded spec — may contain quotes and newlines>"
+curl -s -X POST "$MISSION_CONTROL_BASE_URL/api/v1/tasks" \
   -H "Authorization: Bearer $MISSION_CONTROL_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"board_id\": \"$MISSION_CONTROL_BOARD_ID\", \"title\": \"<task>\", \"description\": \"<expanded_spec>\", \"status\": \"inbox\"}"
+  -d "$(jq -n --arg board_id "$MISSION_CONTROL_BOARD_ID" \
+              --arg title "$TITLE" \
+              --arg desc "$DESCRIPTION" \
+              '{board_id: $board_id, title: $title, description: $desc, status: "inbox"}')"
 ```
 
 Env vars available: `MISSION_CONTROL_BASE_URL`, `MISSION_CONTROL_TOKEN`, `MISSION_CONTROL_BOARD_ID`.
