@@ -16,6 +16,25 @@ What this repo contains:
 
 ---
 
+## Config-First Principle
+
+**Before writing Python code, check if the goal can be achieved by editing `openclaw-config/`.**
+
+openclaw has rich built-in capabilities. Use them:
+
+| Want to change | Edit this |
+|---|---|
+| jleechanclaw behavior / decision-making | `openclaw-config/SOUL.md` |
+| Tool allow/deny list | `openclaw-config/TOOLS.md` or `openclaw.json` |
+| Memory, history, compaction settings | `openclaw.json` (memorySearch, dmHistoryLimit, compaction) |
+| Agent identity / user context | `openclaw-config/USER.md`, `identity/` |
+| Cron / scheduled tasks | `openclaw-config/cron/` |
+| New Python orchestration logic | `src/orchestration/` — **only if config cannot express it** |
+
+New Python code in `src/` is for capabilities that genuinely don't exist in openclaw's config surface. Everything else is config. See `roadmap/NATURAL_LANGUAGE_DISPATCH.md` for the rationale.
+
+---
+
 ## Critical Rules
 
 | Rule | Requirement |

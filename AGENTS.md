@@ -1,4 +1,30 @@
-# Repository Guidelines
+# jleechanclaw Repo — Agent Guidelines
+
+> **This file is used by agents working on `jleechanorg/jleechanclaw`.**
+> The sections below the divider are upstream openclaw/openclaw guidelines (kept for reference).
+
+## Config-First Principle (jleechanclaw-specific)
+
+This repo's primary job is **configuring openclaw**, not building new software.
+
+**Before writing any code**, ask: can this be done by editing `openclaw-config/`?
+
+| Goal | Prefer |
+|---|---|
+| Change jleechanclaw behavior | Edit `openclaw-config/SOUL.md` |
+| Change tool access | Edit `openclaw-config/TOOLS.md` or `openclaw.json` |
+| Change memory/history behavior | Edit `openclaw.json` (memorySearch, dmHistoryLimit) |
+| Change agent identity | Edit `openclaw-config/USER.md` |
+| Add cron/scheduled tasks | Edit `openclaw-config/cron/` |
+| Genuinely new orchestration capability | `src/orchestration/` Python — last resort only |
+
+**The test:** if the change could be expressed as a sentence in SOUL.md, it belongs in SOUL.md.
+
+See `roadmap/NATURAL_LANGUAGE_DISPATCH.md` for the design rationale and `CLAUDE.md` for full project rules.
+
+---
+
+# Repository Guidelines (openclaw/openclaw upstream reference)
 
 - Repo: https://github.com/openclaw/openclaw
 - GitHub issues/comments/PR comments: use literal multiline strings or `-F - <<'EOF'` (or $'...') for real newlines; never embed "\\n".
