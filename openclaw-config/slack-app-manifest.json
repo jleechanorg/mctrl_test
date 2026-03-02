@@ -17,6 +17,23 @@
   },
   "oauth_config": {
     "scopes": {
+      "user": [
+        "channels:history",
+        "channels:read",
+        "chat:write",
+        "files:read",
+        "groups:history",
+        "groups:read",
+        "im:history",
+        "im:read",
+        "im:write",
+        "mpim:history",
+        "mpim:read",
+        "search:read",
+        "users:read",
+        "users:read.email",
+        "usergroups:read"
+      ],
       "bot": [
         "app_mentions:read",
         "channels:history",
@@ -47,7 +64,7 @@
       ]
     },
     "interactivity": {
-      "is_enabled": false
+      "is_enabled": true
     },
     "org_deploy_enabled": false,
     "socket_mode_enabled": true,
