@@ -16,7 +16,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Run a Slack check-in summary using only live command output.\n\nExecute these exact commands in order:\n1) gog gmail search --json --max 50 \"is:unread in:inbox is:important\"\n2) gog gmail search --json --max 50 \"is:unread in:inbox is:important newer_than:2d\"\n3) gog calendar events --all --from=now --to=tomorrow --json\n4) gog calendar events --all --days 1 --from=now --json\n\nReturn a Slack-ready plain-text summary in this section format:\nDaily Slack Check-in – <day>, <month> <date>, <year> at <time>\nWhat I need to do today\n- up to 3 bullets\n\nImportant unread emails I need to reply to\n- up to 3 bullets\n\nUpcoming calendar events\n- up to 3 bullets\n\nSuggested priorities\n- up to 3 bullets\n\nRules:\n- Use only data from command output. Do not invent items.\n- If a section has no real data, say exactly: \"No items found in this section.\"\n- If a command errors, include a short error note in the relevant section and continue.\n- No fallback/bot test language (for example \"Test confirmed\", \"No data\" etc) unless the relevant command output is truly empty.\n- Keep it short and actionable.\n\nAfter composing the summary, use the send_message tool to send it as a NEW top-level Slack DM to user:U09GH5BR3QU. IMPORTANT: Do NOT reply in any existing thread. Always send as a fresh top-level message."
+        "message": "Run a Slack check-in summary using only live command output.\n\nExecute these exact commands in order:\n1) gog gmail search --json --max 50 \"is:unread in:inbox is:important\"\n2) gog gmail search --json --max 50 \"is:unread in:inbox is:important newer_than:2d\"\n3) gog calendar events --all --from=now --to=tomorrow --json\n4) gog calendar events --all --days 1 --from=now --json\n\nReturn a Slack-ready plain-text summary in this section format:\nDaily Slack Check-in \u2013 <day>, <month> <date>, <year> at <time>\nWhat I need to do today\n- up to 3 bullets\n\nImportant unread emails I need to reply to\n- up to 3 bullets\n\nUpcoming calendar events\n- up to 3 bullets\n\nSuggested priorities\n- up to 3 bullets\n\nRules:\n- Use only data from command output. Do not invent items.\n- If a section has no real data, say exactly: \"No items found in this section.\"\n- If a command errors, include a short error note in the relevant section and continue.\n- No fallback/bot test language (for example \"Test confirmed\", \"No data\" etc) unless the relevant command output is truly empty.\n- Keep it short and actionable.\n\nAfter composing the summary, use the send_message tool to send it as a NEW top-level Slack DM to user:U09GH5BR3QU. IMPORTANT: Do NOT reply in any existing thread. Always send as a fresh top-level message."
       },
       "delivery": {
         "mode": "none",
@@ -47,7 +47,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Run a Slack check-in summary using only live command output.\n\nExecute these exact commands in order:\n1) gog gmail search --json --max 50 \"is:unread in:inbox is:important\"\n2) gog gmail search --json --max 50 \"is:unread in:inbox is:important newer_than:2d\"\n3) gog calendar events --all --from=now --to=tomorrow --json\n4) gog calendar events --all --days 1 --from=now --json\n\nReturn a Slack-ready plain-text summary in this section format:\nDaily Slack Check-in – <day>, <month> <date>, <year> at <time>\nWhat I need to do today\n- up to 3 bullets\n\nImportant unread emails I need to reply to\n- up to 3 bullets\n\nUpcoming calendar events\n- up to 3 bullets\n\nSuggested priorities\n- up to 3 bullets\n\nRules:\n- Use only data from command output. Do not invent items.\n- If a section has no real data, say exactly: \"No items found in this section.\"\n- If a command errors, include a short error note in the relevant section and continue.\n- No fallback/bot test language (for example \"Test confirmed\", \"No data\" etc) unless the relevant command output is truly empty.\n- Keep it short and actionable.\n\nAfter composing the summary, use the send_message tool to send it as a NEW top-level Slack DM to user:U09GH5BR3QU. IMPORTANT: Do NOT reply in any existing thread. Always send as a fresh top-level message."
+        "message": "Run a Slack check-in summary using only live command output.\n\nExecute these exact commands in order:\n1) gog gmail search --json --max 50 \"is:unread in:inbox is:important\"\n2) gog gmail search --json --max 50 \"is:unread in:inbox is:important newer_than:2d\"\n3) gog calendar events --all --from=now --to=tomorrow --json\n4) gog calendar events --all --days 1 --from=now --json\n\nReturn a Slack-ready plain-text summary in this section format:\nDaily Slack Check-in \u2013 <day>, <month> <date>, <year> at <time>\nWhat I need to do today\n- up to 3 bullets\n\nImportant unread emails I need to reply to\n- up to 3 bullets\n\nUpcoming calendar events\n- up to 3 bullets\n\nSuggested priorities\n- up to 3 bullets\n\nRules:\n- Use only data from command output. Do not invent items.\n- If a section has no real data, say exactly: \"No items found in this section.\"\n- If a command errors, include a short error note in the relevant section and continue.\n- No fallback/bot test language (for example \"Test confirmed\", \"No data\" etc) unless the relevant command output is truly empty.\n- Keep it short and actionable.\n\nAfter composing the summary, use the send_message tool to send it as a NEW top-level Slack DM to user:U09GH5BR3QU. IMPORTANT: Do NOT reply in any existing thread. Always send as a fresh top-level message."
       },
       "delivery": {
         "mode": "none",
@@ -78,7 +78,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Run a Slack check-in summary using only live command output.\n\nExecute these exact commands in order:\n1) gog gmail search --json --max 50 \"is:unread in:inbox is:important\"\n2) gog gmail search --json --max 50 \"is:unread in:inbox is:important newer_than:2d\"\n3) gog calendar events --all --from=now --to=tomorrow --json\n4) gog calendar events --all --days 1 --from=now --json\n\nReturn a Slack-ready plain-text summary in this section format:\nDaily Slack Check-in – <day>, <month> <date>, <year> at <time>\nWhat I need to do today\n- up to 3 bullets\n\nImportant unread emails I need to reply to\n- up to 3 bullets\n\nUpcoming calendar events\n- up to 3 bullets\n\nSuggested priorities\n- up to 3 bullets\n\nRules:\n- Use only data from command output. Do not invent items.\n- If a section has no real data, say exactly: \"No items found in this section.\"\n- If a command errors, include a short error note in the relevant section and continue.\n- No fallback/bot test language (for example \"Test confirmed\", \"No data\" etc) unless the relevant command output is truly empty.\n- Keep it short and actionable.\n\nAfter composing the summary, use the send_message tool to send it as a NEW top-level Slack DM to user:U09GH5BR3QU. IMPORTANT: Do NOT reply in any existing thread. Always send as a fresh top-level message."
+        "message": "Run a Slack check-in summary using only live command output.\n\nExecute these exact commands in order:\n1) gog gmail search --json --max 50 \"is:unread in:inbox is:important\"\n2) gog gmail search --json --max 50 \"is:unread in:inbox is:important newer_than:2d\"\n3) gog calendar events --all --from=now --to=tomorrow --json\n4) gog calendar events --all --days 1 --from=now --json\n\nReturn a Slack-ready plain-text summary in this section format:\nDaily Slack Check-in \u2013 <day>, <month> <date>, <year> at <time>\nWhat I need to do today\n- up to 3 bullets\n\nImportant unread emails I need to reply to\n- up to 3 bullets\n\nUpcoming calendar events\n- up to 3 bullets\n\nSuggested priorities\n- up to 3 bullets\n\nRules:\n- Use only data from command output. Do not invent items.\n- If a section has no real data, say exactly: \"No items found in this section.\"\n- If a command errors, include a short error note in the relevant section and continue.\n- No fallback/bot test language (for example \"Test confirmed\", \"No data\" etc) unless the relevant command output is truly empty.\n- Keep it short and actionable.\n\nAfter composing the summary, use the send_message tool to send it as a NEW top-level Slack DM to user:U09GH5BR3QU. IMPORTANT: Do NOT reply in any existing thread. Always send as a fresh top-level message."
       },
       "delivery": {
         "mode": "none",
@@ -109,7 +109,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "🔔 Reminder: Review P (every 10 min until ack)"
+        "message": "\ud83d\udd14 Reminder: Review P (every 10 min until ack)"
       },
       "delivery": {
         "mode": "none",
@@ -178,6 +178,32 @@
         "lastRunAtMs": 1771992000017,
         "lastStatus": "ok",
         "lastDurationMs": 81555,
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "id": "genesis-memory-curation-weekly",
+      "name": "Genesis memory curation (weekly)",
+      "description": "Curate last 7 days of memory into durable MEMORY.md notes.",
+      "enabled": true,
+      "createdAtMs": 1772578734014,
+      "updatedAtMs": 1772578734014,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 22 * * 0",
+        "tz": "America/Los_Angeles"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Review daily memory files (memory/*.md) from the last 7 days. Extract important decisions, patterns, project status updates, and lessons learned. Update MEMORY.md with curated durable knowledge. Do not duplicate existing entries. Keep MEMORY.md concise and focused on facts that help future sessions start warm."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {
         "consecutiveErrors": 0
       }
     }

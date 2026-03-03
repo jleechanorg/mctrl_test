@@ -80,7 +80,16 @@ In `~/.openclaw/openclaw.json` under `agents.defaults`:
 ### Cron System
 
 Already running 3x daily Slack check-ins + 4-hourly backups via `~/.openclaw/cron/jobs.json`.
-Genesis cron jobs (if any) use the same native format.
+Genesis cron jobs use the same native format.
+
+Repo source of truth for tracked schedules:
+- `openclaw-config/cron/jobs.json`
+
+Current Genesis schedule in this repo:
+- `genesis-memory-curation-weekly` (weekly Sunday 10pm PT)
+
+Runtime note:
+- Cron jobs are executed by OpenClaw runtime components; keep the OpenClaw gateway healthy/running (`openclaw gateway status`).
 
 ## What's Genuinely New (Genesis adds)
 
@@ -164,7 +173,7 @@ Update MEMORY.md with curated findings. Don't duplicate existing entries.
 Keep MEMORY.md concise and focused on durable knowledge.
 ```
 
-**Schedule**: Weekly (Sunday midnight) or after N daily files accumulate.
+**Schedule**: Weekly (Sunday 10pm PT) or after N daily files accumulate.
 
 ### 4. Active Task Registry (optional)
 

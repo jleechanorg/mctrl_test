@@ -153,6 +153,24 @@ curl -sS -X POST "http://127.0.0.1:18789/v1/chat/completions" \
   -d '{"agent":"main","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
+### 4. Cron integration location (this repo)
+
+- Tracked cron jobs live in: `openclaw-config/cron/jobs.json`
+- The Genesis weekly curation job is defined there as:
+  - `id: genesis-memory-curation-weekly`
+  - schedule: `0 22 * * 0` (`America/Los_Angeles`)
+- Runtime execution uses OpenClaw's scheduler + agent runtime, so **the OpenClaw gateway must be running**.
+- **Important:** `openclaw-config/cron/jobs.json` is tracked source config; sync it to `~/.openclaw/cron/jobs.json` for runtime pickup.
+
+Quick verify:
+
+```bash
+openclaw gateway status
+jq '.jobs[] | select(.id=="genesis-memory-curation-weekly")' openclaw-config/cron/jobs.json
+# Optional runtime check (after sync):
+jq '.jobs[] | select(.id=="genesis-memory-curation-weekly")' ~/.openclaw/cron/jobs.json
+```
+
 ## Agent Selection Guide
 
 | Task Type | Agent | Why |
