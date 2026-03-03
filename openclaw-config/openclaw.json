@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastTouchedVersion": "2026.2.12",
-    "lastTouchedAt": "2026-02-26T07:42:09.759Z"
+    "lastTouchedAt": "2026-03-02T10:53:02Z"
   },
   "env": {
     "GOOGLE_CLOUD_PROJECT": "infinite-zephyr-487405-d0",
@@ -154,21 +154,21 @@
   },
   "tools": {
     "profile": "coding",
-    "allow": [
+    "alsoAllow": [
       "read",
       "write",
       "edit",
       "exec",
       "bash",
       "process",
+      "web_fetch",
       "sessions_list",
       "sessions_history",
       "memory_search",
       "memory_get",
-      "web_fetch",
-      "mcp__second-opinion-tool__agent_second_opinion",
-      "mcp__second-opinion-tool__rate_limit_status",
-      "mcp__second-opinion-tool__health-check"
+      "second-opinion-tool_agent_second_opinion",
+      "second-opinion-tool_rate_limit_status",
+      "second-opinion-tool_health-check"
     ],
     "deny": [
       "browser",
@@ -419,7 +419,7 @@
         "enabled": true
       },
       "discord": {
-        "enabled": true
+        "enabled": false
       },
       "slack": {
         "enabled": true
@@ -429,6 +429,23 @@
       },
       "minimax-portal-auth": {
         "enabled": true
+      },
+      "openclaw-mcp-adapter": {
+        "enabled": true,
+        "config": {
+          "servers": [
+            {
+              "name": "second-opinion-tool",
+              "transport": "http",
+              "url": "${SECOND_OPINION_MCP_URL}",
+              "headers": {
+                "Accept": "application/json, text/event-stream",
+                "Authorization": "Bearer ${SECOND_OPINION_MCP_TOKEN}"
+              }
+            }
+          ],
+          "toolPrefix": true
+        }
       }
     }
   },

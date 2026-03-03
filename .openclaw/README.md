@@ -19,9 +19,16 @@ This directory exists to make the boundary explicit between:
 
 ## Current Channel Baseline
 
-The repo baseline currently tracks these as enabled:
+The repo baseline currently tracks the main profile as:
 
-- `channels.discord.enabled = true`
-- `plugins.entries.discord.enabled = true`
+- `channels.discord.enabled = false`
+- `plugins.entries.discord.enabled = false`
 - `channels.slack.enabled = true`
 - `plugins.entries.slack.enabled = true`
+
+Discord bot runtime is isolated in a separate local profile:
+
+- `~/.openclaw-consensus` (Discord enabled, dedicated SOUL/tool policy)
+- Repo backup for that profile lives in `discord-eng-bot/`:
+  - `discord-eng-bot/openclaw.json` (redacted profile config)
+  - `discord-eng-bot/SOUL.md` (prompt backup)

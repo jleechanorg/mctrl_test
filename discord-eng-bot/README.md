@@ -1,85 +1,72 @@
-# Discord Engineering Q&A Bot
+# Discord Consensus Profile Backup
 
-OpenClaw-powered Discord bot for public engineering Q&A with restricted permissions.
+This folder is the repo-safe backup for the dedicated Discord profile at `~/.openclaw-consensus`.
 
 ## Files
 
-- `openclaw.json` - OpenClaw configuration
-- `discord-app-manifest.json` - Discord app manifest (for Developer Portal)
-- `README.md` - This file (setup + usage instructions)
+- `openclaw.json` - redacted Consensus profile config backup
+- `SOUL.md` - Consensus system prompt backup
+- `discord-app-manifest.json` - Discord app manifest template
+- `README.md` - restore and usage notes
 
-## Security Model
+## Runtime Model
 
-This bot is designed for **public use** with strict security:
+- Profile: `consensus` (`~/.openclaw-consensus`)
+- Channel: Discord only
+- Reply behavior: mention-gated (`requireMention: true`)
+- Research behavior:
+  - concise by default
+  - deeper mode on `rsearch`/`research` requests
+  - every answer includes a `Sources:` section
 
-### Sandbox
-- Mode: `non-main` - public sessions run in isolated Docker containers
-- Workspace access: `none` - no file system access
+## Tool Surface
 
-### Tool Restrictions
-- **Denied**: read, write, edit, apply_patch, exec, bash, process, browser, canvas, nodes, cron, gateway, discord, sessions_send, sessions_spawn
-- **Allowed**: web_search, web_fetch, and selected `second-opinion-tool` MCP methods (`agent_second_opinion`, `rate_limit_status`, `health-check`)
+- Allowed: `web_search`, `web_fetch`, `second-opinion-tool_agent_second_opinion`, `second-opinion-tool_rate_limit_status`, `second-opinion-tool_health-check`
+- Denied: filesystem, exec/process, browser/canvas, cron/gateway/session spawn/send
+- Web search provider: `perplexity`
 
-### Anti-Spam
-- `requireMention: true` - bot only responds when @mentioned
-- `groupPolicy: allowlist` - only configured guilds are allowed
-- `replyToMode: off` - no auto-reply threading behavior
+## Required Secrets / Vars
 
-### Command Handling
-- `commands.native: true` - OpenClaw native command handling is enabled
+- `DISCORD_BOT_TOKEN`
+- `PERPLEXITY_API_KEY`
+- `OPENCLAW_GATEWAY_TOKEN` — populates both `gateway.auth.token` and `gateway.remote.token`
+- `SECOND_OPINION_MCP_URL` — populates `plugins.entries.openclaw-mcp-adapter.config.servers[0].url`
 
-## Setup
+## Restore Into `~/.openclaw-consensus`
 
-1. **Create Discord App**
-   - Go to https://discord.com/developers/applications
-   - Create new application
-   - Go to Bot section, create bot
-   - Enable Message Content Intent
-
-2. **Get Bot Token**
-   - Reset token in Bot section
-   - Copy token (you'll need it for openclaw.json)
-
-3. **Configure OpenClaw**
-   - Copy `openclaw.json` to `~/.openclaw/openclaw.json` or merge
-   - Set `channels.discord.token` to your bot token (or set `DISCORD_BOT_TOKEN` if using env var expansion)
-   - Set your Discord server ID under `channels.discord.guilds`
-   - Ensure the Discord plugin is enabled:
-     ```bash
-     openclaw plugins enable discord
-     ```
-
-4. **Add Bot to Server**
-   - Go to OAuth2 > URL Generator
-   - Scopes: `bot`, `applications.commands`
-   - Permissions: `View Channels`, `Send Messages`, `Read Message History`, `Embed Links`
-   - Use generated URL to invite bot
-
-5. **Start OpenClaw**
+1. Create directory:
    ```bash
-   openclaw gateway run
+   mkdir -p ~/.openclaw-consensus/workspace
    ```
-
-6. **Verify Discord Is Active**
+2. Copy config:
    ```bash
-   openclaw channels list
-   openclaw channels capabilities --channel discord
-   openclaw message send --channel discord --target channel:YOUR_CHANNEL_ID --message "healthcheck" --dry-run
+   cp discord-eng-bot/openclaw.json ~/.openclaw-consensus/openclaw.json
    ```
+3. Copy prompt:
+   ```bash
+   cp discord-eng-bot/SOUL.md ~/.openclaw-consensus/workspace/SOUL.md
+   ```
+4. Set real values in `~/.openclaw-consensus/openclaw.json`:
+   - `channels.discord.token`
+   - `channels.discord.guilds`
+   - `tools.web.search.perplexity.apiKey` (or ensure env var is present for the service)
+   - `gateway.auth.token` and `gateway.remote.token`
+   - `plugins.entries.openclaw-mcp-adapter.config.servers[0].url`
+5. Restart profile gateway:
+   ```bash
+   openclaw --profile consensus gateway restart
+   ```
+6. Ensure profile model auth exists before first reply:
+   ```bash
+   openclaw --profile consensus agents add openai-codex:default
+   ```
+   If you already authenticated in another profile, you can also copy
+   `auth-profiles.json` into `~/.openclaw-consensus/agents/main/agent/`.
 
-## Usage
+## Quick Validation
 
-Users interact with the bot by:
-- @mentioning the bot in channels
-- Posting in allowed Discord guilds/channels configured under `channels.discord.guilds`
+```bash
+openclaw --profile consensus agent --channel discord --agent main --message "@Consensus research compare X vs Y" --json
+```
 
-The bot can:
-- Answer engineering questions via web search
-- Fetch documentation from URLs
-- Provide helpful responses
-
-The bot CANNOT:
-- Read/write files
-- Execute code
-- Access other Discord features
-- Access your system
+Expected: response includes `Bottom line`, `Findings`, `Tradeoffs`, `Sources`, and `Tool audit`.
