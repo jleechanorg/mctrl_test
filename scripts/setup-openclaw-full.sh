@@ -87,7 +87,7 @@ echo "  ✓ Backup scripts ready"
 echo
 
 # Step 4: Install backup jobs
-echo "[4/4] Installing backup jobs (cron + launchd)..."
+echo "[4/4] Installing backup jobs (launchd only)..."
 cd "$OPENCLAW_REPO"
 "$OPENCLAW_REPO/scripts/install-openclaw-backup-jobs.sh"
 
@@ -95,8 +95,8 @@ echo
 echo "=== Setup Complete! ==="
 echo
 echo "OpenClaw is now configured with automated backups:"
-echo "  • Cron: Every 4 hours"
 echo "  • Launchd: Every 4 hours"
+echo "  • System crontab: not used for OpenClaw backup automation"
 echo "  • Backups: $OPENCLAW_REPO/.openclaw-backups/"
 echo
 echo "To test the backup:"

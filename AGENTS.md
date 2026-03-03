@@ -18,6 +18,11 @@ This repo's primary job is **configuring openclaw**, not building new software.
 | Add cron/scheduled tasks | Edit `openclaw-config/cron/` |
 | Genuinely new orchestration capability | `src/orchestration/` Python — last resort only |
 
+## Scheduling Guardrail (jleechanclaw-specific)
+
+- Forbidden: editing system `crontab` for OpenClaw reminder, scheduling, or automation jobs.
+- Required: use OpenClaw gateway cron workflow only (`openclaw cron ...` subcommands and `openclaw-config/cron/` config).
+
 **The test:** if the change could be expressed as a sentence in SOUL.md, it belongs in SOUL.md.
 
 See `roadmap/NATURAL_LANGUAGE_DISPATCH.md` for the design rationale and `CLAUDE.md` for full project rules.

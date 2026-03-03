@@ -73,7 +73,7 @@ cd openclaw
 ./scripts/install-openclaw-backup-jobs.sh
 ```
 
-This installs both cron and launchd jobs for redundancy.
+This installs launchd jobs for backup automation and removes legacy OpenClaw cron entries.
 
 ## Verification
 
@@ -105,8 +105,9 @@ tail -f ~/Library/Logs/openclaw-backup/stderr.log
 ### Verify Jobs
 
 ```bash
-# Check cron
-crontab -l | grep openclaw
+# OpenClaw reminders/schedules (gateway cron only)
+openclaw cron status
+openclaw cron list
 
 # Check launchd
 launchctl list | grep openclaw
@@ -162,11 +163,12 @@ launchctl enable gui/$(id -u)/com.openclaw.backup
 launchctl kickstart -k gui/$(id -u)/com.openclaw.backup
 ```
 
-### Cron Job Not Running
+### Gateway Cron Job Not Running
 
 ```bash
-# Check cron logs (macOS)
-log show --predicate 'process == "cron"' --last 1h
+# Check gateway cron status and jobs
+openclaw cron status
+openclaw cron list
 
 # Manually run the backup
 ~/.openclaw/workspace/openclaw/scripts/run-openclaw-backup.sh

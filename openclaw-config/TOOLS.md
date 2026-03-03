@@ -37,6 +37,14 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 ---
 
+## OpenClaw Scheduling Guardrail
+
+- Forbidden: system `crontab` edits for OpenClaw reminder/scheduling jobs.
+- Required: use OpenClaw gateway cron subcommands only (`openclaw cron ...`).
+- If unsure, run: `openclaw cron --help`
+
+---
+
 ## AI Coding Agents
 
 **All coding tasks go through `ai_orch`.** Never write code yourself when asked to implement something — always delegate to an agent via `ai_orch run`.

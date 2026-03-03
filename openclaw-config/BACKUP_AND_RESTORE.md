@@ -4,6 +4,13 @@
 
 ---
 
+## 🚧 Scheduling Guardrail
+
+- **Forbidden:** system `crontab` edits for OpenClaw automation jobs.
+- **Required:** use OpenClaw gateway cron for reminders/schedules (`openclaw cron ...`), and use launchd-based backup jobs from this repo for backups.
+
+---
+
 ## 🔐 What Gets Backed Up
 
 ✅ **Configuration**: `~/.openclaw/openclaw.json`
@@ -25,7 +32,7 @@ Run this command to set up automatic daily backups:
 This will:
 - Create daily backups in `~/.openclaw/backups/`
 - Keep last 30 days of backups
-- Run automatically via cron at 2 AM daily
+- Install launchd-based backup scheduling (no system crontab)
 - Encrypt sensitive credentials
 
 ---
@@ -136,9 +143,13 @@ git push -u origin main
 
 ### 3. Scheduled Backups
 ```bash
-# Add to crontab (already configured via health-check)
-# Backups run daily at 2 AM
-0 2 * * * tar -czf ~/.openclaw/backups/backup-$(date +\%Y\%m\%d).tar.gz ~/.openclaw/
+# OpenClaw reminders/schedules: gateway cron only
+openclaw cron --help
+openclaw cron status
+openclaw cron list
+
+# Backups: install launchd backup schedule (no system crontab)
+./scripts/install-openclaw-backup-jobs.sh
 ```
 
 ---
@@ -169,7 +180,7 @@ If you lose your Slack tokens:
 ✓ Health check runs every 5 minutes
 ✓ Logs preserved in `~/.openclaw/logs/`
 ✓ Configuration backed up on every `openclaw doctor --fix`
-✓ Crontab persists across reboots
+✓ Backup scheduler uses launchd (no system crontab)
 
 ---
 

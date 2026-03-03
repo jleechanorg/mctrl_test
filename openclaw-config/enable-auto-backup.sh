@@ -2,22 +2,27 @@
 
 set -euo pipefail
 
-# Installs a cron job that creates a daily backup tarball of
+# Installs a launchd job that creates a daily backup tarball of
 # ~/.openclaw and LaunchAgent config at 2:00 AM.
 #
 # Usage:
 #   ./enable-auto-backup.sh
 #
 # The job calls ~/.openclaw/backup-content.sh (created lazily below).
+# Guardrail: OpenClaw automation must not use system crontab.
 
 OPENCLAW_DIR="$HOME/.openclaw"
 BACKUP_DIR="$OPENCLAW_DIR/backups"
 SCRIPT_PATH="$OPENCLAW_DIR/backup-content.sh"
 LAUNCHAGENT="$HOME/Library/LaunchAgents/ai.openclaw.gateway.plist"
-CRON_EXPR='0 2 * * *'
+LAUNCHD_DIR="$HOME/Library/LaunchAgents"
+PLIST_PATH="$LAUNCHD_DIR/ai.openclaw.backup.daily.plist"
+LOG_DIR="$HOME/.openclaw/logs"
 CRON_MARK="# OpenClaw daily backup"
 
 mkdir -p "$BACKUP_DIR"
+mkdir -p "$LOG_DIR"
+mkdir -p "$LAUNCHD_DIR"
 
 cat > "$SCRIPT_PATH" <<'EOF_SCRIPT'
 #!/usr/bin/env bash
@@ -45,16 +50,64 @@ find "$BACKUP_DIR" -name 'backup-*.tar.gz' -type f -mtime +30 -delete || true
 EOF_SCRIPT
 chmod +x "$SCRIPT_PATH"
 
-# Install/update cron entry (dedupe any previous backup lines)
-CRON_LINE="$CRON_EXPR $HOME/.openclaw/backup-content.sh"
+# Install/update launchd entry (daily at 2:00 AM local time)
+cat > "$PLIST_PATH" <<EOF_PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.openclaw.backup.daily</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>$SCRIPT_PATH</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>2</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>$LOG_DIR/backup-content.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>$LOG_DIR/backup-content.err.log</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
+EOF_PLIST
 
-tmp=$(mktemp)
-crontab -l 2>/dev/null | grep -Fv "$CRON_MARK" | grep -Fv "$CRON_LINE" | grep -Fv "$SCRIPT_PATH" > "$tmp" || true
-printf "%s\n%s\n" "$CRON_MARK" "$CRON_LINE" >> "$tmp"
-crontab "$tmp"
-rm -f "$tmp"
+BOOTSTRAP_ERR_FILE="$(mktemp)"
+if ! launchctl bootstrap gui/$(id -u) "$PLIST_PATH" 2>"$BOOTSTRAP_ERR_FILE"; then
+  if [[ -s "$BOOTSTRAP_ERR_FILE" ]]; then
+    cat "$BOOTSTRAP_ERR_FILE" >&2
+  fi
+  launchctl bootout gui/$(id -u) "$PLIST_PATH" 2>/dev/null || true
+  launchctl bootstrap gui/$(id -u) "$PLIST_PATH"
+fi
+rm -f "$BOOTSTRAP_ERR_FILE"
+launchctl enable gui/$(id -u)/ai.openclaw.backup.daily
+launchctl kickstart -k gui/$(id -u)/ai.openclaw.backup.daily
 
-echo "Installed cron job: $CRON_EXPR -> $SCRIPT_PATH"
+# Remove legacy OpenClaw system crontab lines if present
+if command -v crontab >/dev/null 2>&1; then
+  CRON_BEFORE="$(mktemp)"
+  CRON_AFTER="$(mktemp)"
+  crontab -l > "$CRON_BEFORE" 2>/dev/null || true
+  if [[ -s "$CRON_BEFORE" ]]; then
+    grep -Fv "$CRON_MARK" "$CRON_BEFORE" | grep -Fv "$SCRIPT_PATH" > "$CRON_AFTER" || true
+    if ! cmp -s "$CRON_BEFORE" "$CRON_AFTER"; then
+      crontab "$CRON_AFTER"
+      echo "Removed legacy OpenClaw backup entries from system crontab."
+    fi
+  fi
+  rm -f "$CRON_BEFORE" "$CRON_AFTER"
+fi
+
+echo "Installed launchd backup job: ai.openclaw.backup.daily"
+echo "Schedule: daily at 02:00 local time"
 echo "Backups will be written to: $BACKUP_DIR"
-echo "Current crontab entry includes:"
-crontab -l | grep -F "$CRON_MARK" -A1 || true
+echo "Reminder/schedule guardrail: use 'openclaw cron ...' for OpenClaw jobs; do not use system crontab."
