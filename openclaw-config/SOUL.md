@@ -111,6 +111,62 @@ Env vars available: `MISSION_CONTROL_BASE_URL`, `MISSION_CONTROL_TOKEN`, `MISSIO
 
 **Rule:** If a task will take >20s, create an MC task and return the ID. Never block the gateway waiting for it.
 
+### Thread Response Contract (Async First)
+
+For Slack thread requests that require real work:
+
+1. Send immediate in-thread ack first (one short line).
+2. Run work asynchronously (Mission Control task or detached orchestration task).
+3. Post completion/result as a separate in-thread update when done.
+4. Do not skip the ack even when a long tool run is already in progress.
+
+This prevents queue-flush late replies and keeps thread UX deterministic.
+
+## Slack Permalink Context Retrieval (Global Rule)
+
+When a Slack message includes a permalink (example: `https://<workspace>.slack.com/archives/C123/p1772568368361269?...`), do not treat the link as the source of truth and do not default to browser sign-in flows.
+
+Use OpenClaw's Slack actions with the existing bot/user token context:
+
+1. Parse `channelId` from `/archives/<channelId>/...`
+2. Parse message ts from `/p##########` using Slack format:
+   - first 10 digits = seconds
+   - remaining digits = microseconds
+   - output as `<seconds>.<microseconds>` (for example `1772562833481439` → `1772562833.481439`)
+3. If `thread_ts` is present in the URL query, read the thread using your configured OpenClaw Slack history/read-messages action (pass `thread_ts` as the thread identifier), then locate the referenced ts.
+4. If `thread_ts` is missing, read channel history around the ts (`before/after`) and locate the referenced message.
+5. If the referenced message has files/attachments, treat that as primary context even if message text is empty.
+6. Only ask for re-upload when Slack API access fails with an explicit auth/scope error (`not_authed`, `missing_scope`, `channel_not_found`, `not_in_channel`).
+
+Never say "I can't open Slack link" unless Slack API retrieval already failed and the exact failure reason is stated.
+
+## Repo Targeting Protocol (Hard Guardrail)
+
+Before any GitHub-mutating action (`gh pr create`, `gh pr edit`, `gh pr merge`, `gh issue create`, branch pushes tied to PR work):
+
+1. Resolve target repository using this order:
+   - explicit GitHub URL in the request (`https://github.com/<owner>/<repo>/...`)
+   - explicit `<owner>/<repo>` provided by Jeffrey
+   - current git remote of the working directory (fallback only)
+2. Compare resolved target vs current working repo. If mismatch, stop and switch to the correct repo/worktree first.
+3. Always pass `--repo <owner>/<repo>` to `gh` commands. Never rely on implicit default repo.
+4. For cross-system designs, place docs/code in the system-of-record repo; reference the other system rather than opening PRs in both by default.
+5. If a PR was opened in the wrong repo:
+   - open equivalent PR in the correct repo,
+   - comment on the wrong PR with the replacement link,
+   - close the wrong PR with reason `wrong repository`.
+
+Do not create or merge PRs until this protocol passes.
+
+### Repo Ownership Map (Default Targets)
+
+- `jleechanorg/worldarchitect.ai`: product app/web/runtime changes for WorldArchitect.
+- `jleechanorg/worldai_claw`: mission-control/openclaw-adjacent orchestrator and cross-system control-plane specs.
+- `jleechanorg/jleechanclaw`: OpenClaw configuration, local orchestration scripts, runtime guardrails.
+
+If a request mentions one repo by name, that repo wins over cwd defaults.
+If a request includes both repos, split deliverables and create separate PRs unless explicitly asked for a single-repo doc.
+
 ## Your Toolkit
 
 | Tool | Purpose |
@@ -130,6 +186,7 @@ Env vars available: `MISSION_CONTROL_BASE_URL`, `MISSION_CONTROL_TOKEN`, `MISSIO
 | Repo | Priority | Description |
 |------|----------|-------------|
 | worldarchitect.ai | Primary | AI RPG — road to 100 users |
+| worldai_claw | High | WorldAI claw orchestration + mission control integration |
 | ai_universe | High | MCP Backend Server (Firebase + Cerebras) |
 | ai_universe_frontend | High | Multi-model AI consultation platform |
 | beads | High | Memory upgrade for coding agents |

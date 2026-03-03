@@ -66,9 +66,23 @@ ai_orch run --agent-cli codex "task description"
 - Run from the relevant repo directory, or include the path in the task description
 - After dispatching, tell the user: agent is running in tmux, attach with `ai_orch attach <session>`
 - Do NOT wait for the agent to finish before responding — it runs async
+- Before any PR operation, resolve repo from URL or explicit `<owner>/<repo>` and pass `--repo <owner>/<repo>` explicitly
+- Never create/edit/merge PRs with implicit default repo context
 
 ### What counts as a coding task
 
 Everything that involves writing, modifying, or testing code: bug fixes, new features, refactors, tests, scripts. Even "small" tasks go through ai_orch — consistency matters more than overhead.
+
+## GitHub Repo Safety Snippets
+
+```bash
+# Inspect configured remotes and pick intended target
+git remote -v
+
+# Always pin repo on gh commands
+gh pr view 5833 --repo jleechanorg/worldarchitect.ai
+gh pr create --repo jleechanorg/worldai_claw ...
+gh pr merge 123 --repo jleechanorg/worldarchitect.ai --squash
+```
 
 Add whatever helps you do your job. This is your cheat sheet.
