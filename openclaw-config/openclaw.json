@@ -372,6 +372,10 @@
         ]
       },
       "channels": {
+        "C0AH3RY3DK6": {
+          "allow": true,
+          "requireMention": false
+        },
         "*": {
           "allow": true
         }

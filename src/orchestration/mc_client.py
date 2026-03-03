@@ -25,6 +25,7 @@ class TaskStatus(StrEnum):
     """Task status values in Mission Control."""
     INBOX = "inbox"
     IN_PROGRESS = "in_progress"
+    REVIEW = "review"
     DONE = "done"
     BLOCKED = "blocked"
 
@@ -127,6 +128,28 @@ class MissionControlClient:
         """Make PATCH request."""
         return self._request("PATCH", path, body)
 
+    @staticmethod
+    def _normalize_task_payload(payload: dict) -> dict:
+        """Normalize legacy payload shape to TaskCreate/TaskUpdate schema fields."""
+        body = dict(payload)
+        if "custom_fields" in body and "custom_field_values" not in body:
+            body["custom_field_values"] = body.pop("custom_fields")
+
+        allowed_keys = {
+            "title",
+            "description",
+            "status",
+            "priority",
+            "due_at",
+            "assigned_agent_id",
+            "depends_on_task_ids",
+            "tag_ids",
+            "created_by_user_id",
+            "custom_field_values",
+            "comment",
+        }
+        return {k: v for k, v in body.items() if k in allowed_keys}
+
     # === Task API ===
 
     def list_inbox_tasks(self, board_id: str) -> list[dict]:
@@ -158,6 +181,7 @@ class MissionControlClient:
         status: TaskStatus,
         assigned_agent_id: str | None = None,
         custom_fields: dict | None = None,
+        board_id: str | None = None,
     ) -> dict:
         """Update a task in Mission Control.
 
@@ -166,6 +190,7 @@ class MissionControlClient:
             status: New task status.
             assigned_agent_id: Optional agent ID to assign the task to.
             custom_fields: Optional task custom fields payload.
+            board_id: Board UUID. When provided uses /api/v1/boards/{board_id}/tasks/{task_id}.
 
         Returns:
             Updated task dict, or empty dict if unconfigured.
@@ -177,12 +202,26 @@ class MissionControlClient:
         if assigned_agent_id:
             body["assigned_agent_id"] = assigned_agent_id
         if custom_fields is not None:
-            body["custom_fields"] = custom_fields
+            body["custom_field_values"] = custom_fields
 
+        path = (
+            f"/api/v1/boards/{board_id}/tasks/{task_id}"
+            if board_id
+            else f"/api/v1/tasks/{task_id}"
+        )
         try:
-            result = self._patch(f"/api/v1/tasks/{task_id}", body)
+            result = self._patch(path, body)
             return result or {}
-        except MissionControlError:
+        except MissionControlError as e:
+            # Some boards reject unknown custom fields; retry status-only update.
+            if e.status_code == 422 and "custom_field_values" in body:
+                retry_body = dict(body)
+                retry_body.pop("custom_field_values", None)
+                try:
+                    result = self._patch(path, retry_body)
+                    return result or {}
+                except MissionControlError:
+                    return {}
             return {}
 
     def create_task(self, payload: dict) -> dict:
@@ -196,24 +235,60 @@ class MissionControlClient:
         """
         if not self._configured:
             return {}
+
+        board_id = payload.get("board_id")
+        normalized_payload = self._normalize_task_payload(payload)
+
+        if isinstance(board_id, str) and board_id.strip():
+            try:
+                result = self._post(
+                    f"/api/v1/boards/{board_id}/tasks",
+                    normalized_payload,
+                )
+                return result or {}
+            except MissionControlError as e:
+                # Backwards compatibility for older MC API versions.
+                if e.status_code not in (404, 405):
+                    return {}
+
         try:
             result = self._post("/api/v1/tasks", payload)
             return result or {}
         except MissionControlError:
             return {}
 
-    def set_task_dependencies(self, task_id: str, depends_on_ids: list[str]) -> dict:
+    def set_task_dependencies(
+        self,
+        task_id: str,
+        depends_on_ids: list[str],
+        *,
+        board_id: str | None = None,
+    ) -> dict:
         """Set task dependencies in Mission Control.
 
         Args:
             task_id: Task UUID.
             depends_on_ids: List of upstream dependency task IDs.
+            board_id: Optional board UUID for board-scoped API.
 
         Returns:
             Response payload, or empty dict if unconfigured.
         """
         if not self._configured:
             return {}
+
+        if board_id:
+            try:
+                result = self._patch(
+                    f"/api/v1/boards/{board_id}/tasks/{task_id}",
+                    {"depends_on_task_ids": depends_on_ids},
+                )
+                return result or {}
+            except MissionControlError as e:
+                # Backwards compatibility for older MC API versions.
+                if e.status_code not in (404, 405):
+                    return {}
+
         try:
             result = self._post(
                 f"/api/v1/tasks/{task_id}/dependencies",

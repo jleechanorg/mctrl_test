@@ -95,16 +95,16 @@ The coding agent only ever receives the expanded description — never the raw "
 
 ```bash
 # Create a task in Mission Control (fire-and-forget)
+# IMPORTANT: endpoint is /api/v1/boards/{board_id}/tasks — NOT /api/v1/tasks (that returns 404)
 # Use jq -n to safely handle quotes and newlines in the description
 TITLE="<task title>"
 DESCRIPTION="<expanded spec — may contain quotes and newlines>"
-curl -s -X POST "$MISSION_CONTROL_BASE_URL/api/v1/tasks" \
+curl -s -X POST "$MISSION_CONTROL_BASE_URL/api/v1/boards/$MISSION_CONTROL_BOARD_ID/tasks" \
   -H "Authorization: Bearer $MISSION_CONTROL_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "$(jq -n --arg board_id "$MISSION_CONTROL_BOARD_ID" \
-              --arg title "$TITLE" \
+  -d "$(jq -n --arg title "$TITLE" \
               --arg desc "$DESCRIPTION" \
-              '{board_id: $board_id, title: $title, description: $desc, status: "inbox"}')"
+              '{title: $title, description: $desc, status: "inbox"}')"
 ```
 
 Env vars available: `MISSION_CONTROL_BASE_URL`, `MISSION_CONTROL_TOKEN`, `MISSION_CONTROL_BOARD_ID`.

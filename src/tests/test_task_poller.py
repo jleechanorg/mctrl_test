@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from unittest.mock import patch, MagicMock
 import json
 
@@ -9,6 +10,12 @@ import pytest
 
 from orchestration.task_poller import TaskPoller, detect_cli
 from orchestration.mc_client import TaskStatus
+
+
+@pytest.fixture(autouse=True)
+def _clear_minimax_api_key(monkeypatch):
+    """Keep tests hermetic unless a test explicitly sets MINIMAX_API_KEY."""
+    monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
 
 
 class TestDetectCli:
@@ -118,12 +125,11 @@ class TestTaskPoller:
             client=mock_client,
         )
 
-        with patch("orchestration.task_poller.subprocess.run") as mock_run:
-            mock_run.return_value.returncode = 0
+        with patch.object(poller, "_dispatch_via_subprocess", return_value=(True, {})):
             result = poller.poll_and_dispatch()
 
         assert result == 1
-        mock_client.update_task.assert_called_once_with("task-1", TaskStatus.IN_PROGRESS, custom_fields=None)
+        mock_client.update_task.assert_called_once_with("task-1", TaskStatus.IN_PROGRESS, custom_fields=None, board_id="board-123")
 
     def test_poll_and_dispatch_multiple_tasks(self):
         """Multiple tasks are each dispatched and status updated."""
@@ -140,12 +146,48 @@ class TestTaskPoller:
             client=mock_client,
         )
 
-        with patch("orchestration.task_poller.subprocess.run") as mock_run:
-            mock_run.return_value.returncode = 0
+        with patch.object(poller, "_dispatch_via_subprocess", return_value=(True, {})):
             result = poller.poll_and_dispatch()
 
         assert result == 3
         assert mock_client.update_task.call_count == 3
+
+    def test_poll_and_dispatch_dispatches_tasks_concurrently(self):
+        """With dispatch_concurrency > 1, task dispatches overlap in time."""
+        mock_client = MagicMock()
+        mock_client.is_configured = True
+        mock_client.list_inbox_tasks.return_value = [
+            {"id": "task-1", "title": "Task 1", "description": "Work 1"},
+            {"id": "task-2", "title": "Task 2", "description": "Work 2"},
+        ]
+
+        poller = TaskPoller(
+            board_id="board-123",
+            client=mock_client,
+            dispatch_concurrency=2,
+        )
+
+        started = 0
+        lock = threading.Lock()
+        both_started = threading.Event()
+        overlap_checks: list[bool] = []
+
+        def blocking_dispatch(_task: dict) -> bool:
+            nonlocal started
+            with lock:
+                started += 1
+                if started == 2:
+                    both_started.set()
+            did_overlap = both_started.wait(timeout=0.5)
+            with lock:
+                overlap_checks.append(did_overlap)
+            return True
+
+        with patch.object(poller, "_dispatch_task", side_effect=blocking_dispatch):
+            result = poller.poll_and_dispatch()
+
+        assert result == 2
+        assert overlap_checks == [True, True]
 
     def test_poll_and_dispatch_does_not_count_if_task_status_update_fails(self):
         """Failed status updates are not counted as successful dispatch."""
@@ -161,12 +203,11 @@ class TestTaskPoller:
             client=mock_client,
         )
 
-        with patch("orchestration.task_poller.subprocess.run") as mock_run:
-            mock_run.return_value.returncode = 0
+        with patch.object(poller, "_dispatch_via_subprocess", return_value=(True, {})):
             result = poller.poll_and_dispatch()
 
         assert result == 0
-        mock_client.update_task.assert_called_once_with("task-1", TaskStatus.IN_PROGRESS, custom_fields=None)
+        mock_client.update_task.assert_called_once_with("task-1", TaskStatus.IN_PROGRESS, custom_fields=None, board_id="board-123")
 
     def test_poll_and_dispatch_skips_task_without_id(self):
         """Task without id is skipped with warning."""
@@ -182,8 +223,7 @@ class TestTaskPoller:
             client=mock_client,
         )
 
-        with patch("orchestration.task_poller.subprocess.run") as mock_run:
-            mock_run.return_value.returncode = 0
+        with patch.object(poller, "_dispatch_via_subprocess", return_value=(True, {})):
             with patch("orchestration.task_poller.logger") as mock_logger:
                 result = poller.poll_and_dispatch()
 
@@ -218,14 +258,13 @@ class TestTaskPoller:
             client=mock_client,
         )
 
-        with patch("orchestration.task_poller.subprocess.run") as mock_run:
-            mock_run.return_value.returncode = 0
+        with patch.object(poller, "_dispatch_via_subprocess", return_value=(True, {})) as mock_dispatch:
             result = poller.poll_and_dispatch()
 
         assert result == 1
         assert mock_client.update_task.call_count == 1
-        mock_client.update_task.assert_called_once_with("task-2", TaskStatus.IN_PROGRESS, custom_fields=None)
-        assert mock_run.call_count == 1
+        mock_client.update_task.assert_called_once_with("task-2", TaskStatus.IN_PROGRESS, custom_fields=None, board_id="board-123")
+        assert mock_dispatch.call_count == 1
 
     def test_poll_and_dispatch_not_configured(self):
         """When client not configured, returns 0 without calling API."""
@@ -266,6 +305,7 @@ class TestTaskPoller:
             "task-1",
             TaskStatus.IN_PROGRESS,
             custom_fields={"cost": {"input_tokens": 5}},
+            board_id="board-123",
         )
 
     def test_poll_and_dispatch_uses_dispatch_fn_dict_payload(self, tmp_path):
@@ -291,6 +331,7 @@ class TestTaskPoller:
             "task-1",
             TaskStatus.IN_PROGRESS,
             custom_fields={"cost": {"total_tokens": 9}},
+            board_id="board-123",
         )
 
     def test_dispatch_task_blocks_parent_when_subtasks_created(self):
@@ -318,9 +359,13 @@ class TestTaskPoller:
         result = poller._dispatch_task(task)
 
         assert result is True
-        mock_client.update_task.assert_called_once_with("task-1", TaskStatus.BLOCKED)
+        mock_client.update_task.assert_called_once_with("task-1", TaskStatus.BLOCKED, board_id="board-123")
         assert mock_client.create_task.call_count == 2
-        mock_client.set_task_dependencies.assert_called_once_with("task-sub-2", ["task-sub-1"])
+        mock_client.set_task_dependencies.assert_called_once_with(
+            "task-sub-2",
+            ["task-sub-1"],
+            board_id="board-123",
+        )
 
     def test_decompose_task_builds_dependencies_between_subtasks(self):
         """Subtasks inherit explicit and previous subtasks as dependencies."""
@@ -347,11 +392,19 @@ class TestTaskPoller:
 
         assert created_ids == ["sub-1", "sub-2", "sub-3"]
         assert mock_client.create_task.call_count == 3
-        mock_client.set_task_dependencies.assert_any_call("sub-2", ["manual", "sub-1"])
-        mock_client.set_task_dependencies.assert_any_call("sub-3", ["sub-2"])
+        mock_client.set_task_dependencies.assert_any_call(
+            "sub-2",
+            ["manual", "sub-1"],
+            board_id="board-123",
+        )
+        mock_client.set_task_dependencies.assert_any_call(
+            "sub-3",
+            ["sub-2"],
+            board_id="board-123",
+        )
 
-    def test_dispatch_via_subprocess_extracts_token_usage(self):
-        """_dispatch_via_subprocess parses token usage from stdout JSON."""
+    def test_dispatch_via_subprocess_succeeds_on_zero_returncode(self):
+        """_dispatch_via_subprocess returns (True, ...) when agent exits 0."""
         mock_client = MagicMock()
         mock_client.is_configured = True
         poller = TaskPoller(board_id="board-123", client=mock_client)
@@ -368,6 +421,63 @@ class TestTaskPoller:
 
         assert dispatched is True
         assert token_usage == {"input_tokens": 10, "output_tokens": 20, "total_tokens": 30}
+
+    def test_dispatch_via_subprocess_uses_sync_commands_not_ai_orch(self):
+        """_dispatch_via_subprocess must NOT use ai_orch (tmux-detached, exits 0 immediately).
+        Must use CLI-specific sync commands that block until agent completes."""
+        mock_client = MagicMock()
+        mock_client.is_configured = True
+        poller = TaskPoller(board_id="board-123", client=mock_client)
+
+        with patch("orchestration.task_poller.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = b""
+            mock_run.return_value.stderr = b""
+            poller._dispatch_via_subprocess("claude", "do the thing", "task-1")
+            cmd = mock_run.call_args[0][0]
+
+            assert "ai_orch" not in cmd, "ai_orch creates detached tmux sessions (exits 0 immediately)"
+            assert "claude" in cmd
+            assert "--dangerously-skip-permissions" in cmd
+
+    def test_dispatch_via_subprocess_codex_uses_exec_subcommand(self):
+        """codex CLI must use 'codex exec --yolo' (non-interactive), not ai_orch."""
+        mock_client = MagicMock()
+        mock_client.is_configured = True
+        poller = TaskPoller(board_id="board-123", client=mock_client)
+
+        with patch("orchestration.task_poller.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = b""
+            mock_run.return_value.stderr = b""
+            poller._dispatch_via_subprocess("codex", "do the thing", "task-1")
+            cmd = mock_run.call_args[0][0]
+
+            assert "codex" in cmd
+            assert "exec" in cmd
+            assert "--yolo" in cmd
+            assert "ai_orch" not in cmd
+
+    def test_dispatch_via_subprocess_gemini_uses_yolo_stdin_mode(self):
+        """gemini CLI must use '--yolo' with stdin (not deprecated -p flag), not ai_orch."""
+        mock_client = MagicMock()
+        mock_client.is_configured = True
+        poller = TaskPoller(board_id="board-123", client=mock_client)
+
+        with patch("orchestration.task_poller.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = b""
+            mock_run.return_value.stderr = b""
+            poller._dispatch_via_subprocess("gemini", "do the thing", "task-1")
+            cmd = mock_run.call_args[0][0]
+            call_kwargs = mock_run.call_args[1] if mock_run.call_args[1] else {}
+            stdin_input = mock_run.call_args[0][1] if len(mock_run.call_args[0]) > 1 else call_kwargs.get("input")
+
+            assert "gemini" in cmd
+            assert "--yolo" in cmd
+            assert "-p" not in cmd, "gemini -p flag is deprecated; prompt must go via stdin"
+            assert "ai_orch" not in cmd
+            assert stdin_input is not None, "gemini prompt must be passed via stdin"
 
     def test_run_once_calls_poll_and_dispatch(self):
         """run_once calls poll_and_dispatch and returns result."""
@@ -414,8 +524,9 @@ class TestTaskPoller:
             MockClient.assert_called_once()
             assert poller.client is mock_client_instance
 
-    def test_dispatch_uses_detect_cli(self):
-        """Task dispatch uses detect_cli to pick CLI."""
+    def test_dispatch_uses_detect_cli(self, monkeypatch):
+        """Task dispatch uses detect_cli to pick CLI (requires no MINIMAX_API_KEY)."""
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
         mock_client = MagicMock()
         mock_client.is_configured = True
         mock_client.list_inbox_tasks.return_value = [
@@ -427,13 +538,69 @@ class TestTaskPoller:
             client=mock_client,
         )
 
-        with patch("orchestration.task_poller.subprocess.run") as mock_run:
+        with patch.object(poller, "_dispatch_via_subprocess", return_value=(True, {})) as mock_dispatch:
             with patch("orchestration.task_poller.detect_cli", return_value="codex") as mock_detect:
                 poller.poll_and_dispatch()
 
                 mock_detect.assert_called_once()
-                # Verify codex was used in the command
-                call_args = mock_run.call_args[0][0]
-                assert "--agent-cli" in call_args
-                cli_index = call_args.index("--agent-cli")
-                assert call_args[cli_index + 1] == "codex"
+                # Verify dispatch was called with the cli returned by detect_cli
+                assert mock_dispatch.call_args[0][0] == "codex"
+
+
+class TestMinimaxDispatchWiring:
+    """When MINIMAX_API_KEY is set, TaskPoller must use build_claudem_dispatch,
+    not pass 'claudem' to ai_orch (which rejects it with exit code 2)."""
+
+    @patch.dict("os.environ", {"MINIMAX_API_KEY": "test-key"})
+    def test_poller_auto_wires_claudem_dispatch_when_minimax_key_set(self):
+        """TaskPoller.__post_init__ sets dispatch_fn=build_claudem_dispatch()
+        when MINIMAX_API_KEY is present and no explicit dispatch_fn given."""
+        mock_client = MagicMock()
+        mock_client.is_configured = True
+        mock_client.list_inbox_tasks.return_value = []
+
+        poller = TaskPoller(board_id="board-123", client=mock_client)
+        assert poller.dispatch_fn is not None, (
+            "dispatch_fn should be auto-set when MINIMAX_API_KEY is present; "
+            "otherwise detect_cli returns 'claudem' which ai_orch rejects with exit 2"
+        )
+
+    @patch.dict("os.environ", {"MINIMAX_API_KEY": "test-key"})
+    def test_dispatch_uses_claudem_fn_not_subprocess_when_minimax_key_set(self):
+        """With MINIMAX_API_KEY set, dispatch goes through claudem dispatch_fn,
+        NOT subprocess.run — ensuring 'claudem' is never passed to the inline subprocess path."""
+        mock_client = MagicMock()
+        mock_client.is_configured = True
+        mock_client.list_inbox_tasks.return_value = [
+            {"id": "task-1", "title": "hello world task", "description": "write hello world"}
+        ]
+        mock_client.update_task.return_value = {"id": "task-1", "status": "in_progress"}
+
+        dispatch_called_with: list = []
+
+        def fake_claudem_dispatch(cli: str, task: dict) -> bool:
+            dispatch_called_with.append((cli, task))
+            return True
+
+        poller = TaskPoller(board_id="board-123", client=mock_client)
+        # Replace auto-wired dispatch_fn with our spy
+        poller.dispatch_fn = fake_claudem_dispatch
+
+        with patch("orchestration.task_poller.subprocess.run") as mock_subprocess:
+            poller.poll_and_dispatch()
+
+        # subprocess.run should NOT be called — claudem dispatch_fn handles it
+        mock_subprocess.assert_not_called()
+        assert len(dispatch_called_with) == 1
+        assert dispatch_called_with[0][0] == "claudem"
+
+    @patch.dict("os.environ", {}, clear=False)
+    def test_poller_dispatch_fn_is_none_without_minimax_key(self, monkeypatch):
+        """Without MINIMAX_API_KEY, dispatch_fn stays None (uses inline subprocess)."""
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
+        mock_client = MagicMock()
+        mock_client.is_configured = True
+        mock_client.list_inbox_tasks.return_value = []
+
+        poller = TaskPoller(board_id="board-123", client=mock_client)
+        assert poller.dispatch_fn is None

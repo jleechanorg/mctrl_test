@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from io import BytesIO
 from unittest.mock import patch, MagicMock
 from urllib.error import HTTPError
 
@@ -186,14 +187,44 @@ class TestMissionControlClient:
     )
     @patch("orchestration.mc_client.urlopen")
     def test_create_task_posts_payload(self, mock_urlopen):
-        """create_task sends POST /api/v1/tasks with body payload."""
+        """create_task uses board-scoped endpoint and normalizes legacy fields."""
         mock_response = MagicMock()
         mock_response.read.return_value = b'{"id": "task-1"}'
         mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_response)
         mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
 
         client = MissionControlClient()
-        payload = {"title": "New task", "board_id": "board-1"}
+        payload = {
+            "title": "New task",
+            "board_id": "board-1",
+            "source": "github",
+            "custom_fields": {"foo": "bar"},
+        }
+        result = client.create_task(payload)
+
+        req = mock_urlopen.call_args[0][0]
+        assert req.full_url == "http://localhost:8000/api/v1/boards/board-1/tasks"
+        body = json.loads(req.data)
+        assert result["id"] == "task-1"
+        assert body == {"title": "New task", "custom_field_values": {"foo": "bar"}}
+
+    @patch.dict(
+        "os.environ",
+        {
+            "MISSION_CONTROL_BASE_URL": "http://localhost:8000",
+            "MISSION_CONTROL_TOKEN": "test-token",
+        },
+    )
+    @patch("orchestration.mc_client.urlopen")
+    def test_create_task_without_board_id_uses_legacy_endpoint(self, mock_urlopen):
+        """create_task falls back to legacy endpoint when board_id is absent."""
+        mock_response = MagicMock()
+        mock_response.read.return_value = b'{"id": "task-1"}'
+        mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_response)
+        mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
+
+        client = MissionControlClient()
+        payload = {"title": "New task"}
         result = client.create_task(payload)
 
         req = mock_urlopen.call_args[0][0]
@@ -219,20 +250,25 @@ class TestMissionControlClient:
     )
     @patch("orchestration.mc_client.urlopen")
     def test_set_task_dependencies_posts_payload(self, mock_urlopen):
-        """set_task_dependencies sends dependency payload for child task."""
+        """set_task_dependencies uses board-scoped PATCH payload when board_id is provided."""
         mock_response = MagicMock()
         mock_response.read.return_value = b'{"ok": true}'
         mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_response)
         mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
 
         client = MissionControlClient()
-        result = client.set_task_dependencies("task-1", ["task-a", "task-b"])
+        result = client.set_task_dependencies(
+            "task-1",
+            ["task-a", "task-b"],
+            board_id="board-1",
+        )
 
         req = mock_urlopen.call_args[0][0]
-        assert req.full_url == "http://localhost:8000/api/v1/tasks/task-1/dependencies"
+        assert req.full_url == "http://localhost:8000/api/v1/boards/board-1/tasks/task-1"
+        assert req.method == "PATCH"
         body = json.loads(req.data)
         assert result == {"ok": True}
-        assert body == {"depends_on": ["task-a", "task-b"]}
+        assert body == {"depends_on_task_ids": ["task-a", "task-b"]}
 
     @patch.dict("os.environ", {}, clear=True)
     def test_set_task_dependencies_unconfigured(self):
@@ -264,6 +300,54 @@ class TestMissionControlClient:
         body = json.loads(req.data)
         assert body["status"] == "in_progress"
         assert body["assigned_agent_id"] == "agent-123"
+
+    @patch.dict(
+        "os.environ",
+        {
+            "MISSION_CONTROL_BASE_URL": "http://localhost:8000",
+            "MISSION_CONTROL_TOKEN": "test-token",
+        },
+    )
+    @patch("orchestration.mc_client.urlopen")
+    def test_update_task_retries_without_custom_fields_on_422(self, mock_urlopen):
+        """When custom fields are rejected, update_task retries with status-only payload."""
+        err_body = BytesIO(b'{"detail":"Unknown custom field keys for this board."}')
+        first_error = HTTPError(
+            "http://localhost:8000/api/v1/boards/board-1/tasks/task-1",
+            422,
+            "Unprocessable Entity",
+            {},
+            err_body,
+        )
+        success_response = MagicMock()
+        success_response.read.return_value = b'{"id":"task-1","status":"in_progress"}'
+
+        mock_urlopen.side_effect = [
+            first_error,
+            MagicMock(
+                __enter__=MagicMock(return_value=success_response),
+                __exit__=MagicMock(return_value=False),
+            ),
+        ]
+
+        client = MissionControlClient()
+        result = client.update_task(
+            "task-1",
+            TaskStatus.IN_PROGRESS,
+            custom_fields={"cost": {"total_tokens": 9}},
+            board_id="board-1",
+        )
+
+        assert result.get("status") == "in_progress"
+        assert mock_urlopen.call_count == 2
+
+        first_req = mock_urlopen.call_args_list[0][0][0]
+        first_body = json.loads(first_req.data)
+        assert "custom_field_values" in first_body
+
+        second_req = mock_urlopen.call_args_list[1][0][0]
+        second_body = json.loads(second_req.data)
+        assert second_body == {"status": "in_progress"}
 
     @patch.dict("os.environ", {}, clear=True)
     @patch("orchestration.mc_client.urlopen")
@@ -342,4 +426,46 @@ class TestMissionControlClient:
         client._get("/api/v1/test")
 
         call_args = mock_urlopen.call_args
-        assert call_args[1].get("timeout") == 15.0
+        assert call_args[1]["timeout"] == 15.0
+
+
+class TestUpdateTaskEndpointPath:
+    """update_task must use /api/v1/boards/{board_id}/tasks/{task_id} — not /api/v1/tasks/{id}.
+    The /api/v1/tasks/{id} endpoint does not exist and returns 404."""
+
+    @patch.dict(
+        "os.environ",
+        {"MISSION_CONTROL_BASE_URL": "http://localhost:9010", "MISSION_CONTROL_TOKEN": "tok"},
+    )
+    @patch("orchestration.mc_client.urlopen")
+    def test_update_task_uses_boards_path_when_board_id_given(self, mock_urlopen):
+        """update_task(board_id=...) PATCHes /api/v1/boards/{board_id}/tasks/{task_id}."""
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"id": "t1", "status": "in_progress"}'
+        mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_resp)
+        mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
+
+        client = MissionControlClient()
+        client.update_task("t1", TaskStatus.IN_PROGRESS, board_id="board-42")
+
+        req = mock_urlopen.call_args[0][0]
+        assert "/api/v1/boards/board-42/tasks/t1" in req.full_url, (
+            f"Expected boards path, got: {req.full_url}"
+        )
+
+    @patch.dict(
+        "os.environ",
+        {"MISSION_CONTROL_BASE_URL": "http://localhost:9010", "MISSION_CONTROL_TOKEN": "tok"},
+    )
+    @patch("orchestration.mc_client.urlopen")
+    def test_update_task_without_board_id_still_works(self, mock_urlopen):
+        """update_task without board_id falls back gracefully (backwards compat)."""
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"id": "t1", "status": "done"}'
+        mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_resp)
+        mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
+
+        client = MissionControlClient()
+        result = client.update_task("t1", TaskStatus.DONE)
+        # Should not raise — returns whatever the server responds
+        assert isinstance(result, dict)

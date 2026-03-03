@@ -7,11 +7,13 @@ and spawns agents via ai_orch to handle each task.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import logging
 import os
 import re
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -231,9 +233,7 @@ def build_claudem_dispatch() -> Callable[[str, dict], bool]:
     Returns:
         Callable that takes (cli: str, task: dict) and returns True on success.
     """
-    # Ensure log directory exists
     log_dir = Path("/tmp/ralph/jobs")
-    log_dir.mkdir(parents=True, exist_ok=True)
 
     def claudem_dispatch(cli: str, task: dict) -> bool:
         """Dispatch task using claudem (minimax).
@@ -245,6 +245,7 @@ def build_claudem_dispatch() -> Callable[[str, dict], bool]:
         Returns:
             True if dispatch succeeded, False otherwise.
         """
+        log_dir.mkdir(parents=True, exist_ok=True)
         task_id = task.get("id", "unknown")
         title = task.get("title", "Untitled")
         description = task.get("description", "")
@@ -318,6 +319,7 @@ class TaskPoller:
         client: MissionControlClient instance for API calls. If None, creates from env.
         agent_cli_map: Optional custom mapping of keywords to CLI names.
         poll_interval_seconds: Interval between polls in run_forever mode.
+        dispatch_concurrency: Max number of tasks dispatched in parallel.
         dispatch_fn: Optional callable for task dispatch. If None, uses subprocess.
     """
 
@@ -326,13 +328,36 @@ class TaskPoller:
     agent_cli_map: dict[str, list[str]] = field(default_factory=lambda: dict(DEFAULT_CLI_KEYWORDS))
     prompt_library_path: Path = field(default_factory=lambda: PROMPT_LIBRARY_PATH)
     poll_interval_seconds: int = 60
+    dispatch_concurrency: int = 4
     dispatch_fn: Optional[Callable[[str, dict], bool]] = field(default=None, repr=False)
     _dispatched_count: int = field(default=0, repr=False)
 
     def __post_init__(self) -> None:
-        """Create client from env if not provided."""
+        """Create client from env if not provided. Auto-wire claudem dispatch when MINIMAX_API_KEY set."""
         if self.client is None:
             self.client = MissionControlClient()
+        # Auto-wire claudem dispatch when MINIMAX_API_KEY is present and no explicit dispatch_fn given.
+        # Without this, detect_cli returns "claudem" which ai_orch rejects (only accepts claude/codex/etc).
+        if self.dispatch_fn is None and os.environ.get("MINIMAX_API_KEY"):
+            self.dispatch_fn = build_claudem_dispatch()
+
+        env_concurrency = os.environ.get("TASK_POLLER_DISPATCH_CONCURRENCY")
+        if env_concurrency:
+            try:
+                self.dispatch_concurrency = int(env_concurrency)
+            except ValueError:
+                logger.warning(
+                    "Invalid TASK_POLLER_DISPATCH_CONCURRENCY=%s; using %s",
+                    env_concurrency,
+                    self.dispatch_concurrency,
+                )
+
+        try:
+            self.dispatch_concurrency = int(self.dispatch_concurrency)
+        except (TypeError, ValueError):
+            logger.warning("Invalid dispatch_concurrency=%s; using 1", self.dispatch_concurrency)
+            self.dispatch_concurrency = 1
+        self.dispatch_concurrency = max(1, self.dispatch_concurrency)
 
     def poll_and_dispatch(self) -> int:
         """Poll for inbox tasks and dispatch each to an agent CLI.
@@ -348,7 +373,7 @@ class TaskPoller:
         if not tasks:
             return 0
 
-        dispatched = 0
+        dispatchable_tasks: list[dict] = []
         for task in tasks:
             task_id = task.get("id")
             title = task.get("title", "Untitled")
@@ -358,12 +383,34 @@ class TaskPoller:
             if task.get("approval_required") and not task.get("approved_at"):
                 logger.info(f"Skipping task pending approval: {task_id} - {title}")
                 continue
+            dispatchable_tasks.append(task)
 
-            try:
-                if self._dispatch_task(task):
-                    dispatched += 1
-            except Exception as e:
-                logger.error(f"Failed to dispatch task {task_id}: {e}")
+        if not dispatchable_tasks:
+            return 0
+
+        dispatched = 0
+        max_workers = min(self.dispatch_concurrency, len(dispatchable_tasks))
+        if max_workers == 1:
+            for task in dispatchable_tasks:
+                task_id = task.get("id", "<unknown>")
+                try:
+                    if self._dispatch_task(task):
+                        dispatched += 1
+                except Exception as e:
+                    logger.error(f"Failed to dispatch task {task_id}: {e}")
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_task_id = {
+                    executor.submit(self._dispatch_task, task): str(task.get("id", "<unknown>"))
+                    for task in dispatchable_tasks
+                }
+                for future in as_completed(future_to_task_id):
+                    task_id = future_to_task_id[future]
+                    try:
+                        if future.result():
+                            dispatched += 1
+                    except Exception as e:
+                        logger.error(f"Failed to dispatch task {task_id}: {e}")
 
         self._dispatched_count += dispatched
         return dispatched
@@ -417,7 +464,11 @@ class TaskPoller:
                 explicit_dependencies.append(previous_task_id)
 
             if explicit_dependencies:
-                self.client.set_task_dependencies(subtask_id, explicit_dependencies)
+                self.client.set_task_dependencies(
+                    subtask_id,
+                    explicit_dependencies,
+                    board_id=self.board_id,
+                )
 
             created_ids.append(subtask_id)
             previous_task_id = subtask_id
@@ -441,7 +492,7 @@ class TaskPoller:
         if decompose_ids:
             logger.info(f"Created {len(decompose_ids)} subtasks for {task_id}")
             try:
-                updated_task = self.client.update_task(task_id, TaskStatus.BLOCKED)
+                updated_task = self.client.update_task(task_id, TaskStatus.BLOCKED, board_id=self.board_id)
             except Exception as e:  # pragma: no cover - client-level exceptions
                 logger.error(f"Failed to block parent task {task_id}: {e}")
                 return False
@@ -483,7 +534,7 @@ class TaskPoller:
             except Exception as e:
                 logger.error(f"dispatch_fn failed for {task_id}: {e}")
         else:
-            # Default: use subprocess with ai_orch
+            # Default: use subprocess directly (claude/codex/gemini/cursor)
             dispatched, token_usage = self._dispatch_via_subprocess(cli, task_summary, task_id)
 
         # Only mark in_progress when dispatch succeeded and API update succeeds
@@ -496,6 +547,7 @@ class TaskPoller:
                 task_id,
                 TaskStatus.IN_PROGRESS,
                 custom_fields=custom_fields,
+                board_id=self.board_id,
             )
         except Exception as e:  # pragma: no cover - client-level exceptions
             logger.error(f"Failed to mark task {task_id} as in_progress: {e}")
@@ -514,46 +566,82 @@ class TaskPoller:
         task_summary: str,
         task_id: str,
     ) -> tuple[bool, dict[str, int]]:
-        """Dispatch task via subprocess (ai_orch).
+        """Dispatch task via synchronous subprocess.
+
+        Command patterns:
+        - claude:  claude --output-format stream-json --verbose
+                   --dangerously-skip-permissions  (prompt via stdin)
+        - codex:   codex exec --yolo --skip-git-repo-check  (prompt via stdin)
+        - gemini:  gemini -m {model} --yolo  (prompt via stdin; -p is deprecated)
+        - cursor:  cursor-agent -f -p @{tmpfile} --model {model} --output-format text
+
+        ai_orch run is intentionally NOT used — it creates a detached tmux
+        session and exits 0 immediately before the agent finishes.
 
         Args:
-            cli: CLI name to use.
+            cli: CLI name to use (claude, codex, gemini, cursor).
             task_summary: Task description string.
             task_id: Task ID for logging.
 
         Returns:
             (True if dispatch succeeded, token usage data).
         """
-        cmd = [
-            "ai_orch",
-            "run",
-            "--agent-cli",
-            cli,
-            task_summary,
-        ]
+        # Strip Claude Code session vars to allow nested claude invocations.
+        env = dict(os.environ)
+        for key in list(env):
+            if key == "CLAUDECODE" or key.startswith("CLAUDE_CODE_"):
+                env.pop(key)
+
+        cmd: list[str]
+        stdin_input: bytes | None = None
+        prompt_file_path: str | None = None
+
+        if cli == "codex":
+            cmd = ["codex", "exec", "--yolo", "--skip-git-repo-check"]
+            stdin_input = task_summary.encode()
+        elif cli == "gemini":
+            model = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
+            cmd = ["gemini", "-m", model, "--yolo"]
+            stdin_input = task_summary.encode()
+        elif cli == "cursor":
+            model = os.environ.get("CURSOR_MODEL", "composer-1")
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+                f.write(task_summary)
+                prompt_file_path = f.name
+            cmd = ["cursor-agent", "-f", "-p", f"@{prompt_file_path}",
+                   "--model", model, "--output-format", "text"]
+        else:
+            # claude (default)
+            cmd = ["claude", "--output-format", "stream-json", "--verbose",
+                   "--dangerously-skip-permissions"]
+            stdin_input = task_summary.encode()
 
         token_usage: dict[str, int] = {}
+        dispatched = False
         try:
             result = subprocess.run(
                 cmd,
+                input=stdin_input,
                 capture_output=True,
-                timeout=300,  # 5 min timeout for spawn
+                timeout=300,
+                env=env,
             )
             dispatched = result.returncode == 0
             token_usage = _extract_token_usage(result.stdout)
             if not dispatched:
-                logger.error(
-                    f"Task dispatch exited with code {result.returncode} for {task_id}"
-                )
+                logger.error(f"Task dispatch exited {result.returncode} for {task_id}")
         except subprocess.TimeoutExpired:
             logger.error(f"Task dispatch timed out for {task_id}")
-            dispatched = False
         except FileNotFoundError:
-            logger.error("ai_orch not found in PATH")
-            dispatched = False
+            logger.error(f"{cli} not found in PATH")
         except Exception as e:
             logger.error(f"Failed to dispatch task {task_id}: {e}")
-            dispatched = False
+        finally:
+            if prompt_file_path:
+                try:
+                    os.unlink(prompt_file_path)
+                except OSError:
+                    pass
 
         return dispatched, token_usage
 
