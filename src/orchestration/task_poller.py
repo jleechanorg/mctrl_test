@@ -543,7 +543,7 @@ class TaskPoller:
 
         custom_fields = {"cost": token_usage} if token_usage else None
         try:
-            updated_task = self.client.update_task(
+            in_progress_task = self.client.update_task(
                 task_id,
                 TaskStatus.IN_PROGRESS,
                 custom_fields=custom_fields,
@@ -553,8 +553,22 @@ class TaskPoller:
             logger.error(f"Failed to mark task {task_id} as in_progress: {e}")
             return False
 
-        if not updated_task:
+        if not in_progress_task:
             logger.error(f"Mission Control rejected in_progress update for task {task_id}")
+            return False
+
+        try:
+            done_task = self.client.update_task(
+                task_id,
+                TaskStatus.DONE,
+                board_id=self.board_id,
+            )
+        except Exception as e:  # pragma: no cover - client-level exceptions
+            logger.error(f"Failed to mark task {task_id} as done: {e}")
+            return False
+
+        if not done_task:
+            logger.error(f"Mission Control rejected done update for task {task_id}")
             return False
 
         _update_prompt_library(task, cli, self.prompt_library_path)

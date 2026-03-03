@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 import json
 
 import pytest
@@ -116,6 +116,7 @@ class TestTaskPoller:
         """Single task is dispatched and status updated."""
         mock_client = MagicMock()
         mock_client.is_configured = True
+        mock_client.update_task.return_value = {"id": "task-1", "status": "done"}
         mock_client.list_inbox_tasks.return_value = [
             {"id": "task-1", "title": "Test task", "description": "Do work"}
         ]
@@ -129,7 +130,13 @@ class TestTaskPoller:
             result = poller.poll_and_dispatch()
 
         assert result == 1
-        mock_client.update_task.assert_called_once_with("task-1", TaskStatus.IN_PROGRESS, custom_fields=None, board_id="board-123")
+        mock_client.update_task.assert_has_calls(
+            [
+                call("task-1", TaskStatus.IN_PROGRESS, custom_fields=None, board_id="board-123"),
+                call("task-1", TaskStatus.DONE, board_id="board-123"),
+            ],
+        )
+        assert mock_client.update_task.call_count == 2
 
     def test_poll_and_dispatch_multiple_tasks(self):
         """Multiple tasks are each dispatched and status updated."""
@@ -150,7 +157,7 @@ class TestTaskPoller:
             result = poller.poll_and_dispatch()
 
         assert result == 3
-        assert mock_client.update_task.call_count == 3
+        assert mock_client.update_task.call_count == 6
 
     def test_poll_and_dispatch_dispatches_tasks_concurrently(self):
         """With dispatch_concurrency > 1, task dispatches overlap in time."""
@@ -209,6 +216,35 @@ class TestTaskPoller:
         assert result == 0
         mock_client.update_task.assert_called_once_with("task-1", TaskStatus.IN_PROGRESS, custom_fields=None, board_id="board-123")
 
+    def test_poll_and_dispatch_does_not_count_if_done_update_fails(self):
+        """Done transition failure leaves dispatch uncounted."""
+        mock_client = MagicMock()
+        mock_client.is_configured = True
+        mock_client.list_inbox_tasks.return_value = [
+            {"id": "task-1", "title": "Test task", "description": "Do work"},
+        ]
+        mock_client.update_task.side_effect = [
+            {"id": "task-1", "status": "in_progress"},
+            {},
+        ]
+
+        poller = TaskPoller(
+            board_id="board-123",
+            client=mock_client,
+        )
+
+        with patch.object(poller, "_dispatch_via_subprocess", return_value=(True, {})):
+            result = poller.poll_and_dispatch()
+
+        assert result == 0
+        mock_client.update_task.assert_has_calls(
+            [
+                call("task-1", TaskStatus.IN_PROGRESS, custom_fields=None, board_id="board-123"),
+                call("task-1", TaskStatus.DONE, board_id="board-123"),
+            ],
+        )
+        assert mock_client.update_task.call_count == 2
+
     def test_poll_and_dispatch_skips_task_without_id(self):
         """Task without id is skipped with warning."""
         mock_client = MagicMock()
@@ -236,6 +272,7 @@ class TestTaskPoller:
         """Tasks requiring approval are skipped until approved."""
         mock_client = MagicMock()
         mock_client.is_configured = True
+        mock_client.update_task.return_value = {"id": "task-2", "status": "done"}
         mock_client.list_inbox_tasks.return_value = [
             {
                 "id": "task-1",
@@ -262,8 +299,13 @@ class TestTaskPoller:
             result = poller.poll_and_dispatch()
 
         assert result == 1
-        assert mock_client.update_task.call_count == 1
-        mock_client.update_task.assert_called_once_with("task-2", TaskStatus.IN_PROGRESS, custom_fields=None, board_id="board-123")
+        mock_client.update_task.assert_has_calls(
+            [
+                call("task-2", TaskStatus.IN_PROGRESS, custom_fields=None, board_id="board-123"),
+                call("task-2", TaskStatus.DONE, board_id="board-123"),
+            ],
+        )
+        assert mock_client.update_task.call_count == 2
         assert mock_dispatch.call_count == 1
 
     def test_poll_and_dispatch_not_configured(self):
@@ -301,12 +343,18 @@ class TestTaskPoller:
         result = poller.poll_and_dispatch()
 
         assert result == 1
-        mock_client.update_task.assert_called_once_with(
-            "task-1",
-            TaskStatus.IN_PROGRESS,
-            custom_fields={"cost": {"input_tokens": 5}},
-            board_id="board-123",
+        mock_client.update_task.assert_has_calls(
+            [
+                call(
+                    "task-1",
+                    TaskStatus.IN_PROGRESS,
+                    custom_fields={"cost": {"input_tokens": 5}},
+                    board_id="board-123",
+                ),
+                call("task-1", TaskStatus.DONE, board_id="board-123"),
+            ],
         )
+        assert mock_client.update_task.call_count == 2
 
     def test_poll_and_dispatch_uses_dispatch_fn_dict_payload(self, tmp_path):
         """Dict return from dispatch_fn is supported and includes token usage."""
@@ -327,12 +375,18 @@ class TestTaskPoller:
         result = poller.poll_and_dispatch()
 
         assert result == 1
-        mock_client.update_task.assert_called_once_with(
-            "task-1",
-            TaskStatus.IN_PROGRESS,
-            custom_fields={"cost": {"total_tokens": 9}},
-            board_id="board-123",
+        mock_client.update_task.assert_has_calls(
+            [
+                call(
+                    "task-1",
+                    TaskStatus.IN_PROGRESS,
+                    custom_fields={"cost": {"total_tokens": 9}},
+                    board_id="board-123",
+                ),
+                call("task-1", TaskStatus.DONE, board_id="board-123"),
+            ],
         )
+        assert mock_client.update_task.call_count == 2
 
     def test_dispatch_task_blocks_parent_when_subtasks_created(self):
         """When subtasks are created, parent task is marked blocked and not dispatched."""
