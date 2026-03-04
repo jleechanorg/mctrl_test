@@ -33,95 +33,12 @@ rsync -a --delete \
   "$SRC_DIR/" "$SNAPSHOT_DIR/"
 
 # ---------------------------------------------------------------------------
-# Step 2: Post-redaction pass — redact secrets in text files in-place;
-# remove high-risk binary key material.
+# Step 2: Post-redaction pass via orchestration.backup_redaction module.
+# Symlinks are never followed — prevents writing through symlinks to targets
+# outside the snapshot directory (bug fix: symlink-following redaction).
 # ---------------------------------------------------------------------------
-export SNAPSHOT_DIR SNAPSHOT_TS
-python3 - <<'PY'
-from pathlib import Path
-import os
-import re
-
-SNAPSHOT_DIR = Path(os.environ["SNAPSHOT_DIR"])
-SNAPSHOT_TS  = os.environ["SNAPSHOT_TS"]
-
-SENSITIVE_PATH_HINTS = [
-    "/.ssh/",
-    "/.aws/",
-    "/.config/",
-    "/.kube/",
-    ".env",
-    "id_rsa",
-    "id_ed25519",
-]
-
-PATTERNS = [
-    re.compile(r"(?im)^[\t ]*(?:export[\t ]+)?(?:[A-Za-z_][A-Za-z0-9_]*_?(?:KEY|KEYS?|TOKEN|SECRET|PASS|PASSWORD)|API[_-]?KEY|CLIENT_SECRET|CLIENTID|CLIENT_ID|CLIENT_SECRET)\s*[:=].+$"),
-    re.compile(r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|bearer\s+token)\b[^\n]*"),
-    re.compile(r"(?i)\"(?:botToken|appToken|token|apiKey|secret|password)\"\s*:\s*\"[^\"]+\""),
-    re.compile(r"(?i)\b(sk-[A-Za-z0-9]{10,}|xox[baprs]-[0-9A-Za-z\-]{10,}|ghp_[A-Za-z0-9]{20,})\b"),
-    re.compile(r"(?i)xai-[A-Za-z0-9]{20,}"),
-    re.compile(r"(?i)https://hooks\.slack\.com/services/[A-Z0-9/]+"),
-    re.compile(r"(?i)pypi-[A-Za-z0-9_\-]{60,}"),
-    re.compile(r"(?i)https?://[^:\s]+:[^@\s]+@"),
-]
-
-HIGH_RISK_EXTENSIONS = {".pem", ".key", ".p12", ".pfx", ".crt", ".cer", ".der"}
-
-
-def is_binary(path: Path) -> bool:
-    try:
-        with open(path, "rb") as f:
-            return b"\x00" in f.read(4096)
-    except Exception:
-        return True
-
-
-def path_is_sensitive(path: Path) -> bool:
-    low = str(path).lower()
-    if any(token in low for token in SENSITIVE_PATH_HINTS):
-        return True
-    if any(part.lower() in {"authorized_keys", "known_hosts", "config"} for part in path.parts):
-        return True
-    return False
-
-
-for p in SNAPSHOT_DIR.rglob("*"):
-    if not p.is_file():
-        continue
-
-    # Remove high-risk binary key material entirely.
-    if path_is_sensitive(p) and (is_binary(p) or p.suffix.lower() in HIGH_RISK_EXTENSIONS):
-        p.unlink()
-        continue
-
-    # Skip binary files — no redaction needed.
-    if is_binary(p):
-        continue
-
-    # Redact secrets in text files in-place.
-    try:
-        text = p.read_text(encoding="utf-8")
-    except Exception:
-        try:
-            text = p.read_text(encoding="latin-1")
-        except Exception:
-            continue
-
-    new = text
-    for pattern in PATTERNS:
-        new = pattern.sub("[REDACTED]", new)
-
-    if new != text:
-        p.write_text(new, encoding="utf-8")
-
-# Write audit manifest.
-(SNAPSHOT_DIR / "REDACTION_MANIFEST.txt").write_text(
-    "Source: {}\nTimestamp: {}\nStatus: rsync+redacted\n".format(
-        os.environ.get("HOME", "") + "/.openclaw", SNAPSHOT_TS
-    )
-)
-PY
+export SNAPSHOT_DIR SNAPSHOT_TS SRC_DIR
+PYTHONPATH="$REPO_ROOT/src" python3 -m orchestration.backup_redaction "$SNAPSHOT_DIR"
 
 cd "$REPO_ROOT"
 

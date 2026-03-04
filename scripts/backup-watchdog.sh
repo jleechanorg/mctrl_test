@@ -95,7 +95,14 @@ echo "[$(TS)] ALERT: backup stale (${AGE_HOURS}h). Firing alerts." >> "$LOG_FILE
 # Alert 1: Slack webhook
 # ---------------------------------------------------------------------------
 if [[ -n "${SLACK_BACKUP_WEBHOOK:-}" ]]; then
-  SLACK_PAYLOAD="{\"text\":\"$SUBJECT\n\n$BODY\"}"
+  # Use python3 to build valid JSON — shell string interpolation produces
+  # invalid JSON when SUBJECT/BODY contain newlines or special characters.
+  SLACK_PAYLOAD="$(python3 -c "
+import json, sys
+subject = sys.argv[1]
+body = sys.argv[2]
+print(json.dumps({'text': subject + '\n\n' + body}))
+" "$SUBJECT" "$BODY")"
   if curl -sf -X POST -H 'Content-type: application/json' \
        --data "$SLACK_PAYLOAD" "$SLACK_BACKUP_WEBHOOK" >/dev/null 2>&1; then
     echo "[$(TS)] Slack alert sent." >> "$LOG_FILE"

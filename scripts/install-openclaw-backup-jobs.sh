@@ -58,13 +58,14 @@ if ! grep -Fq "$CRON_MARKER" "$CRON_TMP"; then
   } >> "$CRON_TMP"
   crontab "$CRON_TMP"
   echo "Installed cron job: every 4 hours at :40"
-elif ! grep -Fq "$CRON_CMD" "$CRON_TMP"; then
-  # Marker exists but path or timing is stale; replace the cron line
-  sed -i.bak "/\/4 \* \* \* \*/s|.*|40 */4 * * * $CRON_CMD|" "$CRON_TMP"
+elif ! grep -Fq "40 */4 * * * $CRON_CMD" "$CRON_TMP"; then
+  # Marker exists but schedule or path is stale; replace matching cron line.
+  # Matches any minute-field before */4 (e.g. "0 */4" → "40 */4").
+  sed -i.bak "s|^[0-9]* \*/4 \* \* \* $CRON_CMD|40 */4 * * * $CRON_CMD|" "$CRON_TMP"
   crontab "$CRON_TMP"
-  echo "Updated cron job path/timing to $CRON_CMD"
+  echo "Updated cron job schedule/path to 40 */4 $CRON_CMD"
 else
-  echo "Cron job already present; skipping cron install."
+  echo "Cron job already present with correct schedule; skipping."
 fi
 
 # ---------- watchdog (hourly) ----------
