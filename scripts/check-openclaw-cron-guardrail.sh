@@ -5,10 +5,17 @@ set -euo pipefail
 # - Forbidden: system crontab usage for OpenClaw reminder/scheduling/automation jobs.
 # - Required: OpenClaw gateway cron workflow for reminders/schedules.
 
+# Check for required tools
+if ! command -v rg &> /dev/null; then
+  echo "Error: ripgrep (rg) is required but not installed." >&2
+  echo "Install via: brew install ripgrep" >&2
+  exit 1
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-FILES="$(git ls-files '*.md' '*.mdx' '*.sh' 'AGENTS.md' 'TOOLS.md' 'README.md')"
+FILES="$(git ls-files '*.md' '*.mdx' '*.sh')"
 
 had_violations=0
 
