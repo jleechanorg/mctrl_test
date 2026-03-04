@@ -31,6 +31,7 @@ rsync -a --delete \
   --exclude='workspace-*' \
   --exclude='jleechanclaw' \
   --exclude='credentials/whatsapp' \
+  --exclude='*.lock' \
   "$SRC_DIR/" "$SNAPSHOT_DIR/"
 
 # ---------------------------------------------------------------------------
