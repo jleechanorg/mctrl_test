@@ -15,6 +15,8 @@ import pytest
 REPO_ROOT = Path(__file__).parent.parent.parent
 DISCORD_CONFIG = REPO_ROOT / "discord-eng-bot" / "openclaw.json"
 MAIN_CONFIG = REPO_ROOT / "openclaw-config" / "openclaw.json"
+MC_PLIST = REPO_ROOT / "openclaw-config" / "ai.openclaw.mission-control.plist"
+START_MC_SCRIPT = REPO_ROOT / "scripts" / "start-mc.sh"
 
 CORE_TOOLS = {"read", "write", "edit", "exec", "bash", "process"}
 SECOND_OPINION_TOOLS = {
@@ -112,6 +114,10 @@ def _get_mcp_servers(cfg: dict) -> list[dict]:
     )
 
 
+def _server_transport(server: dict) -> str:
+    return str(server.get("transport") or "http").strip().lower()
+
+
 class TestMcpAdapterWiring:
     def test_discord_mcp_adapter_has_authorization_header(self, discord_cfg: dict):
         """Adapter must send Authorization header — server requires Firebase JWT Bearer token."""
@@ -132,6 +138,8 @@ class TestMcpAdapterWiring:
         servers = _get_mcp_servers(main_cfg)
         assert servers, "No MCP adapter servers in main config"
         for server in servers:
+            if _server_transport(server) != "http":
+                continue
             headers = server.get("headers", {})
             assert "Authorization" in headers, (
                 f"MCP server '{server.get('name')}' missing Authorization header (ORCH-d5b)"
@@ -166,10 +174,20 @@ class TestMcpAdapterWiring:
         servers = _get_mcp_servers(main_cfg)
         assert servers, "No MCP adapter servers in main config"
         for server in servers:
+            if _server_transport(server) != "http":
+                continue
             assert "${" in server.get("url", ""), (
                 f"MCP server '{server.get('name')}' URL should use an env var "
                 "placeholder like '${SECOND_OPINION_MCP_URL}'"
             )
+
+    def test_main_stdio_mcp_servers_define_command(self, main_cfg: dict):
+        servers = _get_mcp_servers(main_cfg)
+        for server in servers:
+            if _server_transport(server) != "stdio":
+                continue
+            command = str(server.get("command") or "").strip()
+            assert command, f"MCP server '{server.get('name')}' with transport=stdio must define command"
 
     def test_discord_mcp_tool_prefix_enabled(self, discord_cfg: dict):
         prefix = (
@@ -190,3 +208,19 @@ class TestMcpAdapterWiring:
             .get("toolPrefix")
         )
         assert prefix is True
+
+
+class TestMissionControlRuntimeWiring:
+    def test_mission_control_launchagent_uses_in_process_runtime(self):
+        """MC launchd service should start backend+poller entrypoint, not bare uvicorn."""
+        plist_text = MC_PLIST.read_text(encoding="utf-8")
+        assert "orchestration.mc_backend_service" in plist_text
+        assert "<key>MISSION_CONTROL_BASE_URL</key>" in plist_text
+        assert "<key>MISSION_CONTROL_TOKEN</key>" in plist_text
+        assert "<key>MISSION_CONTROL_BOARD_ID</key>" in plist_text
+        assert "<key>PYTHONPATH</key>" in plist_text
+
+    def test_start_mc_script_uses_same_runtime_entrypoint(self):
+        """Manual startup path should match launchd runtime wiring."""
+        script_text = START_MC_SCRIPT.read_text(encoding="utf-8")
+        assert "orchestration.mc_backend_service" in script_text

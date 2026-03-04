@@ -15,11 +15,14 @@
 
     <key>ProgramArguments</key>
     <array>
-      <string>/opt/homebrew/bin/uv</string>
+      <string>/Users/jleechan/.local/bin/uv</string>
       <string>run</string>
       <string>--python</string>
       <string>3.12</string>
-      <string>uvicorn</string>
+      <string>python</string>
+      <string>-m</string>
+      <string>orchestration.mc_backend_service</string>
+      <string>--app</string>
       <string>app.main:app</string>
       <string>--host</string>
       <string>127.0.0.1</string>
@@ -43,6 +46,18 @@
       <string>local</string>
       <key>LOCAL_AUTH_TOKEN</key>
       <string>PLACEHOLDER_MC_TOKEN</string>
+      <key>MISSION_CONTROL_BASE_URL</key>
+      <string>http://127.0.0.1:9010</string>
+      <key>MISSION_CONTROL_TOKEN</key>
+      <string>PLACEHOLDER_MC_TOKEN</string>
+      <key>MISSION_CONTROL_BOARD_ID</key>
+      <string>aa68f729-d5e0-4d44-8c99-51bcebc0b8bc</string>
+      <key>MISSION_CONTROL_IN_PROCESS_POLLER</key>
+      <string>1</string>
+      <key>MISSION_CONTROL_POLL_INTERVAL_SECONDS</key>
+      <string>15</string>
+      <key>PYTHONPATH</key>
+      <string>/Users/jleechan/project_jleechanclaw/jleechanclaw/src</string>
       <key>HOME</key>
       <string>/Users/jleechan</string>
       <key>PATH</key>

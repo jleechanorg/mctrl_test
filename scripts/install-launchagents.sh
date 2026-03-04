@@ -6,6 +6,7 @@
 #   - ai.openclaw.gateway             (openclaw gateway, port 18789)
 #   - ai.openclaw.mission-control     (MC backend, port 9010)
 #   - ai.openclaw.mission-control-frontend (MC frontend, port 3000)
+#   - ai.openclaw.thread-ack-watcher  (Slack missed-mention thread ack backfill)
 #
 # The MC token is read from ~/.openclaw/openclaw.json if not passed explicitly.
 
@@ -59,6 +60,7 @@ echo "Installing LaunchAgents..."
 install_plist "$CONFIG_DIR/ai.openclaw.gateway.plist"
 install_plist "$CONFIG_DIR/ai.openclaw.mission-control.plist"
 install_plist "$CONFIG_DIR/ai.openclaw.mission-control-frontend.plist"
+install_plist "$CONFIG_DIR/ai.openclaw.thread-ack-watcher.plist"
 
 echo ""
 echo "Verifying..."
@@ -76,3 +78,4 @@ echo "Log locations:"
 echo "  gateway:  ~/.openclaw/logs/gateway.log"
 echo "  MC backend:  /tmp/mc-backend.log"
 echo "  MC frontend: /tmp/mc-frontend.log"
+echo "  thread ack watcher: ~/.openclaw/logs/thread-ack-watcher.log"

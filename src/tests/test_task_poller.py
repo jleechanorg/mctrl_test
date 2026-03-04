@@ -58,6 +58,12 @@ class TestDetectCli:
         assert detect_cli(task) == "gemini"
 
     @patch.dict("os.environ", {}, clear=True)
+    def test_detect_cli_handles_none_title_and_description(self):
+        """None values should be treated as empty strings, not crash."""
+        task = {"title": None, "description": None}
+        assert detect_cli(task) == "claude"
+
+    @patch.dict("os.environ", {}, clear=True)
     def test_custom_agent_cli_map(self):
         """Custom agent_cli_map is passed to detect_cli and used for dispatch."""
         custom_map = {"special": ["custom-keyword"], "claude": []}
@@ -658,3 +664,150 @@ class TestMinimaxDispatchWiring:
 
         poller = TaskPoller(board_id="board-123", client=mock_client)
         assert poller.dispatch_fn is None
+
+
+class TestMissionControlBackendService:
+    """Tests for in-process Mission Control backend + poller runtime."""
+
+    def test_is_enabled_defaults_to_false_for_unset_or_blank(self):
+        """Unset/blank env should not implicitly enable poller."""
+        from orchestration import mc_backend_service
+
+        assert mc_backend_service._is_enabled(None) is False
+        assert mc_backend_service._is_enabled("") is False
+        assert mc_backend_service._is_enabled("   ") is False
+
+    def test_is_enabled_accepts_truthy_values(self):
+        """Common truthy values enable poller."""
+        from orchestration import mc_backend_service
+
+        assert mc_backend_service._is_enabled("1") is True
+        assert mc_backend_service._is_enabled("true") is True
+        assert mc_backend_service._is_enabled("yes") is True
+        assert mc_backend_service._is_enabled("on") is True
+
+    @patch.dict(
+        "os.environ",
+        {
+            "MISSION_CONTROL_IN_PROCESS_POLLER": "1",
+            "MISSION_CONTROL_BOARD_ID": "board-123",
+            "MISSION_CONTROL_TOKEN": "tok",
+            "MISSION_CONTROL_BASE_URL": "http://localhost:9010",
+        },
+        clear=True,
+    )
+    def test_run_service_starts_poller_before_uvicorn(self):
+        """Service should start poller lane first, then boot API server."""
+        from orchestration import mc_backend_service
+
+        call_order: list[tuple] = []
+
+        with patch.object(
+            mc_backend_service,
+            "start_in_process_task_poller",
+            side_effect=lambda board_id, poll_interval_seconds=None: call_order.append(
+                ("poller", board_id, poll_interval_seconds)
+            ),
+        ):
+            with patch.object(
+                mc_backend_service,
+                "_run_uvicorn",
+                side_effect=lambda app, host, port: call_order.append(
+                    ("uvicorn", app, host, port)
+                ),
+            ):
+                mc_backend_service.run_service(app="app.main:app", host="127.0.0.1", port=9010)
+
+        assert call_order[0] == ("poller", "board-123", None)
+        assert call_order[1] == ("uvicorn", "app.main:app", "127.0.0.1", 9010)
+
+    @patch.dict(
+        "os.environ",
+        {
+            "MISSION_CONTROL_IN_PROCESS_POLLER": "1",
+            "MISSION_CONTROL_TOKEN": "tok",
+            "MISSION_CONTROL_BASE_URL": "http://localhost:9010",
+        },
+        clear=True,
+    )
+    def test_run_service_requires_board_id_when_poller_enabled(self):
+        """Fail fast when poller is enabled but board id is missing."""
+        from orchestration import mc_backend_service
+
+        with patch.object(mc_backend_service, "_run_uvicorn") as mock_uvicorn:
+            with pytest.raises(RuntimeError, match="MISSION_CONTROL_BOARD_ID"):
+                mc_backend_service.run_service(app="app.main:app", host="127.0.0.1", port=9010)
+
+        mock_uvicorn.assert_not_called()
+
+    @patch.dict(
+        "os.environ",
+        {
+            "MISSION_CONTROL_IN_PROCESS_POLLER": "0",
+        },
+        clear=True,
+    )
+    def test_run_service_can_disable_poller_via_env(self):
+        """Disable switch allows backend-only mode for break-glass cases."""
+        from orchestration import mc_backend_service
+
+        with patch.object(mc_backend_service, "start_in_process_task_poller") as mock_start:
+            with patch.object(mc_backend_service, "_run_uvicorn") as mock_uvicorn:
+                mc_backend_service.run_service(app="app.main:app", host="127.0.0.1", port=9010)
+
+        mock_start.assert_not_called()
+        mock_uvicorn.assert_called_once_with("app.main:app", "127.0.0.1", 9010)
+
+    @patch.dict(
+        "os.environ",
+        {
+            "MISSION_CONTROL_TOKEN": "tok",
+            "MISSION_CONTROL_BASE_URL": "http://localhost:9010",
+        },
+        clear=True,
+    )
+    def test_run_service_defaults_to_backend_only_when_poller_env_unset(self):
+        """Without opt-in env, service should run backend without poller."""
+        from orchestration import mc_backend_service
+
+        with patch.object(mc_backend_service, "start_in_process_task_poller") as mock_start:
+            with patch.object(mc_backend_service, "_run_uvicorn") as mock_uvicorn:
+                mc_backend_service.run_service(app="app.main:app", host="127.0.0.1", port=9010)
+
+        mock_start.assert_not_called()
+        mock_uvicorn.assert_called_once_with("app.main:app", "127.0.0.1", 9010)
+
+    def test_start_in_process_task_poller_builds_and_starts_thread(self):
+        """Thread wrapper should create TaskPoller and start a daemon thread."""
+        from orchestration import mc_backend_service
+
+        fake_client = MagicMock()
+        fake_client.is_configured = True
+        fake_thread = MagicMock()
+
+        with patch.object(mc_backend_service, "MissionControlClient", return_value=fake_client):
+            with patch.object(mc_backend_service, "TaskPoller") as mock_poller_cls:
+                with patch.object(mc_backend_service.threading, "Thread", return_value=fake_thread):
+                    result = mc_backend_service.start_in_process_task_poller(
+                        board_id="board-123",
+                        poll_interval_seconds=45,
+                    )
+
+        mock_poller_cls.assert_called_once_with(
+            board_id="board-123",
+            client=fake_client,
+            poll_interval_seconds=45,
+        )
+        fake_thread.start.assert_called_once()
+        assert result is fake_thread
+
+    def test_start_in_process_task_poller_requires_configured_client(self):
+        """Fail fast if MC client is not configured in environment."""
+        from orchestration import mc_backend_service
+
+        fake_client = MagicMock()
+        fake_client.is_configured = False
+
+        with patch.object(mc_backend_service, "MissionControlClient", return_value=fake_client):
+            with pytest.raises(RuntimeError, match="Mission Control not configured"):
+                mc_backend_service.start_in_process_task_poller(board_id="board-123")

@@ -236,3 +236,39 @@ Think of it like being a tech lead: you decide what to build and who builds it, 
 
 **Your coding hands are `ai_orch`.** See TOOLS.md for exact commands.
 Priority: codexs → clauded → codex.
+
+## Worktree Policy (Hard Requirement)
+
+All coding execution must run inside a git worktree, never in the repo primary checkout.
+
+Rules:
+- Before dispatching any coding task, verify the working path is a worktree path.
+- If no worktree exists for the task, create one first, then dispatch the coding agent there.
+- Refuse "quick edits in main checkout" and explain that coding is worktree-only for safety.
+- Keep one task per worktree when practical; close or clean stale worktrees after merge.
+
+Minimum pre-dispatch check:
+- Confirm `git rev-parse --is-inside-work-tree` succeeds.
+- Confirm the path is listed by `git worktree list`.
+- If either check fails, do not start coding.
+
+Status proof:
+- In status updates for coding tasks, include both the main checkout path and the worktree path used.
+
+## Legacy Preferences (Integrated from `~/SOUL.md`)
+
+- After making repo changes, always report:
+  - local working directory used
+  - remote commit URL(s)
+  - associated PR URL(s), when present
+- For live agent loop/debug workflows, execute fixes and verification directly when possible instead of asking the user to run shell commands.
+- In this environment, `aiorch` is shorthand for `ai_orch`.
+- When Jeffrey says "minimax", map behavior to the `claudem()` profile from `~/.bashrc`:
+  - Anthropic-compatible endpoint: `https://api.minimax.io/anthropic`
+  - model mapping: `MiniMax-M2.5`
+  - keep bypass/tmux teammate behavior consistent with `claudem()`
+- Never shadow real CLI names with same-name shell functions.
+- When Jeffrey asks to "remember" something, report both:
+  - exact `~/.openclaw` file edit location
+  - merge-to-`origin/main` commit URL (or explicit blocker)
+- Keep design docs in the same repo as related code.

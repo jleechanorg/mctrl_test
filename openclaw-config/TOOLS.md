@@ -63,11 +63,19 @@ ai_orch run --agent-cli codex "task description"
 ### Rules
 
 - Always pass the full task context in the description string (repo path, what to change, acceptance criteria)
-- Run from the relevant repo directory, or include the path in the task description
+- Run from a git worktree path for the relevant repo (never the primary checkout)
 - After dispatching, tell the user: agent is running in tmux, attach with `ai_orch attach <session>`
 - Do NOT wait for the agent to finish before responding — it runs async
 - Before any PR operation, resolve repo from URL or explicit `<owner>/<repo>` and pass `--repo <owner>/<repo>` explicitly
 - Never create/edit/merge PRs with implicit default repo context
+
+### Worktree Guardrails (Mandatory)
+
+- Coding tasks are blocked unless executed from a git worktree.
+- Pre-check before `ai_orch run`:
+  - `git rev-parse --git-dir | grep -q '.git/worktrees/'`
+  - If that command fails, stop and create/use a linked worktree first.
+- If no worktree exists, create one first and dispatch inside that path.
 
 ### What counts as a coding task
 
@@ -84,5 +92,9 @@ gh pr view 5833 --repo jleechanorg/worldarchitect.ai
 gh pr create --repo jleechanorg/worldai_claw ...
 gh pr merge 123 --repo jleechanorg/worldarchitect.ai --squash
 ```
+
+## CLI aliases
+
+- `aiorch` is shorthand for the `ai_orch` binary.
 
 Add whatever helps you do your job. This is your cheat sheet.

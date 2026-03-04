@@ -201,8 +201,8 @@ def detect_cli(
     cli_map = agent_cli_map or DEFAULT_CLI_KEYWORDS
 
     # Build searchable text from task
-    title = task.get("title", "").lower()
-    description = task.get("description", "").lower()
+    title = str(task.get("title") or "").lower()
+    description = str(task.get("description") or "").lower()
     search_text = f"{title} {description}"
 
     library = _load_prompt_library(prompt_library_path or PROMPT_LIBRARY_PATH)

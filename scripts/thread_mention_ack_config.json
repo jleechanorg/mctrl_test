@@ -1,11 +1,19 @@
 {
   "enabled": true,
   "botUserId": "U0AEZC7RX1Q",
-  "ackMethod": "threadReplyViaOpenClaw",
-  "defaultChannel": "#worldai",
-  "channelId": "C0AH3RY3DK6",
-  "watchIntervalSeconds": 300,
-  "defaultAckMessage": "Thanks — I\u2019ll keep replies in-thread when you tag me here and will auto-ack any missed tagged messages once per thread.",
+  "watchIntervalSeconds": 30,
+  "lookbackSeconds": 21600,
+  "defaultAckMessage": "Thanks, I saw the mention. Replying in this thread now.",
+  "channelIds": [],
+  "scanConversationTypes": "public_channel,private_channel",
+  "allowedAuthorUserIds": [
+    "U09GH5BR3QU"
+  ],
+  "ackAnyThreadMessageFromAllowedUsers": true,
+  "historyPageLimit": 200,
+  "historyPagesPerChannel": 20,
+  "maxAckedMentions": 10000,
   "ledgerPath": "/Users/jleechan/.openclaw/thread_ack_ledger.json",
-  "openclawBinary": "/Users/jleechan/.nvm/versions/node/v22.22.0/lib/node_modules/openclaw/openclaw.mjs"
+  "slackBotTokenEnv": "SLACK_BOT_TOKEN",
+  "slackBotToken": ""
 }

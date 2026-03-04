@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>ai.openclaw.thread-ack-watcher</string>
+
+    <key>Comment</key>
+    <string>Slack thread mention ack watcher (deterministic backfill)</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/Users/jleechan/project_jleechanclaw/jleechanclaw/scripts/run_thread_mention_ack_watcher.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/jleechan/project_jleechanclaw/jleechanclaw</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jleechan/.openclaw/logs/thread-ack-watcher.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/jleechan/.openclaw/logs/thread-ack-watcher.err.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>HOME</key>
+      <string>/Users/jleechan</string>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+  </dict>
+</plist>
