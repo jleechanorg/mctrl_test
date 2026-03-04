@@ -101,6 +101,7 @@
       "memorySearch": {
         "enabled": true,
         "extraPaths": [
+          "/Users/jleechan/.openclaw/workspace/MEMORY.md",
           "/Users/jleechan/.openclaw/workspace/TOOLS.md",
           "/Users/jleechan/projects/worldarchitect.ai/CLAUDE.md",
           "/Users/jleechan/projects/worldarchitect.ai/.claude/learnings.md",
@@ -166,7 +167,18 @@
       "memory_get",
       "second-opinion-tool_agent_second_opinion",
       "second-opinion-tool_rate_limit_status",
-      "second-opinion-tool_health-check"
+      "second-opinion-tool_health-check",
+      "slack-mcp_channels_list",
+      "slack-mcp_conversations_add_message",
+      "slack-mcp_conversations_history",
+      "slack-mcp_conversations_mark",
+      "slack-mcp_conversations_replies",
+      "slack-mcp_usergroups_create",
+      "slack-mcp_usergroups_list",
+      "slack-mcp_usergroups_me",
+      "slack-mcp_usergroups_update",
+      "slack-mcp_usergroups_users_update",
+      "slack-mcp_users_search"
     ],
     "deny": [
       "browser",
@@ -355,7 +367,7 @@
       "dmHistoryLimit": 200,
       "replyToMode": "all",
       "replyToModeByChatType": {
-        "direct": "off",
+        "direct": "all",
         "group": "all",
         "channel": "all"
       },
@@ -452,7 +464,7 @@
             {
               "name": "slack-mcp",
               "transport": "stdio",
-              "command": "/Users/jleechan/go/bin/slack-mcp-server",
+              "command": "${SLACK_MCP_SERVER_PATH}",
               "args": [],
               "env": {
                 "SLACK_MCP_XOXB_TOKEN": "${OPENCLAW_SLACK_BOT_TOKEN}",

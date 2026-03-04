@@ -23,6 +23,7 @@ jobs:
           MC_BASE_URL: ${{ vars.MISSION_CONTROL_BASE_URL }}
           MC_TOKEN: ${{ secrets.MISSION_CONTROL_TOKEN }}
           MC_BOARD_ID: ${{ vars.MISSION_CONTROL_BOARD_ID }}
+          # Untrusted input passed via env vars (not interpolated inline in run:)
           COMMENT_BODY: ${{ github.event.comment.body }}
           PR_NUMBER: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}

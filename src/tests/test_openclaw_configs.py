@@ -24,6 +24,19 @@ SECOND_OPINION_TOOLS = {
     "second-opinion-tool_rate_limit_status",
     "second-opinion-tool_health-check",
 }
+SLACK_MCP_TOOLS = {
+    "slack-mcp_channels_list",
+    "slack-mcp_conversations_add_message",
+    "slack-mcp_conversations_history",
+    "slack-mcp_conversations_mark",
+    "slack-mcp_conversations_replies",
+    "slack-mcp_usergroups_create",
+    "slack-mcp_usergroups_list",
+    "slack-mcp_usergroups_me",
+    "slack-mcp_usergroups_update",
+    "slack-mcp_usergroups_users_update",
+    "slack-mcp_users_search",
+}
 
 
 @pytest.fixture(scope="module")
@@ -142,7 +155,7 @@ class TestMcpAdapterWiring:
                 continue
             headers = server.get("headers", {})
             assert "Authorization" in headers, (
-                f"MCP server '{server.get('name')}' missing Authorization header (ORCH-d5b)"
+                f"HTTP MCP server '{server.get('name')}' missing Authorization header (ORCH-d5b)"
             )
 
     def test_discord_mcp_adapter_enabled(self, discord_cfg: dict):
@@ -177,7 +190,7 @@ class TestMcpAdapterWiring:
             if _server_transport(server) != "http":
                 continue
             assert "${" in server.get("url", ""), (
-                f"MCP server '{server.get('name')}' URL should use an env var "
+                f"HTTP MCP server '{server.get('name')}' URL should use an env var "
                 "placeholder like '${SECOND_OPINION_MCP_URL}'"
             )
 
@@ -224,3 +237,107 @@ class TestMissionControlRuntimeWiring:
         """Manual startup path should match launchd runtime wiring."""
         script_text = START_MC_SCRIPT.read_text(encoding="utf-8")
         assert "orchestration.mc_backend_service" in script_text
+
+
+# ---------------------------------------------------------------------------
+# ORCH-sl1: Slack DM reply must be enabled (not "off")
+#
+# replyToModeByChatType.direct="off" means the agent reads DMs but never
+# replies. Any commit that sets direct="off" silently breaks DM responses.
+# ---------------------------------------------------------------------------
+
+
+class TestSlackDmReplyConfig:
+    def _slack_cfg(self, main_cfg: dict) -> dict:
+        return main_cfg.get("channels", {}).get("slack", {})
+
+    def test_reply_to_mode_direct_is_not_off(self, main_cfg: dict):
+        """Agent must reply to Slack DMs — direct='off' silently breaks responses."""
+        slack = self._slack_cfg(main_cfg)
+        by_chat_type = slack.get("replyToModeByChatType", {})
+        direct = by_chat_type.get("direct")
+        assert direct != "off", (
+            f"replyToModeByChatType.direct='{direct}' — DMs will be silently ignored. "
+            "Set to 'all' or 'thread' (ORCH-sl1)"
+        )
+
+    def test_reply_to_mode_direct_is_all(self, main_cfg: dict):
+        """replyToModeByChatType.direct should be 'all' to reply to every DM."""
+        slack = self._slack_cfg(main_cfg)
+        direct = slack.get("replyToModeByChatType", {}).get("direct")
+        assert direct == "all", (
+            f"Expected replyToModeByChatType.direct='all', got '{direct}' (ORCH-sl1)"
+        )
+
+    def test_reply_to_mode_top_level_is_not_off(self, main_cfg: dict):
+        """Top-level replyToMode should not be 'off' — it overrides per-type settings."""
+        slack = self._slack_cfg(main_cfg)
+        mode = slack.get("replyToMode")
+        assert mode != "off", (
+            f"replyToMode='{mode}' overrides replyToModeByChatType and silences all replies. "
+            "Remove or set to 'all' (ORCH-sl1)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# ORCH-sl2: slack-mcp stdio server must be present and correctly wired
+# ---------------------------------------------------------------------------
+
+
+class TestSlackMcpServerConfig:
+    def _get_slack_mcp_server(self, main_cfg: dict) -> dict | None:
+        servers = _get_mcp_servers(main_cfg)
+        return next((s for s in servers if s.get("name") == "slack-mcp"), None)
+
+    def test_slack_mcp_server_present(self, main_cfg: dict):
+        """slack-mcp server must be registered in openclaw-mcp-adapter."""
+        server = self._get_slack_mcp_server(main_cfg)
+        assert server is not None, (
+            "No 'slack-mcp' entry in plugins.entries.openclaw-mcp-adapter.config.servers. "
+            "Add stdio server entry (ORCH-sl2)"
+        )
+
+    def test_slack_mcp_uses_stdio_transport(self, main_cfg: dict):
+        """slack-mcp uses a local binary — transport must be 'stdio'."""
+        server = self._get_slack_mcp_server(main_cfg)
+        assert server is not None, "slack-mcp server not found (ORCH-sl2)"
+        assert server.get("transport") == "stdio", (
+            f"slack-mcp transport='{server.get('transport')}', expected 'stdio' (ORCH-sl2)"
+        )
+
+    def test_slack_mcp_token_uses_env_var(self, main_cfg: dict):
+        """Slack token must be an env var placeholder, never a hardcoded value."""
+        server = self._get_slack_mcp_server(main_cfg)
+        assert server is not None, "slack-mcp server not found (ORCH-sl2)"
+        env = server.get("env", {})
+        import re
+        token = env.get("SLACK_MCP_XOXB_TOKEN", "")
+        assert re.match(r"^\$\{[A-Z][A-Z0-9_]+\}$", token), (
+            f"SLACK_MCP_XOXB_TOKEN='{token}' must be exactly a single env var placeholder "
+            "like '${OPENCLAW_SLACK_BOT_TOKEN}' — never hardcode credentials (ORCH-sl2)"
+        )
+
+    def test_slack_mcp_add_message_tool_enabled(self, main_cfg: dict):
+        """SLACK_MCP_ADD_MESSAGE_TOOL must be 'true' to enable write capability."""
+        server = self._get_slack_mcp_server(main_cfg)
+        assert server is not None, "slack-mcp server not found (ORCH-sl2)"
+        env = server.get("env", {})
+        assert env.get("SLACK_MCP_ADD_MESSAGE_TOOL") == "true", (
+            "SLACK_MCP_ADD_MESSAGE_TOOL must be 'true' to allow posting messages (ORCH-sl2)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# ORCH-sl3: all slack-mcp tool IDs must be explicitly in alsoAllow
+# ---------------------------------------------------------------------------
+
+
+class TestSlackMcpToolsAllowed:
+    def test_also_allow_includes_all_slack_mcp_tools(self, main_cfg: dict):
+        """All slack-mcp tool IDs must be in alsoAllow — removal silently disables Slack access."""
+        also_allow = set(main_cfg["tools"].get("alsoAllow", []))
+        missing = SLACK_MCP_TOOLS - also_allow
+        assert not missing, (
+            f"alsoAllow missing slack-mcp tools: {sorted(missing)}. "
+            "Add them back to restore Slack read/write access (ORCH-sl3)"
+        )
