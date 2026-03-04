@@ -19,7 +19,7 @@ is_guardrail_line() {
 
 while IFS= read -r file; do
   case "$file" in
-    .openclaw-backups/*|openclaw/.openclaw-backups/*|openclaw-config/agents/*|openclaw-config/credentials/*)
+    .openclaw-backups/*|openclaw/.openclaw-backups/*|openclaw-config/agents/*|openclaw-config/credentials/*|scripts/check-openclaw-cron-guardrail.sh)
       continue
       ;;
   esac
