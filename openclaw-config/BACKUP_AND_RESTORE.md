@@ -149,7 +149,7 @@ openclaw cron status
 openclaw cron list
 
 # Backups: install launchd backup schedule (no system crontab)
-./scripts/install-openclaw-backup-jobs.sh
+$(pwd)/scripts/install-openclaw-backup-jobs.sh
 ```
 
 ---

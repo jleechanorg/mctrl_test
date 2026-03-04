@@ -8,13 +8,44 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-FILES="$(git ls-files '*.md' '*.sh' 'AGENTS.md' 'TOOLS.md' 'README.md')"
+FILES="$(git ls-files '*.md' '*.mdx' '*.sh' 'AGENTS.md' 'TOOLS.md' 'README.md')"
 
 had_violations=0
 
-is_guardrail_line() {
-  local line="$1"
-  echo "$line" | grep -Eiq 'forbidden|do not|never|must not|prohibit|required|not used|legacy|remove|removed'
+# Check if a file contains guardrail context (words that indicate the file is talking about policy/forbidden items)
+file_has_guardrail_context() {
+  local file="$1"
+  rg -i -q 'forbidden|never use|do not use|must not|prohibit|legacy|removed|replaced|instead|use launchd|use gateway cron' "$file" || true
+}
+
+# Check for violation: crontab + OpenClaw in close proximity (within 3 lines)
+check_file_for_violation() {
+  local file="$1"
+  local violations=0
+
+  # Skip if file explicitly discusses the guardrail policy
+  if file_has_guardrail_context "$file"; then
+    return 0
+  fi
+
+  # Look for crontab references combined with OpenClaw identifiers
+  # Use multiline mode to catch cases where they're on nearby lines
+  while IFS=: read -r line_no line; do
+    [[ -z "$line_no" ]] && continue
+
+    # Get context: current line + 2 lines after
+    local context
+    context=$(sed -n "${line_no},$((line_no + 2))p" "$file")
+
+    # Check if context contains both crontab and OpenClaw-related terms
+    if echo "$context" | rg -iq 'crontab' && echo "$context" | rg -iq 'openclaw|\.openclaw|ai\.openclaw|openclaw-backup|backup-content'; then
+      echo "Guardrail violation: $file:$line_no"
+      echo "  $line"
+      violations=1
+    fi
+  done < <(rg -n --no-heading -i 'crontab' "$file" || true)
+
+  return $violations
 }
 
 while IFS= read -r file; do
@@ -24,19 +55,9 @@ while IFS= read -r file; do
       ;;
   esac
 
-  while IFS=: read -r line_no line; do
-    [[ -z "${line_no:-}" ]] && continue
-
-    if is_guardrail_line "$line"; then
-      continue
-    fi
-
-    if echo "$line" | grep -Eiq 'crontab' && echo "$line" | grep -Eiq 'openclaw|\.openclaw|ai\.openclaw|openclaw-backup|backup-content\.sh'; then
-      echo "Guardrail violation: $file:$line_no"
-      echo "  $line"
-      had_violations=1
-    fi
-  done < <(rg -n --no-heading -i 'crontab' "$file" || true)
+  if ! check_file_for_violation "$file"; then
+    had_violations=1
+  fi
 done <<< "$FILES"
 
 if [[ "$had_violations" -ne 0 ]]; then
