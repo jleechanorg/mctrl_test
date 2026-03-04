@@ -17,6 +17,7 @@ rsync -a --delete \
   --exclude='jleechanclaw' \
   --exclude='credentials/whatsapp' \
   --exclude='*.lock' \
+  --exclude='extensions/*/node_modules' \
   "$SRC/" "$DST/" >> "$LOG" 2>&1 \
   && echo "[$(date '+%Y-%m-%d %H:%M:%S')] Done." >> "$LOG" \
   || echo "[$(date '+%Y-%m-%d %H:%M:%S')] FAILED (exit $?)" >> "$LOG"

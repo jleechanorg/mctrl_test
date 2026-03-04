@@ -28,6 +28,7 @@ rsync -a --delete \
   --exclude='jleechanclaw' \
   --exclude='credentials/whatsapp' \
   --exclude='*.lock' \
+  --exclude='extensions/*/node_modules' \
   "$SRC_DIR/" "$SNAPSHOT_DIR/"
 
 # ---------------------------------------------------------------------------
