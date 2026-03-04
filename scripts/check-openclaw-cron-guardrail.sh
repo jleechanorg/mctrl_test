@@ -22,7 +22,7 @@ had_violations=0
 # Check if a file contains guardrail context (words that indicate the file is talking about policy/forbidden items)
 file_has_guardrail_context() {
   local file="$1"
-  if rg -i -q 'forbidden|never use|do not use|must not|prohibit|legacy|removed|replaced|instead|use launchd|use gateway cron' "$file"; then
+  if rg -i -q 'forbidden|never use system crontab|do not use.*crontab|must not.*crontab|prohibit.*crontab|no system crontab|use launchd|use gateway cron|openclaw cron' "$file"; then
     return 0
   else
     return 1

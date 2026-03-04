@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  echo "enable-auto-backup.sh requires macOS (launchd)." >&2
+  exit 1
+fi
+
 # Installs a launchd job that creates a daily backup tarball of
 # ~/.openclaw and LaunchAgent config at 2:00 AM.
 #

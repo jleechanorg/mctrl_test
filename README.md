@@ -182,7 +182,6 @@ jq '.jobs[] | select(.id=="genesis-memory-curation-weekly")' openclaw-config/cro
 # Optional runtime check (after sync)
 jq '.jobs[] | select(.id=="genesis-memory-curation-weekly")' ~/.openclaw/cron/jobs.json
 ```
-```
 
 ## Agent Selection Guide
 
