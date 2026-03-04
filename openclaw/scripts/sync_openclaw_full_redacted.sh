@@ -16,8 +16,8 @@ if [ -d ".git" ]; then
   echo "Using existing repo at $REPO_DIR"
 else
   if command -v gh >/dev/null 2>&1; then
-    echo "Cloning jleechanorg/openclaw into $REPO_DIR..."
-    gh repo clone jleechanorg/openclaw .
+    echo "Cloning jleechanorg/jleechanclaw into $REPO_DIR..."
+    gh repo clone jleechanorg/jleechanclaw .
   else
     echo "gh CLI not found. Please clone https://github.com/jleechanorg/openclaw first into $REPO_DIR and re-run." >&2
     exit 1

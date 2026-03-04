@@ -160,14 +160,14 @@
       "updatedAtMs": 1771992081572,
       "schedule": {
         "kind": "cron",
-        "expr": "0 */4 * * *",
+        "expr": "20 */4 * * *",
         "tz": "America/Los_Angeles"
       },
       "sessionTarget": "isolated",
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Run the OpenClaw backup script now: /Users/jleechan/.openclaw/workspace/openclaw/scripts/run-openclaw-backup.sh\n\nAfter it completes, reply with one compact line:\n- Status: ok if exit code 0, otherwise failed\n- Latest backup log tail summary (last 5 lines)\n- Backup archive location(s) mentioned in output or logs\n\nRules: do not invent anything; only report command output."
+        "message": "Run the OpenClaw backup script now: /Users/jleechan/project_jleechanclaw/jleechanclaw/scripts/run-openclaw-backup.sh\n\nAfter it completes, reply with one compact line:\n- Status: ok if exit code 0, otherwise failed\n- Latest backup log tail summary (last 5 lines)\n- Backup archive location(s) mentioned in output or logs\n\nRules: do not invent anything; only report command output."
       },
       "delivery": {
         "mode": "none",

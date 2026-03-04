@@ -5,6 +5,9 @@ set -euo pipefail
 #
 # Outputs a timestamped snapshot under .openclaw-backups/<timestamp>/
 # and commits it if changes are detected.
+#
+# Strategy: rsync for initial mirror (fast, incremental, --delete),
+# then Python post-redaction pass on the staged snapshot.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -16,17 +19,29 @@ SNAPSHOT_DIR="$SNAP_BASE/$SNAPSHOT_TS"
 mkdir -p "$SNAP_BASE"
 mkdir -p "$SNAPSHOT_DIR"
 
-export SRC_DIR SNAPSHOT_DIR SNAPSHOT_TS
+# ---------------------------------------------------------------------------
+# Step 1: rsync mirror — fast, incremental copy; --delete keeps snapshot clean.
+# Excludes: nested backup dirs, git metadata, macOS noise.
+# ---------------------------------------------------------------------------
+rsync -a --delete \
+  --exclude='.openclaw-backups' \
+  --exclude='.git' \
+  --exclude='.DS_Store' \
+  "$SRC_DIR/" "$SNAPSHOT_DIR/"
+
+# ---------------------------------------------------------------------------
+# Step 2: Post-redaction pass — redact secrets in text files in-place;
+# remove high-risk binary key material.
+# ---------------------------------------------------------------------------
+export SNAPSHOT_DIR SNAPSHOT_TS
 python3 - <<'PY'
 from pathlib import Path
 import os
 import re
-import shutil
 
-SRC_DIR = Path(os.environ["SRC_DIR"])
-DST_DIR = Path(os.environ["SNAPSHOT_DIR"])
+SNAPSHOT_DIR = Path(os.environ["SNAPSHOT_DIR"])
+SNAPSHOT_TS  = os.environ["SNAPSHOT_TS"]
 
-# Conservative redaction for common secret-bearing files/content.
 SENSITIVE_PATH_HINTS = [
     "/.ssh/",
     "/.aws/",
@@ -36,10 +51,6 @@ SENSITIVE_PATH_HINTS = [
     "id_rsa",
     "id_ed25519",
 ]
-
-EXCLUDE_FILES = {
-    ".DS_Store",
-}
 
 PATTERNS = [
     re.compile(r"(?im)^[\t ]*(?:export[\t ]+)?(?:[A-Za-z_][A-Za-z0-9_]*_?(?:KEY|KEYS?|TOKEN|SECRET|PASS|PASSWORD)|API[_-]?KEY|CLIENT_SECRET|CLIENTID|CLIENT_ID|CLIENT_SECRET)\s*[:=].+$"),
@@ -51,6 +62,8 @@ PATTERNS = [
     re.compile(r"(?i)pypi-[A-Za-z0-9_\-]{60,}"),
     re.compile(r"(?i)https?://[^:\s]+:[^@\s]+@"),
 ]
+
+HIGH_RISK_EXTENSIONS = {".pem", ".key", ".p12", ".pfx", ".crt", ".cer", ".der"}
 
 
 def is_binary(path: Path) -> bool:
@@ -70,67 +83,40 @@ def path_is_sensitive(path: Path) -> bool:
     return False
 
 
-for root, dirs, files in os.walk(SRC_DIR):
-    src_root = Path(root)
-    rel_root = src_root.relative_to(SRC_DIR)
+for p in SNAPSHOT_DIR.rglob("*"):
+    if not p.is_file():
+        continue
 
-    # Skip backup directory to prevent recursive backup; skip .git dirs inside nested repos
-    dirs[:] = [d for d in dirs if d != '.openclaw-backups' and d != '.git']
+    # Remove high-risk binary key material entirely.
+    if path_is_sensitive(p) and (is_binary(p) or p.suffix.lower() in HIGH_RISK_EXTENSIONS):
+        p.unlink()
+        continue
 
-    # Do not skip directories by default; this is a full mirror.
-    # Sensitive paths are copied, then redacted where possible.
-    out_root = DST_DIR / rel_root
-    out_root.mkdir(parents=True, exist_ok=True)
+    # Skip binary files — no redaction needed.
+    if is_binary(p):
+        continue
 
-    for name in files:
-        if name in EXCLUDE_FILES:
-            continue
-        src_file = src_root / name
-        rel = src_file.relative_to(SRC_DIR)
-        dst_file = DST_DIR / rel
-
-        if path_is_sensitive(src_file) and (is_binary(src_file) or src_file.suffix.lower() in {
-            ".pem", ".key", ".p12", ".pfx", ".crt", ".cer", ".der"
-        }):
-            # skip high-risk binary key material
-            continue
-
-        if is_binary(src_file):
-            try:
-                shutil.copy2(src_file, dst_file)
-            except (FileNotFoundError, OSError):
-                # Skip files that disappear during backup (transient files, broken symlinks)
-                pass
-            continue
-
+    # Redact secrets in text files in-place.
+    try:
+        text = p.read_text(encoding="utf-8")
+    except Exception:
         try:
-            text = src_file.read_text(encoding="utf-8")
+            text = p.read_text(encoding="latin-1")
         except Exception:
-            # Try latin-1 which accepts all byte values, still applying redaction
-            try:
-                text = src_file.read_text(encoding="latin-1")
-            except Exception:
-                # Only copy verbatim if even latin-1 fails
-                try:
-                    shutil.copy2(src_file, dst_file)
-                except (FileNotFoundError, OSError):
-                    # Skip files that disappear during backup
-                    pass
-                continue
+            continue
 
-        new = text
-        for pattern in PATTERNS:
-            new = pattern.sub("[REDACTED]", new)
+    new = text
+    for pattern in PATTERNS:
+        new = pattern.sub("[REDACTED]", new)
 
-        dst_file.write_text(new, encoding="utf-8")
-        try:
-            shutil.copystat(src_file, dst_file)
-        except Exception:
-            pass
+    if new != text:
+        p.write_text(new, encoding="utf-8")
 
-# Write manifest in each snapshot for auditability
-(DST_DIR / "REDACTION_MANIFEST.txt").write_text(
-    "Source: {}\nTimestamp: {}\nStatus: redacted+mirrored\n".format(SRC_DIR, os.environ["SNAPSHOT_TS"])
+# Write audit manifest.
+(SNAPSHOT_DIR / "REDACTION_MANIFEST.txt").write_text(
+    "Source: {}\nTimestamp: {}\nStatus: rsync+redacted\n".format(
+        os.environ.get("HOME", "") + "/.openclaw", SNAPSHOT_TS
+    )
 )
 PY
 
@@ -144,6 +130,12 @@ if git diff --quiet --cached -- .openclaw-backups; then
 fi
 
 git commit -m "chore: backup ~/.openclaw snapshot $SNAPSHOT_TS" -- .openclaw-backups/
+
+# ---------------------------------------------------------------------------
+# Step 3: Update latest/ symlink to newest snapshot (relative, from SNAP_BASE).
+# ---------------------------------------------------------------------------
+(cd "$SNAP_BASE" && ln -sfn "$SNAPSHOT_TS" latest)
+
 git fetch --quiet origin main
 COMMIT_SHA="$(git rev-parse HEAD)"
 REMOTE_URL="$(git remote get-url origin)"
