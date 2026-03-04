@@ -27,6 +27,9 @@ rsync -a --delete \
   --exclude='.openclaw-backups' \
   --exclude='.git' \
   --exclude='.DS_Store' \
+  --exclude='workspace' \
+  --exclude='workspace-*' \
+  --exclude='jleechanclaw' \
   "$SRC_DIR/" "$SNAPSHOT_DIR/"
 
 # ---------------------------------------------------------------------------
