@@ -106,6 +106,7 @@ Context windows are zero-sum. Fill it with code and there's no room for business
 | `GITHUB_REPOS.md` | All jleechanorg repositories with commit counts |
 | `PROJECTS_BEADS.md` | Beads memory context |
 | `docs/GENESIS_DESIGN.md` | Original design doc (historical — renamed to jleechanclaw) |
+| `docs/mcp-mail-openclaw-mission-control-design.md` | Autonomous task-to-PR lifecycle design (Mission Control + MCP Mail + ai_orch) |
 | `docs/openclaw-backup-jobs.md` | Backup job documentation |
 | `roadmap/` | Project roadmap tracking |
 

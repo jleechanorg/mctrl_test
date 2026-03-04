@@ -4,6 +4,7 @@ import json
 import subprocess
 from unittest.mock import patch, MagicMock
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
@@ -553,3 +554,25 @@ class TestGetAutomatedComments:
         comments = get_automated_comments(pr)
         assert comments == []
 
+
+class TestAgentPRFixTriggerWorkflow:
+    def test_workflow_enforces_pr_and_trusted_actor_guards(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/agent-pr-fix-trigger.yml"
+        text = workflow.read_text(encoding="utf-8")
+        assert "github.event.issue.pull_request" in text
+        assert "github.event.comment.author_association" in text
+        assert "permissions: {}" in text
+        assert "OWNER" in text
+        assert "MEMBER" in text
+        assert "COLLABORATOR" in text
+
+    def test_workflow_uses_safe_payload_and_fail_fast_http(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/agent-pr-fix-trigger.yml"
+        text = workflow.read_text(encoding="utf-8")
+        assert "jq -n" in text
+        assert "jq -rn" in text
+        assert "grep -Eiq '@jleechanclaw'" in text
+        assert 'sub("@jleechanclaw"; ""; "i")' in text
+        assert "--fail-with-body" in text
+        assert "/api/v1/boards/$MC_BOARD_ID/tasks" in text
+        assert "xargs" not in text
