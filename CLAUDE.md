@@ -33,6 +33,17 @@ openclaw has rich built-in capabilities. Use them:
 
 New Python code in `src/` is for capabilities that genuinely don't exist in openclaw's config surface. Everything else is config. See `roadmap/NATURAL_LANGUAGE_DISPATCH.md` for the rationale.
 
+## Durable Behavior Goal (Not Incident-Only)
+
+Primary intent: OpenClaw should behave consistently for repeated user requests, not require one-off fixes per thread/PR.
+
+Execution rules:
+1. Treat behavior bugs as system bugs first (config/policy/workflow contract), not isolated incidents.
+2. Prefer reusable guardrails in `openclaw-config/` and shared automation templates over ad-hoc local patches.
+3. Enforce explicit routing and target resolution for external actions (repo, endpoint, channel) before mutation.
+4. Add fail-closed checks (tests/CI/policy validators) so the same class of error cannot silently recur.
+5. Validate fixes by replaying the same request style in multiple contexts.
+
 ---
 
 ## Critical Rules

@@ -22,6 +22,19 @@ This repo's primary job is **configuring openclaw**, not building new software.
 
 See `roadmap/NATURAL_LANGUAGE_DISPATCH.md` for the design rationale and `CLAUDE.md` for full project rules.
 
+## Durable Behavior Goal (Non-Oneoff)
+
+Jeffrey's operating goal for OpenClaw is deterministic behavior:
+- He should be able to talk to OpenClaw the same way repeatedly and get the right behavior every time.
+- Fixes must be systemic (policy/config/workflow/contracts), not incident-by-incident patches.
+
+When implementing behavior changes, apply these rules:
+1. Prefer global defaults in `openclaw-config/` over per-thread/per-PR exceptions.
+2. Encode routing/endpoint/repo rules as explicit guardrails (deny-by-default on ambiguity).
+3. Add prevention checks (CI/policy checks, preflight validation, or launchd/runtime checks) so regressions fail closed.
+4. For any one-off hotfix, also add a follow-up durable guardrail before considering the work complete.
+5. Validate by replaying the same request pattern in multiple contexts (not just the original failing thread).
+
 ---
 
 # Repository Guidelines (openclaw/openclaw upstream reference)
