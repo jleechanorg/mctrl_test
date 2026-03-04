@@ -15,7 +15,11 @@ had_violations=0
 # Check if a file contains guardrail context (words that indicate the file is talking about policy/forbidden items)
 file_has_guardrail_context() {
   local file="$1"
-  rg -i -q 'forbidden|never use|do not use|must not|prohibit|legacy|removed|replaced|instead|use launchd|use gateway cron' "$file" || true
+  if rg -i -q 'forbidden|never use|do not use|must not|prohibit|legacy|removed|replaced|instead|use launchd|use gateway cron' "$file"; then
+    return 0
+  else
+    return 1
+  fi
 }
 
 # Check for violation: crontab + OpenClaw in close proximity (within 3 lines)
