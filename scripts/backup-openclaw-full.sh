@@ -1,27 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Backup/backup-snapshot of ~/.openclaw into this repo with sensitive redaction.
+# Backup ~/.openclaw into this repo with sensitive redaction.
 #
-# Outputs a timestamped snapshot under .openclaw-backups/<timestamp>/
-# and commits it if changes are detected.
-#
-# Strategy: rsync for initial mirror (fast, incremental, --delete),
-# then Python post-redaction pass on the staged snapshot.
+# Rsyncs into a single .openclaw-backups/latest/ directory (--delete keeps it
+# current) and commits if anything changed. Git history is the point-in-time
+# record — no dated subdirectories needed.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SRC_DIR="${HOME}/.openclaw"
 SNAP_BASE="$REPO_ROOT/.openclaw-backups"
+SNAPSHOT_DIR="$SNAP_BASE/latest"
 SNAPSHOT_TS="$(date +"%Y%m%d_%H%M%S")"
-SNAPSHOT_DIR="$SNAP_BASE/$SNAPSHOT_TS"
 
-mkdir -p "$SNAP_BASE"
 mkdir -p "$SNAPSHOT_DIR"
 
 # ---------------------------------------------------------------------------
-# Step 1: rsync mirror — fast, incremental copy; --delete keeps snapshot clean.
-# Excludes: nested backup dirs, git metadata, macOS noise.
+# Step 1: rsync mirror — incremental, --delete removes files gone from source.
 # ---------------------------------------------------------------------------
 rsync -a --delete \
   --exclude='.openclaw-backups' \
@@ -37,26 +33,21 @@ rsync -a --delete \
 # ---------------------------------------------------------------------------
 # Step 2: Post-redaction pass via orchestration.backup_redaction module.
 # Symlinks are never followed — prevents writing through symlinks to targets
-# outside the snapshot directory (bug fix: symlink-following redaction).
+# outside the snapshot directory.
 # ---------------------------------------------------------------------------
 export SNAPSHOT_DIR SNAPSHOT_TS SRC_DIR
 PYTHONPATH="$REPO_ROOT/src" python3 -m orchestration.backup_redaction "$SNAPSHOT_DIR"
 
 cd "$REPO_ROOT"
 
-git add .openclaw-backups/
-if git diff --quiet --cached -- .openclaw-backups; then
+git add .openclaw-backups/latest/
+if git diff --quiet --cached -- .openclaw-backups/latest; then
   echo "No changes to commit."
-  git restore --staged .openclaw-backups 2>/dev/null || true
+  git restore --staged .openclaw-backups/latest 2>/dev/null || true
   exit 0
 fi
 
-git commit -m "chore: backup ~/.openclaw snapshot $SNAPSHOT_TS" -- .openclaw-backups/
-
-# ---------------------------------------------------------------------------
-# Step 3: Update latest/ symlink to newest snapshot (relative, from SNAP_BASE).
-# ---------------------------------------------------------------------------
-(cd "$SNAP_BASE" && ln -sfn "$SNAPSHOT_TS" latest)
+git commit -m "chore: backup ~/.openclaw snapshot $SNAPSHOT_TS" -- .openclaw-backups/latest/
 
 git fetch --quiet origin main
 COMMIT_SHA="$(git rev-parse HEAD)"
