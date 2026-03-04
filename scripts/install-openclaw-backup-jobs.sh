@@ -84,6 +84,23 @@ else
   echo "Watchdog cron job already present; skipping."
 fi
 
+# ---------- Dropbox backup (every 4h at :10) ----------
+DROPBOX_MARKER="# OpenClaw Dropbox backup (4h, offset :10)"
+DROPBOX_BACKUP="$SCRIPTS/dropbox-openclaw-backup.sh"
+
+if ! grep -Fq "$DROPBOX_MARKER" "$CRON_TMP"; then
+  echo "$DROPBOX_MARKER" >> "$CRON_TMP"
+  echo "10 */4 * * * $DROPBOX_BACKUP" >> "$CRON_TMP"
+  crontab "$CRON_TMP"
+  echo "Installed Dropbox backup cron: every 4h at :10"
+elif ! grep -Fq "10 */4 * * * $DROPBOX_BACKUP" "$CRON_TMP"; then
+  sed -i.bak "s|^[0-9]* \*/4 \* \* \* $DROPBOX_BACKUP|10 */4 * * * $DROPBOX_BACKUP|" "$CRON_TMP"
+  crontab "$CRON_TMP"
+  echo "Updated Dropbox backup cron entry"
+else
+  echo "Dropbox backup cron already present; skipping."
+fi
+
 rm -f "$CRON_TMP"
 
 echo "Done."
