@@ -29,7 +29,14 @@ mc_health=$(curl -sf http://localhost:9010/health 2>/dev/null | python3 -c "impo
 check "MC backend /health ok" "$mc_health"
 
 # --- MC agents registered ---
-mc_agents=$(curl -sf http://localhost:9010/api/v1/agents 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(1 if len(d.get('items',[])) > 0 else 0)" 2>/dev/null || echo 0)
+_mc_token=$(python3 -c "import json; cfg=json.load(open('$HOME/.openclaw/openclaw.json')); print(cfg.get('env',{}).get('MISSION_CONTROL_TOKEN',''))" 2>/dev/null || echo "")
+_auth_header=()
+if [[ -n "${_mc_token}" ]]; then
+  _auth_header=(-H "Authorization: Bearer ${_mc_token}")
+fi
+mc_agents=$(curl -sf http://localhost:9010/api/v1/agents \
+  ${_auth_header[@]+"${_auth_header[@]}"} 2>/dev/null | \
+  python3 -c "import sys,json; d=json.load(sys.stdin); print(1 if len(d.get('items',[])) > 0 else 0)" 2>/dev/null || echo 0)
 check "MC agents registered (heartbeat)" "$mc_agents"
 
 # --- task poller running ---
@@ -37,7 +44,9 @@ poller_running=$(launchctl list ai.openclaw.task-poller 2>/dev/null | grep -c "P
 check "task-poller LaunchAgent loaded" "$([[ $poller_running -gt 0 ]] && echo 1 || echo 0)"
 
 # --- inbox tasks with no agents (zombie state) ---
-inbox_count=$(curl -sf "http://localhost:9010/api/v1/tasks?status=inbox" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('items',[])))" 2>/dev/null || echo 0)
+inbox_count=$(curl -sf "http://localhost:9010/api/v1/tasks?status=inbox" \
+  ${_auth_header[@]+"${_auth_header[@]}"} 2>/dev/null | \
+  python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('items',[])))" 2>/dev/null || echo 0)
 if [[ "$inbox_count" -gt 0 && "$mc_agents" == "0" ]]; then
   echo "⚠️  ZOMBIE STATE: $inbox_count inbox tasks but 0 agents registered"
   FAIL=$((FAIL+1))

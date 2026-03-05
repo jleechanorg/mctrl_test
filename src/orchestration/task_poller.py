@@ -1,7 +1,19 @@
 """Task poller — polls Mission Control for inbox tasks and dispatches to agents.
 
-Polls a Mission Control board for inbox tasks, detects which CLI to use,
-and spawns agents via ai_orch to handle each task.
+Polls a Mission Control board for inbox tasks and dispatches each via
+``ai_orch run``, which launches the appropriate agent process.
+
+ai_orch handles CLI selection, model choice, and the agent process
+lifecycle; the task poller passes task summaries and tracks dispatch status.
+
+When ``async_dispatch`` is enabled, ``ai_orch run --async`` returns before
+the agent finishes — dispatched tasks are marked IN_PROGRESS only (not DONE).
+When synchronous (default), the subprocess blocks until the agent completes
+and tasks transition through IN_PROGRESS → DONE.
+
+All ai_orch parameters (``--agent-cli``, ``--model``, ``--async``,
+``--resume``, ``--worktree``) are configurable via dataclass fields
+or environment variables.
 """
 
 from __future__ import annotations
@@ -13,121 +25,13 @@ import logging
 import os
 import re
 import subprocess
-import tempfile
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Callable, Optional
 
 from orchestration.mc_client import MissionControlClient, TaskStatus
 
 logger = logging.getLogger(__name__)
-
-# Default CLI keywords for task type detection
-DEFAULT_CLI_KEYWORDS: dict[str, list[str]] = {
-    "codex": ["codex", "complex", "refactor", "large"],
-    "gemini": ["gemini", "design", "UI", "frontend", "creative"],
-    "cursor": ["cursor", "edit", "fix", "small"],
-    "claude": [],  # Default fallback
-}
-
-PROMPT_LIBRARY_PATH = Path.home() / ".jleechanclaw" / "prompt_library.json"
-
-
-def _normalize_text(value: object) -> str:
-    """Normalize free text into lower-case, whitespace-compact form."""
-    return " ".join(str(value or "").lower().split())
-
-
-def _load_prompt_library(library_path: Path) -> dict:
-    """Load prompt library JSON from disk."""
-    if not library_path.exists():
-        return {}
-    try:
-        with library_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def _save_prompt_library(library_path: Path, data: dict) -> None:
-    """Persist prompt library JSON to disk."""
-    library_path.parent.mkdir(parents=True, exist_ok=True)
-    with library_path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-def _resolve_library_cli(search_text: str, library: dict) -> str | None:
-    """Resolve a CLI override from prompt library entries."""
-    patterns = library.get("patterns")
-    if not isinstance(patterns, dict):
-        return None
-
-    for pattern, value in sorted(
-        patterns.items(),
-        key=lambda item: len(item[0]),
-        reverse=True,
-    ):
-        if not isinstance(pattern, str):
-            continue
-        if not pattern:
-            continue
-        if pattern.lower() not in search_text:
-            continue
-
-        if isinstance(value, str):
-            return value
-        if isinstance(value, dict) and isinstance(value.get("cli"), str):
-            return value.get("cli")
-    return None
-
-
-def _build_prompt_key(task: dict) -> str:
-    """Create a short prompt key for library learning."""
-    explicit = task.get("prompt_library_key")
-    if explicit:
-        return _normalize_text(explicit)
-
-    title = _normalize_text(task.get("title", ""))
-    description = _normalize_text(task.get("description", ""))
-    text = f"{title} {description}".strip()
-    if not text:
-        return ""
-
-    words = [w for w in text.split() if len(w) > 2]
-    return " ".join(words[:5])
-
-
-def _update_prompt_library(task: dict, cli: str, library_path: Path) -> None:
-    """Persist successful task-to-CLI choice for future prompt detection."""
-    key = _build_prompt_key(task)
-    if not key:
-        return
-
-    library = _load_prompt_library(library_path)
-    patterns = library.get("patterns")
-    if not isinstance(patterns, dict):
-        patterns = {}
-
-    entry = patterns.get(key)
-    if isinstance(entry, dict):
-        if entry.get("cli") == cli:
-            count = entry.get("hits", 0)
-            entry["hits"] = (count + 1) if isinstance(count, int) else 1
-        else:
-            entry["cli"] = cli
-            entry["hits"] = 1
-    elif isinstance(entry, str):
-        patterns[key] = {"cli": entry if entry == cli else cli, "hits": 1}
-        if entry == cli:
-            patterns[key]["hits"] = 2
-    else:
-        patterns[key] = {"cli": cli, "hits": 1}
-
-    library["patterns"] = patterns
-    _save_prompt_library(library_path, library)
-
 
 _TOKEN_USAGE_PATTERNS: dict[str, re.Pattern[str]] = {
     "input_tokens": re.compile(r"(?i)\b(?:input|prompt)\s*tokens?[^0-9]*(\d+)", re.MULTILINE),
@@ -149,8 +53,6 @@ def _extract_token_usage(stdout_payload: str | bytes | None) -> dict[str, int]:
     if not output:
         return {}
 
-    # Common Claude JSON shape:
-    # {"input_tokens": 10, "output_tokens": 20, "total_tokens": 30}
     try:
         parsed = json.loads(output)
         if isinstance(parsed, dict):
@@ -164,150 +66,15 @@ def _extract_token_usage(stdout_payload: str | bytes | None) -> dict[str, int]:
         pass
 
     usage: dict[str, int] = {}
-    for field, pattern in _TOKEN_USAGE_PATTERNS.items():
+    for usage_field, pattern in _TOKEN_USAGE_PATTERNS.items():
         match = pattern.search(output)
         if match:
             try:
-                usage[field] = int(match.group(1))
+                usage[usage_field] = int(match.group(1))
             except ValueError:
                 pass
     return usage
 
-
-def detect_cli(
-    task: dict,
-    agent_cli_map: dict[str, list[str]] | None = None,
-    prompt_library_path: Path | None = None,
-) -> str:
-    """Detect which CLI to use based on task content.
-
-    Examines task title and description for keywords that indicate
-    which agent CLI is best suited for the task. Also checks for
-    MINIMAX_API_KEY env var to enable minimax/claudem (returns 'claudem'
-    meaning: use build_claudem_dispatch).
-
-    Args:
-        task: Task dict with 'title' and/or 'description' keys.
-        agent_cli_map: Optional custom mapping of keywords to CLI names.
-        prompt_library_path: Optional path override for prompt library.
-
-    Returns:
-        CLI name string (e.g., 'claude', 'codex', 'gemini', 'cursor', 'claudem').
-    """
-    # Check for minimax/claudem first if API key is set
-    if os.environ.get("MINIMAX_API_KEY"):
-        return "claudem"
-
-    cli_map = agent_cli_map or DEFAULT_CLI_KEYWORDS
-
-    # Build searchable text from task
-    title = str(task.get("title") or "").lower()
-    description = str(task.get("description") or "").lower()
-    search_text = f"{title} {description}"
-
-    library = _load_prompt_library(prompt_library_path or PROMPT_LIBRARY_PATH)
-    library_choice = _resolve_library_cli(search_text, library)
-    if library_choice:
-        return library_choice
-
-    # Check for matching keywords in order (specific to general)
-    for cli, keywords in cli_map.items():
-        if cli == "claude":
-            continue  # Claude is default, check last
-        for keyword in keywords:
-            if keyword.lower() in search_text:
-                return cli
-
-    return "claude"  # Default fallback
-
-
-def build_claudem_dispatch() -> Callable[[str, dict], bool]:
-    """Build a dispatch function that uses claudem (minimax) for task execution.
-
-    Returns a callable that:
-    - Runs `claude --dangerously-skip-permissions --print` via subprocess
-    - Sends `<task_title>: <task_description>` to stdin
-    - Uses 300s timeout
-    - Captures stdout/stderr to /tmp/ralph/jobs/<task_id>_<timestamp>.log
-
-    Returns:
-        Callable that takes (cli: str, task: dict) and returns True on success.
-    """
-    log_dir = Path("/tmp/ralph/jobs")
-
-    def claudem_dispatch(cli: str, task: dict) -> bool:
-        """Dispatch task using claudem (minimax).
-
-        Args:
-            cli: CLI name (should be 'claudem' but accepts others for flexibility).
-            task: Task dict with 'id', 'title', 'description'.
-
-        Returns:
-            True if dispatch succeeded, False otherwise.
-        """
-        log_dir.mkdir(parents=True, exist_ok=True)
-        task_id = task.get("id", "unknown")
-        title = task.get("title", "Untitled")
-        description = task.get("description", "")
-        task_summary = f"{title}: {description}" if description else title
-
-        # Build claudem command using claude binary with minimax env
-        # (claudem is a bash function, not a binary, so we call claude directly)
-        cmd = ["claude", "--dangerously-skip-permissions", "--print"]
-
-        # Create log file path
-        timestamp = int(time.time())
-        log_file = log_dir / f"{task_id}_{timestamp}.log"
-
-        logger.info(f"Dispatching to claudem: {title} (log: {log_file})")
-
-        # Build env, removing all Claude Code session vars to allow nested sessions
-        env = dict(os.environ)
-        for key in list(env):
-            if key == "CLAUDECODE" or key.startswith("CLAUDE_CODE_"):
-                env.pop(key)
-        env.update({
-            "ANTHROPIC_BASE_URL": "https://api.minimax.io/anthropic",
-            "ANTHROPIC_AUTH_TOKEN": os.environ.get("MINIMAX_API_KEY", ""),
-            "ANTHROPIC_MODEL": "MiniMax-M2.5",
-            "ANTHROPIC_SMALL_FAST_MODEL": "MiniMax-M2.5",
-            "API_TIMEOUT_MS": "3000000",
-            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-        })
-
-        try:
-            result = subprocess.run(
-                cmd,
-                input=task_summary.encode(),
-                capture_output=True,
-                timeout=300,  # 5 min timeout
-                env=env,
-            )
-
-            # Write output to log file
-            with open(log_file, "w") as f:
-                f.write(f"# Task ID: {task_id}\n")
-                f.write(f"# Title: {title}\n")
-                f.write(f"# Timestamp: {timestamp}\n")
-                f.write(f"# Exit code: {result.returncode}\n")
-                f.write(f"# STDOUT:\n{result.stdout.decode('utf-8', errors='replace')}\n")
-                f.write(f"# STDERR:\n{result.stderr.decode('utf-8', errors='replace')}\n")
-
-            return result.returncode == 0
-
-        except subprocess.TimeoutExpired:
-            logger.error(f"claudem dispatch timed out for {task_id}")
-            with open(log_file, "w") as f:
-                f.write(f"# Task ID: {task_id}\n# Status: TIMEOUT\n")
-            return False
-        except FileNotFoundError:
-            logger.error("claudem not found in PATH")
-            return False
-        except Exception as e:
-            logger.error(f"claudem dispatch failed for {task_id}: {e}")
-            return False
-
-    return claudem_dispatch
 
 
 @dataclass
@@ -317,29 +84,32 @@ class TaskPoller:
     Attributes:
         board_id: Mission Control board UUID to poll.
         client: MissionControlClient instance for API calls. If None, creates from env.
-        agent_cli_map: Optional custom mapping of keywords to CLI names.
         poll_interval_seconds: Interval between polls in run_forever mode.
         dispatch_concurrency: Max number of tasks dispatched in parallel.
-        dispatch_fn: Optional callable for task dispatch. If None, uses subprocess.
+        dispatch_fn: Optional callable for task dispatch. If None, uses ai_orch.
+        agent_cli: Agent CLI to pass via ``--agent-cli``. None = let ai_orch decide.
+        model: Model to pass via ``--model``. None = let ai_orch decide.
+        async_dispatch: If True, pass ``--async`` and skip DONE transition.
+        resume: If True, pass ``--resume`` to ai_orch.
+        worktree: If True, pass ``--worktree`` to ai_orch.
     """
 
     board_id: str
     client: Optional[MissionControlClient] = None
-    agent_cli_map: dict[str, list[str]] = field(default_factory=lambda: dict(DEFAULT_CLI_KEYWORDS))
-    prompt_library_path: Path = field(default_factory=lambda: PROMPT_LIBRARY_PATH)
     poll_interval_seconds: int = 60
     dispatch_concurrency: int = 4
-    dispatch_fn: Optional[Callable[[str, dict], bool]] = field(default=None, repr=False)
+    dispatch_fn: Optional[Callable[[str | None, dict], bool | tuple[bool, dict] | dict]] = field(default=None, repr=False)
+    agent_cli: str | None = None
+    model: str | None = None
+    async_dispatch: bool = False
+    resume: bool = False
+    worktree: bool = False
     _dispatched_count: int = field(default=0, repr=False)
 
     def __post_init__(self) -> None:
-        """Create client from env if not provided. Auto-wire claudem dispatch when MINIMAX_API_KEY set."""
+        """Create client from env if not provided; apply env var overrides."""
         if self.client is None:
             self.client = MissionControlClient()
-        # Auto-wire claudem dispatch when MINIMAX_API_KEY is present and no explicit dispatch_fn given.
-        # Without this, detect_cli returns "claudem" which ai_orch rejects (only accepts claude/codex/etc).
-        if self.dispatch_fn is None and os.environ.get("MINIMAX_API_KEY"):
-            self.dispatch_fn = build_claudem_dispatch()
 
         env_concurrency = os.environ.get("TASK_POLLER_DISPATCH_CONCURRENCY")
         if env_concurrency:
@@ -359,13 +129,30 @@ class TaskPoller:
             self.dispatch_concurrency = 1
         self.dispatch_concurrency = max(1, self.dispatch_concurrency)
 
+        # ai_orch param env var overrides
+        env_agent_cli = os.environ.get("TASK_POLLER_AGENT_CLI")
+        if env_agent_cli:
+            self.agent_cli = env_agent_cli
+
+        env_model = os.environ.get("TASK_POLLER_MODEL")
+        if env_model:
+            self.model = env_model
+
+        for attr, env_key in [
+            ("async_dispatch", "TASK_POLLER_ASYNC"),
+            ("resume", "TASK_POLLER_RESUME"),
+            ("worktree", "TASK_POLLER_WORKTREE"),
+        ]:
+            env_val = os.environ.get(env_key, "")
+            if env_val.strip().lower() in ("1", "true", "yes"):
+                setattr(self, attr, True)
+
     def poll_and_dispatch(self) -> int:
         """Poll for inbox tasks and dispatch each to an agent CLI.
 
         Returns:
             Number of tasks dispatched in this call.
         """
-        # Check if client is configured
         if self.client is None or not self.client.is_configured:
             return 0
 
@@ -476,7 +263,11 @@ class TaskPoller:
         return created_ids
 
     def _dispatch_task(self, task: dict) -> bool:
-        """Dispatch a single task to an agent CLI.
+        """Dispatch a single task via ai_orch run.
+
+        When ``async_dispatch`` is True, the task is only marked IN_PROGRESS
+        (the agent hasn't finished yet). When False (default), the subprocess
+        blocks and the task transitions IN_PROGRESS → DONE.
 
         Args:
             task: Task dict with 'id', 'title', 'description'.
@@ -493,7 +284,7 @@ class TaskPoller:
             logger.info(f"Created {len(decompose_ids)} subtasks for {task_id}")
             try:
                 updated_task = self.client.update_task(task_id, TaskStatus.BLOCKED, board_id=self.board_id)
-            except Exception as e:  # pragma: no cover - client-level exceptions
+            except Exception as e:
                 logger.error(f"Failed to block parent task {task_id}: {e}")
                 return False
 
@@ -503,22 +294,16 @@ class TaskPoller:
 
             return True
 
-        cli = detect_cli(
-            task,
-            self.agent_cli_map,
-            prompt_library_path=self.prompt_library_path,
-        )
         task_summary = f"{title}: {description}" if description else title
-
-        logger.info(f"Dispatching task {task_id} to {cli}: {title}")
+        cli_label = self.agent_cli or "ai_orch-default"
+        logger.info(f"Dispatching task {task_id} to {cli_label}: {title}")
 
         dispatched = False
         token_usage: dict[str, int] = {}
 
-        # Use custom dispatch_fn if provided
         if self.dispatch_fn is not None:
             try:
-                dispatch_response = self.dispatch_fn(cli, task)
+                dispatch_response = self.dispatch_fn(self.agent_cli, task)
                 if isinstance(dispatch_response, tuple) and len(dispatch_response) == 2:
                     dispatched = bool(dispatch_response[0])
                     maybe_usage = dispatch_response[1]
@@ -534,10 +319,8 @@ class TaskPoller:
             except Exception as e:
                 logger.error(f"dispatch_fn failed for {task_id}: {e}")
         else:
-            # Default: use subprocess directly (claude/codex/gemini/cursor)
-            dispatched, token_usage = self._dispatch_via_subprocess(cli, task_summary, task_id)
+            dispatched, token_usage = self._dispatch_via_ai_orch(task_summary, task_id)
 
-        # Only mark in_progress when dispatch succeeded and API update succeeds
         if not dispatched:
             return False
 
@@ -549,7 +332,7 @@ class TaskPoller:
                 custom_fields=custom_fields,
                 board_id=self.board_id,
             )
-        except Exception as e:  # pragma: no cover - client-level exceptions
+        except Exception as e:
             logger.error(f"Failed to mark task {task_id} as in_progress: {e}")
             return False
 
@@ -557,13 +340,17 @@ class TaskPoller:
             logger.error(f"Mission Control rejected in_progress update for task {task_id}")
             return False
 
+        if self.async_dispatch:
+            logger.info(f"Async dispatch — task {task_id} stays IN_PROGRESS")
+            return True
+
         try:
             done_task = self.client.update_task(
                 task_id,
                 TaskStatus.DONE,
                 board_id=self.board_id,
             )
-        except Exception as e:  # pragma: no cover - client-level exceptions
+        except Exception as e:
             logger.error(f"Failed to mark task {task_id} as done: {e}")
             return False
 
@@ -571,74 +358,47 @@ class TaskPoller:
             logger.error(f"Mission Control rejected done update for task {task_id}")
             return False
 
-        _update_prompt_library(task, cli, self.prompt_library_path)
         return True
 
-    def _dispatch_via_subprocess(
+    def _dispatch_via_ai_orch(
         self,
-        cli: str,
         task_summary: str,
         task_id: str,
     ) -> tuple[bool, dict[str, int]]:
-        """Dispatch task via synchronous subprocess.
+        """Dispatch task via ``ai_orch run`` with dynamic param passthrough.
 
-        Command patterns:
-        - claude:  claude --output-format stream-json --verbose
-                   --dangerously-skip-permissions  (prompt via stdin)
-        - codex:   codex exec --yolo --skip-git-repo-check  (prompt via stdin)
-        - gemini:  gemini -m {model} --yolo  (prompt via stdin; -p is deprecated)
-        - cursor:  cursor-agent -f -p @{tmpfile} --model {model} --output-format text
-
-        ai_orch run is intentionally NOT used — it creates a detached tmux
-        session and exits 0 immediately before the agent finishes.
+        Builds the ai_orch command from configured fields (``agent_cli``,
+        ``model``, ``async_dispatch``, ``resume``, ``worktree``).  Only
+        flags with non-default values are included.
 
         Args:
-            cli: CLI name to use (claude, codex, gemini, cursor).
             task_summary: Task description string.
             task_id: Task ID for logging.
 
         Returns:
             (True if dispatch succeeded, token usage data).
         """
-        # Strip Claude Code session vars to allow nested claude invocations.
-        env = dict(os.environ)
-        for key in list(env):
-            if key == "CLAUDECODE" or key.startswith("CLAUDE_CODE_"):
-                env.pop(key)
-
-        cmd: list[str]
-        stdin_input: bytes | None = None
-        prompt_file_path: str | None = None
-
-        if cli == "codex":
-            cmd = ["codex", "exec", "--yolo", "--skip-git-repo-check"]
-            stdin_input = task_summary.encode()
-        elif cli == "gemini":
-            model = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
-            cmd = ["gemini", "-m", model, "--yolo"]
-            stdin_input = task_summary.encode()
-        elif cli == "cursor":
-            model = os.environ.get("CURSOR_MODEL", "composer-1")
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-                f.write(task_summary)
-                prompt_file_path = f.name
-            cmd = ["cursor-agent", "-f", "-p", f"@{prompt_file_path}",
-                   "--model", model, "--output-format", "text"]
-        else:
-            # claude (default)
-            cmd = ["claude", "--output-format", "stream-json", "--verbose",
-                   "--dangerously-skip-permissions"]
-            stdin_input = task_summary.encode()
+        cmd: list[str] = ["ai_orch", "run"]
+        if self.agent_cli:
+            cmd.extend(["--agent-cli", self.agent_cli])
+        if self.model:
+            cmd.extend(["--model", self.model])
+        if self.async_dispatch:
+            cmd.append("--async")
+        if self.resume:
+            cmd.append("--resume")
+        if self.worktree:
+            cmd.append("--worktree")
+        cmd.extend(["--", task_summary])
+        logger.info(f"ai_orch run for task {task_id}")
 
         token_usage: dict[str, int] = {}
         dispatched = False
         try:
             result = subprocess.run(
                 cmd,
-                input=stdin_input,
                 capture_output=True,
                 timeout=300,
-                env=env,
             )
             dispatched = result.returncode == 0
             token_usage = _extract_token_usage(result.stdout)
@@ -647,15 +407,9 @@ class TaskPoller:
         except subprocess.TimeoutExpired:
             logger.error(f"Task dispatch timed out for {task_id}")
         except FileNotFoundError:
-            logger.error(f"{cli} not found in PATH")
+            logger.error("ai_orch not found in PATH")
         except Exception as e:
             logger.error(f"Failed to dispatch task {task_id}: {e}")
-        finally:
-            if prompt_file_path:
-                try:
-                    os.unlink(prompt_file_path)
-                except OSError:
-                    pass
 
         return dispatched, token_usage
 
@@ -691,13 +445,17 @@ if __name__ == "__main__":
         action="store_true",
         help="Run a single poll-and-dispatch cycle and exit",
     )
+    parser.add_argument("--agent-cli", default=None, help="Agent CLI to pass to ai_orch (default: let ai_orch decide)")
+    parser.add_argument("--model", default=None, help="Model to pass to ai_orch")
+    parser.add_argument("--async", dest="async_dispatch", action="store_true", help="Pass --async to ai_orch (skip DONE transition)")
+    parser.add_argument("--resume", action="store_true", help="Pass --resume to ai_orch")
+    parser.add_argument("--worktree", action="store_true", help="Pass --worktree to ai_orch")
 
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    # Load config from environment
     args = parser.parse_args()
     board_id = os.environ.get("MISSION_CONTROL_BOARD_ID")
     if not board_id:
@@ -709,8 +467,15 @@ if __name__ == "__main__":
         print("ERROR: Mission Control not configured (check env vars)")
         exit(1)
 
-    dispatch_fn = build_claudem_dispatch() if os.environ.get("MINIMAX_API_KEY") else None
-    poller = TaskPoller(board_id=board_id, client=client, dispatch_fn=dispatch_fn)
+    poller = TaskPoller(
+        board_id=board_id,
+        client=client,
+        agent_cli=args.agent_cli,
+        model=args.model,
+        async_dispatch=args.async_dispatch,
+        resume=args.resume,
+        worktree=args.worktree,
+    )
     print(f"Starting task poller for board {board_id}...")
 
     if args.once:

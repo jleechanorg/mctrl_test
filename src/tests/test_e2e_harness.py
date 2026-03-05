@@ -1,10 +1,8 @@
-"""Tests for E2E harness and claudem dispatch adapter.
+"""Tests for E2E harness and dispatch_fn injection.
 
 Tests cover:
 - FakeMissionControlServer behavior
 - dispatch_fn injection in TaskPoller
-- build_claudem_dispatch() factory
-- detect_cli() minimax path
 """
 
 from __future__ import annotations
@@ -26,11 +24,7 @@ from integration.run_e2e import (
     FakeMissionControlServer,
     FAKE_TASKS,
 )
-from orchestration.task_poller import (
-    TaskPoller,
-    detect_cli,
-    build_claudem_dispatch,
-)
+from orchestration.task_poller import TaskPoller
 from orchestration.mc_client import TaskStatus
 
 
@@ -98,7 +92,6 @@ class TestFakeMissionControlServer:
 class TestDispatchFn:
     """Tests for dispatch_fn parameter in TaskPoller."""
 
-    @patch.dict("os.environ", {}, clear=True)
     def test_dispatch_fn_receives_correct_args(self):
         """dispatch_fn is called with (cli, task) arguments."""
         mock_client = MagicMock()
@@ -122,8 +115,7 @@ class TestDispatchFn:
 
         poller.poll_and_dispatch()
 
-        # CLI may be selected by prompt-library defaults (claudem) or fallback (claude)
-        assert captured_args.get("cli") in {"claude", "claudem"}
+        assert captured_args.get("cli") is None  # default agent_cli is None
         assert captured_args.get("task").get("id") == "task-1"
 
     def test_dispatch_fn_overrides_subprocess(self):
@@ -165,89 +157,3 @@ class TestDispatchFn:
         mock_client.update_task.assert_not_called()
 
 
-class TestBuildClaudemDispatch:
-    """Tests for build_claudem_dispatch factory."""
-
-    @patch("orchestration.task_poller.subprocess.run")
-    def test_returns_callable(self, mock_run):
-        """build_claudem_dispatch returns a callable."""
-        mock_run.return_value.returncode = 0
-        dispatch_fn = build_claudem_dispatch()
-
-        assert callable(dispatch_fn)
-
-    @patch("orchestration.task_poller.subprocess.run")
-    def test_calls_claudem_with_task_info(self, mock_run):
-        """Dispatch function calls claude binary with task summary (not claudem bash fn)."""
-        mock_run.return_value.returncode = 0
-        dispatch_fn = build_claudem_dispatch()
-
-        task = {"id": "task-123", "title": "My Task", "description": "Task desc"}
-        dispatch_fn("claudem", task)
-
-        # Verify subprocess.run was called
-        mock_run.assert_called_once()
-        call_args = mock_run.call_args[0][0]
-        call_kwargs = mock_run.call_args[1]
-        # cmd should pass prompt over stdin (no -p with --print)
-        assert call_args == ["claude", "--dangerously-skip-permissions", "--print"]
-        assert call_kwargs.get("input") == b"My Task: Task desc"
-
-    @patch("orchestration.task_poller.subprocess.run")
-    def test_returns_true_on_success(self, mock_run):
-        """Dispatch function returns True on successful dispatch."""
-        mock_run.return_value.returncode = 0
-        dispatch_fn = build_claudem_dispatch()
-
-        result = dispatch_fn("claudem", {"id": "task-1", "title": "Test"})
-
-        assert result is True
-
-    @patch("orchestration.task_poller.subprocess.run")
-    def test_returns_false_on_failure(self, mock_run):
-        """Dispatch function returns False when claudem exits non-zero."""
-        mock_run.return_value.returncode = 1
-        dispatch_fn = build_claudem_dispatch()
-
-        result = dispatch_fn("claudem", {"id": "task-1", "title": "Test"})
-
-        assert result is False
-
-    @patch("orchestration.task_poller.subprocess.run")
-    def test_uses_timeout_of_300(self, mock_run):
-        """Dispatch function uses 300s timeout."""
-        mock_run.return_value.returncode = 0
-        dispatch_fn = build_claudem_dispatch()
-
-        dispatch_fn("claudem", {"id": "task-1", "title": "Test"})
-
-        call_kwargs = mock_run.call_args[1]
-        assert call_kwargs.get("timeout") == 300
-
-
-class TestDetectCliMinimax:
-    """Tests for detect_cli minimax path."""
-
-    @patch.dict("os.environ", {"MINIMAX_API_KEY": "test-key-123"})
-    def test_returns_claudem_when_minimax_set(self):
-        """When MINIMAX_API_KEY is set, returns claudem."""
-        task = {"title": "Any task", "description": "Any description"}
-        result = detect_cli(task)
-
-        assert result == "claudem"
-
-    @patch.dict("os.environ", {}, clear=True)
-    def test_falls_back_to_keyword_detection(self):
-        """When MINIMAX_API_KEY not set, falls back to keyword detection."""
-        task = {"title": "Refactor complex code", "description": ""}
-        result = detect_cli(task)
-
-        assert result == "codex"
-
-    @patch.dict("os.environ", {}, clear=True)
-    def test_falls_back_to_claude_when_no_keywords(self):
-        """When no keywords match, defaults to claude."""
-        task = {"title": "Random task", "description": "Nothing special"}
-        result = detect_cli(task)
-
-        assert result == "claude"
