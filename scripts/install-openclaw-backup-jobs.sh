@@ -9,9 +9,9 @@ PLIST_TEMPLATE="$SCRIPTS/openclaw-backup.plist.template"
 LAUNCHD_DIR="$HOME/Library/LaunchAgents"
 PLIST_DST="$LAUNCHD_DIR/com.openclaw.backup.plist"
 CRON_MARKER="# OpenClaw 4h backup for ~/.openclaw"
-# Staggered at :40 — launchd fires approx :00, openclaw-cron at :20, system cron at :40.
-CRON_CMD="$RUNNER"
 WATCHDOG_MARKER="# OpenClaw backup watchdog (hourly)"
+DROPBOX_MARKER="# OpenClaw Dropbox backup (4h, offset :10)"
+DROPBOX_BACKUP="$SCRIPTS/dropbox-openclaw-backup.sh"
 
 mkdir -p "$LAUNCHD_DIR"
 mkdir -p "$HOME/Library/Logs/openclaw-backup"
@@ -46,61 +46,27 @@ launchctl kickstart -k gui/$(id -u)/com.openclaw.backup
 
 echo "Installed launchd job at $PLIST_DST"
 
-# ---------- cron ----------
-CRON_TMP="$(mktemp)"
-crontab -l > "$CRON_TMP" 2>/dev/null || true
+# ---------- legacy cron cleanup ----------
+if command -v crontab >/dev/null 2>&1; then
+  CRON_BEFORE="$(mktemp)"
+  CRON_AFTER="$(mktemp)"
+  crontab -l > "$CRON_BEFORE" 2>/dev/null || true
 
-if ! grep -Fq "$CRON_MARKER" "$CRON_TMP"; then
-  {
-    echo "$CRON_MARKER"
-    # :40 offset — staggered after launchd (:00) and openclaw-cron (:20)
-    echo "40 */4 * * * $CRON_CMD"
-  } >> "$CRON_TMP"
-  crontab "$CRON_TMP"
-  echo "Installed cron job: every 4 hours at :40"
-elif ! grep -Fq "40 */4 * * * $CRON_CMD" "$CRON_TMP"; then
-  # Marker exists but schedule or path is stale; replace matching cron line.
-  # Matches any minute-field before */4 (e.g. "0 */4" → "40 */4").
-  sed -i.bak "s|^[0-9]* \*/4 \* \* \* $CRON_CMD|40 */4 * * * $CRON_CMD|" "$CRON_TMP"
-  crontab "$CRON_TMP"
-  echo "Updated cron job schedule/path to 40 */4 $CRON_CMD"
-else
-  echo "Cron job already present with correct schedule; skipping."
+  if [[ -s "$CRON_BEFORE" ]]; then
+    grep -Fv "$CRON_MARKER" "$CRON_BEFORE" \
+      | grep -Fv "$RUNNER" \
+      | grep -Fv "$WATCHDOG_MARKER" \
+      | grep -Fv "$WATCHDOG" \
+      | grep -Fv "$DROPBOX_MARKER" \
+      | grep -Fv "$DROPBOX_BACKUP" \
+      > "$CRON_AFTER" || true
+    if ! cmp -s "$CRON_BEFORE" "$CRON_AFTER"; then
+      crontab "$CRON_AFTER"
+      echo "Removed legacy OpenClaw backup entries from system crontab."
+    fi
+  fi
+
+  rm -f "$CRON_BEFORE" "$CRON_AFTER"
 fi
 
-# ---------- watchdog (hourly) ----------
-if ! grep -Fq "$WATCHDOG_MARKER" "$CRON_TMP"; then
-  {
-    echo "$WATCHDOG_MARKER"
-    echo "0 * * * * $WATCHDOG"
-  } >> "$CRON_TMP"
-  crontab "$CRON_TMP"
-  echo "Installed watchdog cron job: every hour"
-elif ! grep -Fq "$WATCHDOG" "$CRON_TMP"; then
-  sed -i.bak "\|$WATCHDOG_MARKER|{n; s|.*|0 * * * * $WATCHDOG|;}" "$CRON_TMP"
-  crontab "$CRON_TMP"
-  echo "Updated watchdog cron job path to $WATCHDOG"
-else
-  echo "Watchdog cron job already present; skipping."
-fi
-
-# ---------- Dropbox backup (every 4h at :10) ----------
-DROPBOX_MARKER="# OpenClaw Dropbox backup (4h, offset :10)"
-DROPBOX_BACKUP="$SCRIPTS/dropbox-openclaw-backup.sh"
-
-if ! grep -Fq "$DROPBOX_MARKER" "$CRON_TMP"; then
-  echo "$DROPBOX_MARKER" >> "$CRON_TMP"
-  echo "10 */4 * * * $DROPBOX_BACKUP" >> "$CRON_TMP"
-  crontab "$CRON_TMP"
-  echo "Installed Dropbox backup cron: every 4h at :10"
-elif ! grep -Fq "10 */4 * * * $DROPBOX_BACKUP" "$CRON_TMP"; then
-  sed -i.bak "s|^[0-9]* \*/4 \* \* \* $DROPBOX_BACKUP|10 */4 * * * $DROPBOX_BACKUP|" "$CRON_TMP"
-  crontab "$CRON_TMP"
-  echo "Updated Dropbox backup cron entry"
-else
-  echo "Dropbox backup cron already present; skipping."
-fi
-
-rm -f "$CRON_TMP"
-
-echo "Done."
+echo "Done. OpenClaw backup scheduling now uses launchd only."

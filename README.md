@@ -81,6 +81,7 @@ Context windows are zero-sum. Fill it with code and there's no room for business
 | `scripts/backup-openclaw-full.sh` | Full recursive backup of `~/.openclaw/` with secret redaction |
 | `scripts/run-openclaw-backup.sh` | Backup runner with locking and failure alerts |
 | `scripts/install-openclaw-backup-jobs.sh` | Install launchd plist for scheduled backups |
+| `scripts/check-openclaw-cron-guardrail.sh` | Guardrail check for forbidden OpenClaw `crontab` usage |
 | `health-check.sh` | Gateway and agent health checks |
 | `create_worktree.sh` | Create isolated git worktrees for parallel agent work |
 | `integrate.sh` | Integration tooling |
@@ -154,7 +155,9 @@ curl -sS -X POST "http://127.0.0.1:18789/v1/chat/completions" \
   -d '{"agent":"main","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-### 4. Cron integration location (this repo)
+### 4. Scheduling Guardrail (Gateway Cron Only)
+
+Use OpenClaw gateway cron for reminders/schedules. Do not edit system `crontab` for OpenClaw jobs.
 
 - Tracked cron jobs live in: `openclaw-config/cron/jobs.json`
 - The Genesis weekly curation job is defined there as:
@@ -166,9 +169,17 @@ curl -sS -X POST "http://127.0.0.1:18789/v1/chat/completions" \
 Quick verify:
 
 ```bash
-openclaw gateway status
+# Inspect gateway cron support
+openclaw cron --help
+
+# Common operations
+openclaw cron status
+openclaw cron list
+
+# Ensure tracked job exists
 jq '.jobs[] | select(.id=="genesis-memory-curation-weekly")' openclaw-config/cron/jobs.json
-# Optional runtime check (after sync):
+
+# Optional runtime check (after sync)
 jq '.jobs[] | select(.id=="genesis-memory-curation-weekly")' ~/.openclaw/cron/jobs.json
 ```
 

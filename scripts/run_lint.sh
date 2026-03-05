@@ -93,6 +93,14 @@ if ! run_linter "Docs Linting" "$docs_cmd" "📝"; then
     overall_status=1
 fi
 
+# 6. OpenClaw cron guardrail
+echo -e "\n${BLUE}⏱️ STEP 6: OpenClaw Cron Guardrail${NC}"
+cron_guardrail_cmd="pnpm check:cron-guardrail"
+
+if ! run_linter "OpenClaw Cron Guardrail" "$cron_guardrail_cmd" "⏱️"; then
+    overall_status=1
+fi
+
 # Summary
 echo -e "\n=================================================="
 if [[ $overall_status -eq 0 ]]; then
@@ -106,6 +114,6 @@ fi
 
 echo -e "\n${BLUE}📊 Linting Summary:${NC}"
 echo "  • Mode: $([ "$FIX_MODE" == "fix" ] && echo "Auto-fix enabled" || echo "Check-only")"
-echo "  • Tools: oxlint, oxfmt, TypeScript, SwiftLint, markdownlint"
+echo "  • Tools: oxlint, oxfmt, TypeScript, SwiftLint, markdownlint, OpenClaw cron guardrail"
 
 exit $overall_status

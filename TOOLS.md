@@ -30,6 +30,12 @@ Projects requiring special handling:
 | worldarchitect.ai | `pnpm build`, `pnpm test` | Full test suite |
 | Claude Code | `claude --dangerously-skip-permissions` | Use sparingly |
 
+## OpenClaw Scheduling Guardrail
+
+- Forbidden: system `crontab` changes for OpenClaw reminder/scheduling/automation jobs.
+- Required: OpenClaw gateway cron subcommands only (`openclaw cron ...`).
+- First command to use: `openclaw cron --help`
+
 ## Infrastructure
 
 ### Exe.dev VMs

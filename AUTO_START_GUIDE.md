@@ -6,6 +6,13 @@
 
 ---
 
+## 🚧 Scheduling Guardrail
+
+- **Forbidden:** system `crontab` edits for OpenClaw reminder/scheduling jobs.
+- **Required:** OpenClaw gateway cron workflow only (`openclaw cron ...`).
+
+---
+
 ## ✅ What's Configured
 
 ### 1. **Primary Auto-Start: LaunchAgent**
@@ -20,10 +27,10 @@
 - **Sends message to:** `OPENCLAW_WHATSAPP_TARGET`
 - **Logs:** `~/.openclaw/logs/startup-check.log`
 
-### 3. **Health Monitoring: Crontab**
+### 3. **Health Monitoring: OpenClaw Gateway Cron**
 - **Schedule:** Every 5 minutes
 - **Script:** `~/.openclaw/health-check.sh`
-- **Purpose:** Monitors gateway health and auto-recovery if needed
+- **Purpose:** Monitors gateway health and auto-recovery if needed via OpenClaw gateway cron jobs
 - **Logs:** `~/.openclaw/logs/health-check.log`
 
 ---
@@ -82,9 +89,10 @@ tail -f ~/.openclaw/logs/health-check.log
 tail -f ~/.openclaw/logs/startup-check.log
 ```
 
-### Check Crontab Configuration
+### Check Gateway Cron Configuration
 ```bash
-crontab -l | grep openclaw
+openclaw cron status
+openclaw cron list
 ```
 
 ---
@@ -155,9 +163,10 @@ launchctl load ~/Library/LaunchAgents/ai.openclaw.gateway.plist
 
 ### Health Check Not Running
 
-1. **Verify crontab:**
+1. **Verify gateway cron jobs:**
    ```bash
-   crontab -l
+   openclaw cron status
+   openclaw cron list
    ```
 
 2. **Test health check manually:**
@@ -165,9 +174,9 @@ launchctl load ~/Library/LaunchAgents/ai.openclaw.gateway.plist
    ~/.openclaw/health-check.sh && echo "Exit code: $?"
    ```
 
-3. **Check cron logs (macOS):**
+3. **Inspect gateway logs for cron execution details:**
    ```bash
-   log show --predicate 'process == "cron"' --last 1h
+   openclaw logs --follow
    ```
 
 ---
@@ -204,7 +213,7 @@ echo "" && openclaw channels list
 
 ✅ **LaunchAgent installed** with RunAtLoad=true, KeepAlive=true
 ✅ **Startup verification** configured (sends WhatsApp confirmation)
-✅ **Health monitoring** via cron (every 5 minutes)
+✅ **Health monitoring** via OpenClaw gateway cron (every 5 minutes)
 ✅ **WhatsApp notification** configured via `OPENCLAW_WHATSAPP_TARGET`
 ✅ **Auto-recovery** enabled (restarts on crash)
 ✅ **Version:** v2026.2.12 (latest)

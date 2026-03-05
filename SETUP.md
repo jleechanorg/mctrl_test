@@ -16,7 +16,7 @@ cd openclaw
 This will:
 1. ✅ Check prerequisites (python3, rsync, git)
 2. ✅ Install/copy repo to `~/.openclaw/workspace/openclaw`
-3. ✅ Set up automated backups (cron + launchd)
+3. ✅ Set up automated backups (launchd only)
 4. ✅ Configure backup jobs to run every 4 hours
 
 ## What Gets Installed
@@ -27,15 +27,10 @@ The setup script installs an automated backup system that:
 
 - **Backs up** `~/.openclaw/` directory to `.openclaw-backups/<timestamp>/`
 - **Redacts** sensitive data (API keys, tokens, credentials)
-- **Runs** every 4 hours via both cron and launchd (redundant)
+- **Runs** every 4 hours via launchd
 - **Commits** changes to git automatically
 
 ### Scheduled Jobs
-
-**Cron Job:**
-```
-0 */4 * * * ~/.openclaw/workspace/openclaw/scripts/run-openclaw-backup.sh
-```
 
 **Launchd Job:**
 - Service: `com.openclaw.backup`
@@ -73,7 +68,7 @@ cd openclaw
 ./scripts/install-openclaw-backup-jobs.sh
 ```
 
-This installs both cron and launchd jobs for redundancy.
+This installs launchd jobs for backup automation and removes legacy OpenClaw cron entries.
 
 ## Verification
 
@@ -105,8 +100,9 @@ tail -f ~/Library/Logs/openclaw-backup/stderr.log
 ### Verify Jobs
 
 ```bash
-# Check cron
-crontab -l | grep openclaw
+# OpenClaw reminders/schedules (gateway cron only)
+openclaw cron status
+openclaw cron list
 
 # Check launchd
 launchctl list | grep openclaw
@@ -162,11 +158,12 @@ launchctl enable gui/$(id -u)/com.openclaw.backup
 launchctl kickstart -k gui/$(id -u)/com.openclaw.backup
 ```
 
-### Cron Job Not Running
+### Gateway Cron Job Not Running
 
 ```bash
-# Check cron logs (macOS)
-log show --predicate 'process == "cron"' --last 1h
+# Check gateway cron status and jobs
+openclaw cron status
+openclaw cron list
 
 # Manually run the backup
 ~/.openclaw/workspace/openclaw/scripts/run-openclaw-backup.sh
@@ -208,7 +205,7 @@ Main backup script with redaction logic.
 Wrapper script that runs backup and commits to git.
 
 ### `install-openclaw-backup-jobs.sh`
-Installs both cron and launchd backup jobs.
+Installs launchd backup jobs.
 
 ### `openclaw-backup.plist`
 Launchd configuration for automated backups.
