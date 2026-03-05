@@ -15,6 +15,50 @@ class TaskStatus(StrEnum):
     FAILED = "failed"
 
 
+class MissionControlClient:
+    """Mission Control client that reads configuration from environment."""
+
+    def __init__(self) -> None:
+        import os
+        self.base_url = os.environ.get("MISSION_CONTROL_BASE_URL", "").rstrip("/")
+        self._token = os.environ.get("MISSION_CONTROL_TOKEN", "")
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.base_url and self._token)
+
+    def upsert_agent(
+        self,
+        board_id: str,
+        agent_id: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Register or update an agent heartbeat in Mission Control."""
+        import json
+        import urllib.request
+        import urllib.error
+
+        payload: dict[str, Any] = {"agent_id": agent_id, "board_id": board_id}
+        if metadata:
+            payload["metadata"] = metadata
+        url = f"{self.base_url}/agents/{agent_id}"
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self._token}",
+            },
+            method="PUT",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10):
+                pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("upsert_agent error for %s: %s", agent_id, exc)
+
+
 class MCClient:
     """Minimal Mission Control client for task state management."""
 
