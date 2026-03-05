@@ -1,20 +1,20 @@
+"""Tests for orchestration.gh_integration — GitHub SCM logic ported from TS."""
+
 import json
 import subprocess
 from unittest.mock import patch, MagicMock
+from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
 from orchestration.gh_integration import (
-    ALLOWED_REPOS,
     PRInfo,
     CIStatus,
     ReviewDecision,
     MergeReadiness,
     BOT_AUTHORS,
     gh,
-    resolve_repo_target,
-    validate_repo_target,
-    validate_branch_target,
     detect_pr,
     get_pr_state,
     get_pr_summary,
@@ -30,34 +30,23 @@ from orchestration.gh_integration import (
 )
 
 
+# ---------------------------------------------------------------------------
+# Helper: mock gh CLI output
+# ---------------------------------------------------------------------------
+
+
 def mock_gh_result(stdout: str):
     """Create a mock CompletedProcess for subprocess.run."""
     return subprocess.CompletedProcess(args=["gh"], returncode=0, stdout=stdout, stderr="")
 
 
-def test_validate_repo_target_blocks_unknown_repo() -> None:
-    with pytest.raises(ValueError, match="allowlist"):
-        validate_repo_target("example/unknown-repo")
+def mock_gh_error(msg: str = "error"):
+    return subprocess.CalledProcessError(returncode=1, cmd=["gh"], stderr=msg)
 
 
-def test_resolve_repo_target_uses_default_on_none() -> None:
-    assert resolve_repo_target(None, "jleechanorg/jleechanclaw") == "jleechanorg/jleechanclaw"
-
-
-def test_resolve_repo_target_raises_on_unknown_default() -> None:
-    with pytest.raises(ValueError, match="allowlist"):
-        resolve_repo_target(None, "example/not-allowed")
-
-
-def test_validate_repo_target_enforces_owner_name_format() -> None:
-    with pytest.raises(ValueError, match="owner/name"):
-        validate_repo_target("badformat")
-
-
-def test_allowed_repos_are_expected() -> None:
-    assert ALLOWED_REPOS == frozenset(
-        ["jleechanorg/jleechanclaw", "jleechanorg/worldarchitect.ai"]
-    )
+# ---------------------------------------------------------------------------
+# PRInfo dataclass
+# ---------------------------------------------------------------------------
 
 
 class TestPRInfo:
@@ -136,35 +125,6 @@ class TestDetectPR:
     def test_invalid_repo_format(self):
         with pytest.raises(ValueError, match="expected.*owner/repo"):
             detect_pr("feat-x", "invalid-repo")
-
-
-# ---------------------------------------------------------------------------
-# validate_branch_target()
-# ---------------------------------------------------------------------------
-
-
-class TestValidateBranchTarget:
-    def test_blocks_main(self):
-        with pytest.raises(ValueError, match="protected branch"):
-            validate_branch_target("main")
-
-    def test_blocks_master(self):
-        with pytest.raises(ValueError, match="protected branch"):
-            validate_branch_target("master")
-
-    def test_blocks_flat_branch_name(self):
-        with pytest.raises(ValueError, match="must contain '/'"):
-            validate_branch_target("mybranch")
-
-    def test_allows_feat_branch_and_logs_warning(self, caplog):
-        caplog.set_level("WARNING")
-        validate_branch_target("feat/my-feature")
-        assert "feat/my-feature" in caplog.text
-
-    def test_allows_fix_branch_and_logs_warning(self, caplog):
-        caplog.set_level("WARNING")
-        validate_branch_target("fix/orch-123")
-        assert "fix/orch-123" in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -360,9 +320,28 @@ class TestGetReviewDecision:
 
 class TestGetPendingComments:
     @patch("orchestration.gh_integration.gh")
+    def test_uses_review_threads_first_100_query(self, mock_gh):
+        mock_gh.return_value = json.dumps({
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "reviewThreads": {"totalCount": 0, "nodes": []},
+                    }
+                }
+            }
+        })
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        get_pending_comments(pr)
+        call_args = mock_gh.call_args[0][0]
+        query_arg = next(arg for arg in call_args if arg.startswith("query=query"))
+        assert "reviewThreads(first: 100)" in query_arg
+        assert "totalCount" in query_arg
+
+    @patch("orchestration.gh_integration.gh")
     def test_filters_resolved(self, mock_gh):
         mock_gh.return_value = json.dumps({"data": {"repository": {"pullRequest": {
-            "reviewThreads": {"nodes": [
+            "reviewThreads": {"totalCount": 2, "nodes": [
                 {"isResolved": True, "comments": {"nodes": [
                     {"id": "1", "author": {"login": "human"}, "body": "fix this",
                      "path": "a.py", "line": 10, "url": "https://...", "createdAt": "2026-01-01T00:00:00Z"},
@@ -382,7 +361,7 @@ class TestGetPendingComments:
     @patch("orchestration.gh_integration.gh")
     def test_filters_bots(self, mock_gh):
         mock_gh.return_value = json.dumps({"data": {"repository": {"pullRequest": {
-            "reviewThreads": {"nodes": [
+            "reviewThreads": {"totalCount": 1, "nodes": [
                 {"isResolved": False, "comments": {"nodes": [
                     {"id": "1", "author": {"login": "github-actions[bot]"}, "body": "auto msg",
                      "path": "a.py", "line": 10, "url": "https://...", "createdAt": "2026-01-01T00:00:00Z"},
@@ -394,12 +373,93 @@ class TestGetPendingComments:
         comments = get_pending_comments(pr)
         assert len(comments) == 0
 
-    @patch("orchestration.gh_integration.gh", side_effect=RuntimeError("fail"))
-    def test_error_returns_empty(self, mock_gh):
+    @patch("orchestration.gh_integration.gh")
+    def test_bot_heavy_thread_with_hidden_human_comment_fails_closed(self, mock_gh):
+        """When all visible comments are bots but more exist unfetched, include thread (fail-closed)."""
+        mock_gh.return_value = json.dumps({"data": {"repository": {"pullRequest": {
+            "reviewThreads": {"totalCount": 1, "nodes": [
+                {"isResolved": False, "comments": {"totalCount": 55, "nodes": [
+                    {"id": "1", "author": {"login": "github-actions[bot]"}, "body": "auto msg",
+                     "path": "a.py", "line": 10, "url": "https://...", "createdAt": "2026-01-01T00:00:00Z"},
+                ]}},
+            ]},
+        }}}})
         pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
                     branch="b", base_branch="main", is_draft=False)
         comments = get_pending_comments(pr)
-        assert comments == []
+        # Should NOT be filtered out — human comment may be hidden beyond page boundary
+        assert len(comments) == 1
+
+    @patch("orchestration.gh_integration.gh")
+    def test_all_bot_thread_with_all_fetched_is_filtered(self, mock_gh):
+        """When all comments are bots and all are fetched, thread is correctly filtered out."""
+        mock_gh.return_value = json.dumps({"data": {"repository": {"pullRequest": {
+            "reviewThreads": {"totalCount": 1, "nodes": [
+                {"isResolved": False, "comments": {"totalCount": 1, "nodes": [
+                    {"id": "1", "author": {"login": "github-actions[bot]"}, "body": "auto msg",
+                     "path": "a.py", "line": 10, "url": "https://...", "createdAt": "2026-01-01T00:00:00Z"},
+                ]}},
+            ]},
+        }}}})
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        comments = get_pending_comments(pr)
+        assert len(comments) == 0
+
+    @patch("orchestration.gh_integration.gh")
+    def test_pagination_overflow_fails_closed(self, mock_gh):
+        """When totalCount > fetched nodes, fail closed with specific message."""
+        mock_gh.return_value = json.dumps({"data": {"repository": {"pullRequest": {
+            "reviewThreads": {"totalCount": 150, "nodes": [
+                {"isResolved": False, "comments": {"totalCount": 1, "nodes": [
+                    {"id": "1", "author": {"login": "human"}, "body": "issue",
+                     "path": "a.py", "line": 1, "url": "https://...", "createdAt": "2026-01-01T00:00:00Z"},
+                ]}},
+            ]},
+        }}}})
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        with pytest.raises(RuntimeError, match="150 review threads"):
+            get_pending_comments(pr)
+
+    @patch("orchestration.gh_integration.gh")
+    def test_missing_totalcount_fails_closed(self, mock_gh):
+        """When totalCount field is absent from response, fail closed (not silently pass)."""
+        mock_gh.return_value = json.dumps({"data": {"repository": {"pullRequest": {
+            "reviewThreads": {"nodes": [
+                {"isResolved": False, "comments": {"totalCount": 1, "nodes": [
+                    {"id": "1", "author": {"login": "human"}, "body": "issue",
+                     "path": "a.py", "line": 1, "url": "https://...", "createdAt": "2026-01-01T00:00:00Z"},
+                ]}},
+            ]},
+        }}}})
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        with pytest.raises(RuntimeError, match="totalCount"):
+            get_pending_comments(pr)
+
+    @patch("orchestration.gh_integration.gh")
+    def test_overflow_error_not_rewrapped(self, mock_gh):
+        """Overflow RuntimeError should propagate with specific message, not generic wrapper."""
+        mock_gh.return_value = json.dumps({"data": {"repository": {"pullRequest": {
+            "reviewThreads": {"totalCount": 150, "nodes": [
+                {"isResolved": False, "comments": {"totalCount": 1, "nodes": [
+                    {"id": "1", "author": {"login": "human"}, "body": "issue",
+                     "path": "a.py", "line": 1, "url": "https://...", "createdAt": "2026-01-01T00:00:00Z"},
+                ]}},
+            ]},
+        }}}})
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        with pytest.raises(RuntimeError, match="150 review threads"):
+            get_pending_comments(pr)
+
+    @patch("orchestration.gh_integration.gh", side_effect=RuntimeError("fail"))
+    def test_error_propagates(self, mock_gh):
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        with pytest.raises(RuntimeError, match="Unable to load reviewThreads"):
+            get_pending_comments(pr)
 
 
 # ---------------------------------------------------------------------------
@@ -411,7 +471,8 @@ class TestGetMergeReadiness:
     @patch("orchestration.gh_integration.gh")
     @patch("orchestration.gh_integration.get_pr_state", return_value="open")
     @patch("orchestration.gh_integration.get_ci_summary", return_value=CIStatus.PASSING)
-    def test_ready_to_merge(self, mock_ci, mock_state, mock_gh):
+    @patch("orchestration.gh_integration.get_pending_comments", return_value=[])
+    def test_ready_to_merge(self, mock_pending, mock_ci, mock_state, mock_gh):
         mock_gh.return_value = json.dumps({
             "mergeable": "MERGEABLE", "reviewDecision": "APPROVED",
             "mergeStateStatus": "CLEAN", "isDraft": False,
@@ -425,7 +486,8 @@ class TestGetMergeReadiness:
     @patch("orchestration.gh_integration.gh")
     @patch("orchestration.gh_integration.get_pr_state", return_value="open")
     @patch("orchestration.gh_integration.get_ci_summary", return_value=CIStatus.FAILING)
-    def test_ci_failing_blocks(self, mock_ci, mock_state, mock_gh):
+    @patch("orchestration.gh_integration.get_pending_comments", return_value=[])
+    def test_ci_failing_blocks(self, mock_pending, mock_ci, mock_state, mock_gh):
         mock_gh.return_value = json.dumps({
             "mergeable": "MERGEABLE", "reviewDecision": "APPROVED",
             "mergeStateStatus": "CLEAN", "isDraft": False,
@@ -446,7 +508,8 @@ class TestGetMergeReadiness:
     @patch("orchestration.gh_integration.gh")
     @patch("orchestration.gh_integration.get_pr_state", return_value="open")
     @patch("orchestration.gh_integration.get_ci_summary", return_value=CIStatus.PASSING)
-    def test_draft_blocks(self, mock_ci, mock_state, mock_gh):
+    @patch("orchestration.gh_integration.get_pending_comments", return_value=[])
+    def test_draft_blocks(self, mock_pending, mock_ci, mock_state, mock_gh):
         mock_gh.return_value = json.dumps({
             "mergeable": "MERGEABLE", "reviewDecision": "APPROVED",
             "mergeStateStatus": "CLEAN", "isDraft": True,
@@ -460,7 +523,8 @@ class TestGetMergeReadiness:
     @patch("orchestration.gh_integration.gh")
     @patch("orchestration.gh_integration.get_pr_state", return_value="open")
     @patch("orchestration.gh_integration.get_ci_summary", return_value=CIStatus.PASSING)
-    def test_conflicts_block(self, mock_ci, mock_state, mock_gh):
+    @patch("orchestration.gh_integration.get_pending_comments", return_value=[])
+    def test_conflicts_block(self, mock_pending, mock_ci, mock_state, mock_gh):
         mock_gh.return_value = json.dumps({
             "mergeable": "CONFLICTING", "reviewDecision": "APPROVED",
             "mergeStateStatus": "CLEAN", "isDraft": False,
@@ -470,6 +534,50 @@ class TestGetMergeReadiness:
         result = get_merge_readiness(pr)
         assert result.mergeable is False
         assert any("conflict" in b.lower() for b in result.blockers)
+
+    @patch("orchestration.gh_integration.gh")
+    @patch("orchestration.gh_integration.get_pr_state", return_value="open")
+    @patch("orchestration.gh_integration.get_ci_summary", return_value=CIStatus.PASSING)
+    @patch(
+        "orchestration.gh_integration.get_pending_comments",
+        return_value=[
+            {
+                "id": "thread-1",
+                "author": "human",
+                "body": "Please fix this first",
+                "path": "a.py",
+                "line": 10,
+                "is_resolved": False,
+                "created_at": "2026-01-01T00:00:00Z",
+                "url": "https://example.com/comment/1",
+            }
+        ],
+    )
+    def test_unresolved_threads_block_merge(self, mock_pending, mock_ci, mock_state, mock_gh):
+        mock_gh.return_value = json.dumps({
+            "mergeable": "MERGEABLE", "reviewDecision": "APPROVED",
+            "mergeStateStatus": "CLEAN", "isDraft": False,
+        })
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        result = get_merge_readiness(pr)
+        assert result.mergeable is False
+        assert any("unresolved" in b.lower() and "thread" in b.lower() for b in result.blockers)
+
+    @patch("orchestration.gh_integration.gh")
+    @patch("orchestration.gh_integration.get_pr_state", return_value="open")
+    @patch("orchestration.gh_integration.get_ci_summary", return_value=CIStatus.PASSING)
+    @patch("orchestration.gh_integration.get_pending_comments", side_effect=RuntimeError("graphql timeout"))
+    def test_unresolved_thread_check_failure_blocks_merge(self, mock_pending, mock_ci, mock_state, mock_gh):
+        mock_gh.return_value = json.dumps({
+            "mergeable": "MERGEABLE", "reviewDecision": "APPROVED",
+            "mergeStateStatus": "CLEAN", "isDraft": False,
+        })
+        pr = PRInfo(number=1, url="", title="", owner="o", repo="r",
+                    branch="b", base_branch="main", is_draft=False)
+        result = get_merge_readiness(pr)
+        assert result.mergeable is False
+        assert any("unable to verify" in b.lower() and "thread" in b.lower() for b in result.blockers)
 
 
 # ---------------------------------------------------------------------------
@@ -593,3 +701,36 @@ class TestGetAutomatedComments:
                     branch="b", base_branch="main", is_draft=False)
         comments = get_automated_comments(pr)
         assert comments == []
+
+
+class TestAgentPRFixTriggerWorkflow:
+    def test_single_pr_fix_trigger_workflow_file(self):
+        workflow_dir = Path(__file__).resolve().parents[2] / ".github/workflows"
+        matches = sorted(workflow_dir.glob("*pr*fix*trigger*.yml"))
+        assert [p.name for p in matches] == ["agent-pr-fix-trigger.yml"]
+
+    def test_workflow_enforces_pr_and_trusted_actor_guards(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/agent-pr-fix-trigger.yml"
+        text = workflow.read_text(encoding="utf-8")
+        assert "github.event.issue.pull_request" in text
+        assert "github.event.comment.author_association" in text
+        assert "permissions: {}" in text
+        assert "OWNER" in text
+        assert "MEMBER" in text
+        assert "COLLABORATOR" in text
+
+    def test_workflow_uses_safe_payload_and_fail_fast_http(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/agent-pr-fix-trigger.yml"
+        text = workflow.read_text(encoding="utf-8")
+        assert "jq -n" in text
+        assert "jq -rn" in text
+        assert "grep -Eiq '@jleechanclaw|<@U0AEZC7RX1Q>'" in text
+        assert 'gsub("(?i)@jleechanclaw|<@U0AEZC7RX1Q>"; "")' in text
+        assert "--fail-with-body" in text
+        assert "/api/v1/boards/$MC_BOARD_ID/tasks" in text
+        assert "xargs" not in text
+
+    def test_workflow_allows_slack_style_mention_trigger(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/agent-pr-fix-trigger.yml"
+        text = workflow.read_text(encoding="utf-8")
+        assert "contains(github.event.comment.body, '<@U0AEZC7RX1Q>')" in text

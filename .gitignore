@@ -102,6 +102,19 @@ config.yaml
 ralph-output.log
 orch-test/
 
-# openclaw backup snapshots — never commit (contain OAuth tokens + session logs)
-.openclaw-backups/
+# openclaw backup snapshots — block everything, un-ignore only session logs for LFS
+.openclaw-backups/latest/*
+!.openclaw-backups/latest/agents/
 .beads/interactions.jsonl
+
+# openclaw credentials — never commit tokens
+openclaw-config/credentials/
+openclaw-config/agents/*/agent/auth-profiles.json
+
+# Old timestamped backup snapshots (only latest/ is kept)
+openclaw/
+.openclaw-backups/20*/
+
+# Worktree marker files and stale submodule refs
+worktree_*
+worldarchitect

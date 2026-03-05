@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>ai.openclaw.mission-control</string>
+
+    <key>Comment</key>
+    <string>OpenClaw Mission Control backend (postgres@16, port 9010)</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/Users/jleechan/.local/bin/uv</string>
+      <string>run</string>
+      <string>--python</string>
+      <string>3.12</string>
+      <string>python</string>
+      <string>-m</string>
+      <string>orchestration.mc_backend_service</string>
+      <string>--app</string>
+      <string>app.main:app</string>
+      <string>--host</string>
+      <string>127.0.0.1</string>
+      <string>--port</string>
+      <string>9010</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/jleechan/projects_reference/openclaw-mission-control/backend</string>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/mc-backend.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/mc-backend.err.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>DATABASE_URL</key>
+      <string>postgresql+psycopg://postgres:postgres@localhost:5432/mission_control</string>
+      <key>AUTH_MODE</key>
+      <string>local</string>
+      <key>LOCAL_AUTH_TOKEN</key>
+      <string>PLACEHOLDER_MC_TOKEN</string>
+      <key>MISSION_CONTROL_BASE_URL</key>
+      <string>http://127.0.0.1:9010</string>
+      <key>MISSION_CONTROL_TOKEN</key>
+      <string>PLACEHOLDER_MC_TOKEN</string>
+      <key>MISSION_CONTROL_BOARD_ID</key>
+      <string>aa68f729-d5e0-4d44-8c99-51bcebc0b8bc</string>
+      <key>MISSION_CONTROL_IN_PROCESS_POLLER</key>
+      <string>1</string>
+      <key>MISSION_CONTROL_POLL_INTERVAL_SECONDS</key>
+      <string>15</string>
+      <key>PYTHONPATH</key>
+      <string>/Users/jleechan/project_jleechanclaw/jleechanclaw/src</string>
+      <key>HOME</key>
+      <string>/Users/jleechan</string>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+  </dict>
+</plist>

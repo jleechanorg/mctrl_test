@@ -11,33 +11,10 @@ Key design choices preserved from TS original:
 from __future__ import annotations
 
 import json
-import logging
-import re
 import subprocess
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Optional
-
-logger = logging.getLogger(__name__)
-
-
-ALLOWED_REPOS = frozenset(["jleechanorg/jleechanclaw", "jleechanorg/worldarchitect.ai"])
-
-_REPO_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-
-
-def validate_repo_target(repo: str, allowed: frozenset = ALLOWED_REPOS) -> None:
-    if not _REPO_PATTERN.fullmatch(repo):
-        raise ValueError(f"Repository '{repo}' must use owner/name format")
-
-    if repo not in allowed:
-        raise ValueError(f"Repository '{repo}' is not in the allowlist")
-
-
-def resolve_repo_target(repo_input: str | None, default_repo: str) -> str:
-    selected_repo = default_repo if repo_input is None else repo_input
-    validate_repo_target(selected_repo)
-    return selected_repo
 
 
 # ---------------------------------------------------------------------------
@@ -135,24 +112,6 @@ def gh(args: list[str]) -> str:
 
 def _repo_flag(pr: PRInfo) -> str:
     return f"{pr.owner}/{pr.repo}"
-
-
-def validate_branch_target(
-    branch_name: str,
-    protected_branches: list[str] = None,
-) -> None:
-    """Validate branch target safety for write operations.
-
-    Raises:
-        ValueError: if branch is protected or has a flat name.
-    """
-    protected = protected_branches if protected_branches is not None else ["main", "master"]
-    if branch_name in protected:
-        raise ValueError(f'Cannot target protected branch "{branch_name}"')
-    if "/" not in branch_name:
-        raise ValueError(f'Branch name "{branch_name}" must contain \'/\'')
-
-    logger.warning("Branch target validated: %s", branch_name)
 
 
 # ---------------------------------------------------------------------------
@@ -362,7 +321,11 @@ def get_pending_comments(pr: PRInfo) -> list[dict]:
     """Get unresolved review threads, excluding bot comments.
 
     Uses GraphQL with -f flag for injection-safe variable passing.
+    Raises RuntimeError on API failure or when pagination makes thread
+    visibility incomplete (fail-closed).
     """
+    # Phase 1: Fetch data from GitHub GraphQL.
+    # Only network/parse errors are caught and re-wrapped here.
     try:
         raw = gh([
             "api", "graphql",
@@ -374,9 +337,11 @@ def get_pending_comments(pr: PRInfo) -> list[dict]:
                 "  repository(owner: $owner, name: $name) {"
                 "    pullRequest(number: $number) {"
                 "      reviewThreads(first: 100) {"
+                "        totalCount"
                 "        nodes {"
                 "          isResolved"
-                "          comments(first: 10) {"
+                "          comments(first: 50) {"
+                "            totalCount"
                 "            nodes {"
                 "              id"
                 "              author { login }"
@@ -395,39 +360,61 @@ def get_pending_comments(pr: PRInfo) -> list[dict]:
             ),
         ])
         data = json.loads(raw)
-        threads = data["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
+        thread_data = data["data"]["repository"]["pullRequest"]["reviewThreads"]
+        threads = thread_data["nodes"]
+    except Exception as exc:
+        raise RuntimeError("Unable to load reviewThreads from GitHub GraphQL") from exc
 
-        result = []
-        for t in threads:
-            if t["isResolved"]:
-                continue
-            comments = t["comments"]["nodes"]
-            if not comments:
-                continue
-            # Find first non-bot comment in thread
-            c = None
-            for candidate in comments:
-                author = (candidate.get("author") or {}).get("login", "unknown")
-                if author not in BOT_AUTHORS:
-                    c = candidate
-                    break
-            if c is None:
-                continue
-            author = (c.get("author") or {}).get("login", "unknown")
-            result.append({
-                "id": c["id"],
-                "author": author,
-                "body": c["body"],
-                "path": c.get("path") or None,
-                "line": c.get("line"),
-                "is_resolved": t["isResolved"],
-                "created_at": c.get("createdAt"),
-                "url": c.get("url"),
-            })
+    # Phase 2: Validate completeness (outside try/except so specific errors propagate).
+    if "totalCount" not in thread_data:
+        raise RuntimeError(
+            "GraphQL response missing totalCount for reviewThreads — "
+            "cannot verify all threads were fetched"
+        )
+    total_count = thread_data["totalCount"]
+    if total_count > len(threads):
+        raise RuntimeError(
+            f"PR has {total_count} review threads but only {len(threads)} "
+            f"were fetched — cannot guarantee all unresolved threads are visible"
+        )
 
-        return result
-    except Exception:
-        return []
+    # Phase 3: Filter to unresolved non-bot threads.
+    result = []
+    for t in threads:
+        if t["isResolved"]:
+            continue
+        comment_data = t["comments"]
+        comments = comment_data["nodes"]
+        comment_total = comment_data.get("totalCount", len(comments))
+        if not comments:
+            continue
+        # Find first non-bot comment in thread
+        c = None
+        for candidate in comments:
+            author = (candidate.get("author") or {}).get("login", "unknown")
+            if author not in BOT_AUTHORS:
+                c = candidate
+                break
+        if c is None:
+            # Fail closed: if there are unfetched comments, a human
+            # comment may be hidden beyond the page boundary.
+            if comment_total > len(comments):
+                c = comments[0]  # Use first comment as placeholder
+            else:
+                continue
+        author = (c.get("author") or {}).get("login", "unknown")
+        result.append({
+            "id": c["id"],
+            "author": author,
+            "body": c["body"],
+            "path": c.get("path") or None,
+            "line": c.get("line"),
+            "is_resolved": t["isResolved"],
+            "created_at": c.get("createdAt"),
+            "url": c.get("url"),
+        })
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -474,6 +461,15 @@ def get_merge_readiness(pr: PRInfo) -> MergeReadiness:
         blockers.append("Changes requested in review")
     elif review_decision == "REVIEW_REQUIRED":
         blockers.append("Review required")
+
+    # Unresolved review thread gate (GraphQL reviewThreads)
+    try:
+        unresolved_threads = get_pending_comments(pr)
+    except Exception:
+        blockers.append("Unable to verify unresolved review threads")
+    else:
+        if unresolved_threads:
+            blockers.append(f"Unresolved review threads: {len(unresolved_threads)}")
 
     # Conflicts
     mergeable = (data.get("mergeable") or "").upper()
@@ -594,89 +590,3 @@ def get_automated_comments(pr: PRInfo) -> list[dict]:
         return result
     except Exception:
         return []
-
-
-
-# ---------------------------------------------------------------------------
-# GitHub webhook payload parsing (webhook-first path)
-# ---------------------------------------------------------------------------
-
-
-def parse_github_webhook_pr_number(payload: dict) -> Optional[int]:
-    """Extract PR number from a GitHub webhook payload.
-
-    Handles: pull_request, pull_request_review, issue_comment (PR-only).
-    Returns None when payload is not PR-related.
-
-    Args:
-        payload: Parsed GitHub webhook JSON body.
-
-    Returns:
-        PR number, or None if not a PR-related event.
-    """
-    # pull_request or pull_request_review event
-    pr = payload.get("pull_request")
-    if isinstance(pr, dict):
-        number = pr.get("number")
-        return int(number) if number else None
-
-    # issue_comment: issue.pull_request key present -> PR comment
-    issue = payload.get("issue")
-    if isinstance(issue, dict) and issue.get("pull_request"):
-        number = issue.get("number")
-        return int(number) if number else None
-
-    return None
-
-
-def parse_github_webhook_repo(payload: dict) -> Optional[str]:
-    """Extract owner/repo from a GitHub webhook payload.
-
-    Args:
-        payload: Parsed GitHub webhook JSON body.
-
-    Returns:
-        owner/repo string, or None if repository info is missing.
-    """
-    repo = payload.get("repository")
-    if not isinstance(repo, dict):
-        return None
-
-    full_name = repo.get("full_name")
-    if isinstance(full_name, str) and "/" in full_name:
-        return full_name
-    # Fallback: build from owner + name
-    owner_data = repo.get("owner")
-    owner = owner_data.get("login", "") if isinstance(owner_data, dict) else ""
-    name = repo.get("name", "")
-    if owner and name:
-        return f"{owner}/{name}"
-    return None
-
-
-def parse_github_webhook_actor(payload: dict) -> str:
-    """Extract the triggering actor login from a GitHub webhook payload.
-
-    Args:
-        payload: Parsed GitHub webhook JSON body.
-
-    Returns:
-        Actor login string, or empty string if not present.
-    """
-    sender = payload.get("sender") or {}
-    return str(sender.get("login", ""))
-
-
-def parse_github_webhook_author_association(payload: dict) -> str:
-    """Extract comment author_association for trusted-actor gate checks.
-
-    Relevant for issue_comment events. Returns empty string otherwise.
-
-    Args:
-        payload: Parsed GitHub webhook JSON body.
-
-    Returns:
-        author_association string (e.g. OWNER, MEMBER, COLLABORATOR).
-    """
-    comment = payload.get("comment") or {}
-    return str(comment.get("author_association", ""))

@@ -28,12 +28,25 @@ Enable Jeffrey to hand off a software task once and reliably receive a high-conf
 10. Retry with context, not blind reruns.
 11. Review feedback is treated as work items until resolved or explicitly waived.
 12. Default agent policy is stable; overrides must be explicit.
+13. Duplicate task detection: identical intake payloads within a configurable window (default 5 min) are rejected with a reference to the existing task.
 
 ## Terminology
 - OpenClaw: runtime/orchestration environment for jleechanclaw.
 - Mission Control: task/approval/status UI and control plane.
 - MCP Mail: inter-agent messaging transport.
 - `ai_orch`: agent execution backend (spawn, tmux lifecycle, CLI invocation).
+
+## Component Responsibilities
+
+| Component | Owns | Does Not Own |
+|---|---|---|
+| Mission Control | Task state store (single source of truth). Approval gates, readiness packets, Jeffrey decision surfaces. | Code execution, agent spawning. |
+| `ai_orch` | Agent lifecycle (spawn, tmux, teardown). Reports completion/failure via MCP Mail. Enforces TDD loop. | State persistence. |
+| MCP Mail | Event transport. Thread-based audit trail. | State decisions or transitions. |
+
+**State machine architecture:** Mission Control is the single coordinator. `ai_orch` reports events
+via MCP Mail; Mission Control consumes them and drives transitions. No component self-transitions
+its own state. Jeffrey decisions are the only external inputs that can override orchestrator transitions.
 
 ## End-to-End Lifecycle
 
@@ -112,7 +125,7 @@ System actions:
 |-------|----------------|----------------|
 | CI status | `gh pr checks --repo {repo} {pr_number}` | All required checks pass (no `FAILURE` or `PENDING`) |
 | Review decision | `gh pr view {pr_number} --json reviewDecision` | `reviewDecision == "APPROVED"` |
-| Unresolved threads | GraphQL `pullRequest.reviewThreads(last:100)` filtered to `isResolved == false` | Count == 0 |
+| Unresolved threads | GraphQL `pullRequest.reviewThreads(first:100)` with `totalCount` overflow guard, filtered to `isResolved == false` | Count == 0, totalCount ≤ fetched |
 
 **Unresolved thread detection** must use the GraphQL `reviewThreads` query — not the REST `pulls/{n}/comments` endpoint, which returns all comments (including resolved/historical) and cannot distinguish thread resolution state:
 
@@ -120,7 +133,7 @@ System actions:
 query($owner: String!, $repo: String!, $pr: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
-      reviewThreads(last: 100) {
+      reviewThreads(first: 100) {
         nodes {
           isResolved
           comments(first: 1) {
@@ -157,6 +170,7 @@ Policy:
 - If CodeRabbit is rate-limited/unavailable:
   - mark `CODERABBIT_RATE_LIMITED`
   - continue with human + alternate review evidence
+  - enforce fallback reviewer quorum of **1 non-author human approval**
   - require explicit note in PR limitations section.
 
 #### CodeRabbit Interaction Protocol
@@ -170,6 +184,21 @@ Policy:
 
 Exit criteria:
 - `CODERABBIT_APPROVED` or `CODERABBIT_RATE_LIMITED` with fallback evidence attached.
+
+#### Fallback Evidence Requirements (when CODERABBIT_RATE_LIMITED)
+Minimum coverage to allow transition to `READY_FOR_MERGE_JUDGMENT`:
+- At least one human reviewer has approved with no unresolved blocking comments, OR
+- A secondary automated reviewer has completed a full-file review attached to the readiness packet.
+AND the PR limitations section explicitly notes `CODERABBIT_RATE_LIMITED` with timestamp.
+If neither condition is met, task remains in `REVIEW_REMEDIATION` and Jeffrey is notified via escalation.
+
+#### CodeRabbit Rate-Limit Quorum Decision
+
+- Default quorum when CodeRabbit is unavailable: **1 non-author human approval** plus green required CI.
+- Rationale:
+  - Maintains momentum when CodeRabbit is rate-limited.
+  - Preserves a second set of human eyes without over-constraining small fixes.
+  - Keeps merge authority with Jeffrey at final merge judgment.
 
 ### 7) Human Merge Gate
 System actions:
@@ -195,6 +224,8 @@ For ad-hoc PR task creation via `@jleechanclaw` mentions in PR comments.
 4. **Safe comment text handling:** Use `jq` for JSON payload construction — never pipe comment bodies through `xargs` or shell interpolation, which mangles whitespace and special characters.
 
 ### Reference Workflow
+
+Implemented in-repo at `.github/workflows/agent-pr-fix-trigger.yml`.
 
 ```yaml
 name: Agent PR Fix Trigger
@@ -223,15 +254,17 @@ jobs:
           COMMENT_URL: ${{ github.event.comment.html_url }}
           ACTOR: ${{ github.actor }}
         run: |
-          # Extract instruction after mention (safe: no xargs)
-          INSTRUCTION=$(echo "$COMMENT_BODY" | sed 's/@jleechanclaw//')
+          set -euo pipefail
+
+          # Extract instruction after mention while preserving formatting safely.
+          INSTRUCTION="$(jq -rn --arg body "$COMMENT_BODY" '$body | sub("@jleechanclaw"; "") | gsub("^\\s+|\\s+$"; "")')"
 
           # Build payload via jq (prevents JSON injection and whitespace mangling)
           PAYLOAD=$(jq -n \
             --arg title "PR Fix: $REPO #$PR_NUMBER" \
             --arg description "$INSTRUCTION" \
             --arg board_id "$MC_BOARD_ID" \
-            --argjson pr_number "$PR_NUMBER" \
+            --arg pr_number "$PR_NUMBER" \
             --arg repo "$REPO" \
             --arg comment_url "$COMMENT_URL" \
             --arg actor "$ACTOR" \
@@ -240,7 +273,7 @@ jobs:
               description: $description,
               board_id: $board_id,
               metadata: {
-                pr_number: $pr_number,
+                pr_number: ($pr_number | tonumber),
                 repo: $repo,
                 comment_url: $comment_url,
                 actor: $actor
@@ -248,7 +281,7 @@ jobs:
             }')
 
           # Fail-fast: --fail-with-body ensures non-2xx fails the step
-          curl --fail-with-body -X POST "$MC_BASE_URL/api/tasks" \
+          curl --silent --show-error --fail-with-body -X POST "$MC_BASE_URL/api/tasks" \
             -H "Authorization: Bearer $MC_TOKEN" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD"
@@ -257,7 +290,10 @@ jobs:
 ```
 
 ## Default and Override Agent Policy
-Default execution policy:
+Source of truth:
+- Defaults live in OpenClaw configuration first (`openclaw-config/`), then are consumed by Mission Control.
+
+Default execution policy (from OpenClaw config):
 - Primary coder: `claude` CLI.
 - Default model profile: `MiniMax`.
 - Default review pairing: Claude + secondary reviewer (Codex or policy-configured reviewer).
@@ -269,6 +305,54 @@ Override policy:
   - model profile
   - reviewer set
 - All overrides must be logged in task audit metadata with reason.
+
+## Security and Audit Controls
+
+### Agent Permission Scoping
+- Agents operate only on the task-scoped worktree branch.
+- Pushes to `main`/`master` or protected branches are blocked at orchestrator level.
+- Cross-repo mutations require explicit task-level override with audit log entry.
+
+### Credential Handling
+- GitHub tokens injected per-task via `ai_orch` session context; not inherited from environment.
+- MCP Mail credentials scoped to task correlation ID; expire at task terminal state.
+- No credentials in PR bodies, commit messages, or MCP Mail threads.
+
+### Blast-Radius Guardrails
+| Resource | Default Cap | On Breach |
+|---|---|---|
+| Commits per task | 20 | Pause, escalate to HOLD |
+| PRs per task | 1 | Block, escalate to HOLD |
+| Retry cycles | 3 per class | Apply failure policy |
+| Agents spawned | 5 | Queue; no additional spawns |
+
+### Audit Event Schema
+Events logged to Mission Control timeline and MCP Mail thread:
+`task.created`, `task.state_transition`, `task.override_applied`,
+`agent.spawned`, `agent.completed`, `agent.failed`,
+`pr.created`, `pr.push`, `ci.status_change`,
+`review.comment_received`, `review.comment_resolved`,
+`merge_gate.presented`, `merge_gate.decided`
+
+Record shape: `{ task_id, correlation_id, event_type, actor, timestamp, payload_hash }`.
+Retention: minimum 90 days or until task archived.
+
+## Evidence Schema (Decision)
+
+Use a generalized evidence bundle schema derived from `.claude/skills/evidence-standards` and existing worldarchitect.ai evidence patterns.
+
+Required bundle files:
+- `run.json` (scenario outcomes and errors)
+- `metadata.json` (provenance: git baseline, runtime context, timestamp)
+- `evidence.md` (human-readable pass/fail summary aligned with run data)
+- `methodology.md` (environment + steps + validation method)
+- `README.md` (bundle manifest and attribution)
+- `request_responses.jsonl` (raw execution interactions when applicable)
+
+Required integrity and traceability rules:
+- Per-file checksum sidecars (`*.sha256`) using local basenames.
+- Scenario entries must include identifiers needed for log traceability.
+- Claims must map to concrete artifacts (configuration evidence, trigger evidence, log evidence).
 
 ## State Model and Status Transitions
 
@@ -287,6 +371,8 @@ Override policy:
 `HOLD`
 `REWORK_REQUIRED`
 `FAILED`
+`PLAN_REJECTED`
+`CANCELLED`
 
 ### Transition Rules
 - `NEW -> INTAKE_COMPLETE` only after required metadata validation.
@@ -301,7 +387,40 @@ Override policy:
 - `REVIEW_REMEDIATION -> PR_OPEN` after responses posted and blockers resolved.
 - `PR_OPEN -> READY_FOR_MERGE_JUDGMENT` when all gates pass.
 - `READY_FOR_MERGE_JUDGMENT -> MERGED | HOLD | REWORK_REQUIRED` only by Jeffrey decision.
+- `PLAN_PENDING_APPROVAL -> PLAN_REJECTED` on explicit Jeffrey rejection.
+- `PLAN_REJECTED -> PLAN_PENDING_APPROVAL` after agent revises plan per rejection feedback.
+- `HOLD -> [prior active state]` on Jeffrey resume decision.
+- `REWORK_REQUIRED -> PLAN_PENDING_APPROVAL` when rework requires re-planning.
+- `REWORK_REQUIRED -> EXECUTING_TDD` when rework is implementation-only.
+- `EXECUTING_TDD -> FAILED` explicitly after N consecutive failed TDD cycles (default 3).
+- Any non-terminal state -> `CANCELLED` on explicit Jeffrey cancellation. (`CANCELLED` is terminal.)
 - Any state -> `FAILED` when retries exhausted or unrecoverable policy error.
+
+### State Transition Diagram
+
+```
+NEW ──────────────────────> INTAKE_COMPLETE
+INTAKE_COMPLETE ──[gate]──> PLAN_PENDING_APPROVAL
+INTAKE_COMPLETE ──[auto]──> PLAN_AUTO_APPROVED
+PLAN_PENDING_APPROVAL ────> PLAN_APPROVED
+PLAN_PENDING_APPROVAL ────> PLAN_REJECTED
+PLAN_REJECTED ──[revised]─> PLAN_PENDING_APPROVAL
+PLAN_APPROVED ────────────> EXECUTING_TDD
+PLAN_AUTO_APPROVED ───────> EXECUTING_TDD
+EXECUTING_TDD ──[green]───> PR_OPEN
+EXECUTING_TDD ──[N fails]─> FAILED
+PR_OPEN ──[CI fail]───────> CI_REMEDIATION
+PR_OPEN ──[review]────────> REVIEW_REMEDIATION
+CI_REMEDIATION ──[fixed]──> PR_OPEN
+REVIEW_REMEDIATION ───────> PR_OPEN
+PR_OPEN ──[all gates]─────> READY_FOR_MERGE_JUDGMENT
+READY_FOR_MERGE_JUDGMENT ─> MERGED | HOLD | REWORK_REQUIRED
+HOLD ──[Jeffrey resume]───> [prior active state]
+REWORK_REQUIRED ──[replan]> PLAN_PENDING_APPROVAL
+REWORK_REQUIRED ──[impl]──> EXECUTING_TDD
+[any non-terminal] ───────> CANCELLED  (Jeffrey cancel, terminal)
+[any state] ──────────────> FAILED     (retries exhausted, terminal)
+```
 
 ## Failure Handling, Retries, and Escalation
 Retry strategy:
@@ -322,110 +441,19 @@ Escalation triggers:
 Escalation action:
 - Transition to `HOLD` with explicit escalation note and next-action options for Jeffrey.
 
-## Evidence Packet Schema
+### Phase Timeout Defaults
+| Phase | Default Timeout | On Breach |
+|---|---|---|
+| Task intake + validation | 5 min | FAILED (intake_timeout) |
+| Plan generation | 15 min | Escalate to HOLD |
+| TDD execution (per cycle) | 30 min | Mark failed, apply retry policy |
+| CI remediation (per cycle) | 15 min | Mark failed, apply retry policy |
+| Review remediation | 60 min | Escalate to HOLD |
+| Agent watchdog poll | 5 min | Dead-agent alert, spawn replacement |
 
-Every pipeline stage transition must produce an `EvidencePacket` (see `src/orchestration/evidence.py`).
-
-### Sections (canonical contract defined in this design + `src/orchestration/evidence.py`)
-
-| Section | ArtifactType | Required for COMPLETE |
-|---------|-------------|----------------------|
-| A) Queue | `queue_record` | Yes |
-| B) Executor | `executor_log` | Yes |
-| C) Artifact | `diff`, `test_output`, or `ci_check` | Yes |
-| D) Handoff | `handoff` | Yes |
-
-### Completeness levels
-
-| Level | Meaning |
-|-------|---------|
-| `complete` | All four sections present |
-| `partial` | A + B present; C or D missing |
-| `missing` | A or B absent — claim of delegation is invalid |
-
-### Stage attach points
-
-| Pipeline stage | Attach when | Minimum sections |
-|---------------|------------|-----------------|
-| `execute` | Agent completes a work unit | A + B |
-| `pr_open` | PR created and linked to task | A + B + C + D |
-| `ci_remediation` | CI failure remediation cycle closes | B + C |
-| `review_remediation` | Review blocker resolved | B + C + D |
-| `merge_judgment` | Task reaches READY_FOR_MERGE_JUDGMENT | C + D |
-
-### Merge readiness packet
-
-The merge judgment packet is the `EvidencePacket.as_dict()` output attached to the MC task before presenting to Jeffrey. Required fields:
-
-```json
-{
-  "task_id": "<id>",
-  "pipeline_stage": "merge_judgment",
-  "executor_run_ids": ["<run1>", "..."],
-  "completeness": "complete",
-  "manual_edits": "none",
-  "artifacts": [...]
-}
-```
-
----
-
-## GitHub Event Integration (Webhook-First + Polling Fallback)
-
-### Mode detection
-
-The integration mode is determined automatically:
-
-```
-GITHUB_WEBHOOK_SECRET set      ->  WEBHOOK mode (operator registered endpoint)
-GITHUB_WEBHOOK_SECRET not set  ->  POLLING mode (default, no setup needed)
-```
-
-Use `current_github_event_mode()` from `webhook_bridge.py` to query the active mode.
-
-### Webhook-first path (no operator setup required)
-
-`.github/workflows/agent-pr-trigger.yml` provides the primary webhook-first event path using GitHub Actions — no external HTTP server or webhook registration required beyond repo vars/secrets.
-
-**Triggers:**
-- `issue_comment: created` — when `@jleechanclaw` is mentioned in a PR comment by a trusted actor (OWNER, MEMBER, or COLLABORATOR).
-- `pull_request_review: submitted` — on any new review submission.
-
-**Graceful fallback:** When `MISSION_CONTROL_BASE_URL` or `MISSION_CONTROL_TOKEN` are not set, the workflow logs a notice and exits cleanly. The polling path remains active.
-
-**Trusted-actor gate (issue_comment only):** `author_association` must be `OWNER`, `MEMBER`, or `COLLABORATOR`. Other associations are dropped before any execution step.
-
-### Polling fallback (CI/review monitoring)
-
-For CI status and review thread monitoring, the pipeline polls via `gh` CLI on a configurable interval. Polling is the default and requires no operator setup.
-
-| Check | Command | Pass condition |
-|-------|---------|----------------|
-| CI status | `gh pr checks --repo {repo} {pr_number}` | No FAILURE or PENDING checks |
-| Review decision | `gh pr view {pr_number} --json reviewDecision` | `reviewDecision == APPROVED` |
-| Unresolved threads | GraphQL `reviewThreads(last:100)` | `isResolved == false` count == 0 |
-
-### Optional webhook upgrade (requires operator setup)
-
-When `GITHUB_WEBHOOK_SECRET` is configured and an HTTP endpoint is running `receive_github_event()`, GitHub can push CI/review events directly, replacing polling. This reduces CI response latency but requires:
-1. A public HTTP endpoint.
-2. GitHub webhook registration in repo settings.
-3. `GITHUB_WEBHOOK_SECRET` env var set on the server.
-
-This is the upgrade path, not the default.
-
----
-
-## Resolved Policy Decisions (Batch C)
-
-| Decision | Resolution |
-|----------|-----------|
-| Default `claude + MiniMax` binding location | OpenClaw config (`openclaw-config/`) is the source of truth for defaults; Mission Control policy can override per-task. |
-| Reviewer quorum when CodeRabbit is rate-limited | Codex decides (coordinates via Codex PR review policy). Minimum: one human review approval + CodeRabbit rate-limit note in PR limitations. |
-| Evidence schema for test artifacts | `EvidencePacket` in `src/orchestration/evidence.py`; attach at each stage per the table above. |
-| Webhook vs polling for CI/review events | Webhook-first via GitHub Actions (self-contained, no operator setup). Polling fallback for CI/review monitoring. Optional webhook upgrade for real-time CI events (requires operator HTTP endpoint). |
-
----
+If a task-level `deadline` constraint was provided at intake: evaluate feasibility at each
+state transition. If remaining time < minimum phase budget, transition to `HOLD` with
+`deadline_at_risk` escalation before beginning the phase.
 
 ## MVP Scope vs Future Phases
 
@@ -436,9 +464,7 @@ This is the upgrade path, not the default.
 - PR open + CI loop + review comment resolution loop.
 - CodeRabbit approve/rate-limit handling.
 - Final human merge judgment gate.
-- GitHub Actions trigger with trusted-actor gate (webhook-first, self-contained).
-- Evidence packet attachment at stage transitions with completeness gate.
-- Polling-based CI/review monitoring (default path).
+- GitHub comment trigger with trusted-actor gate.
 
 ### Future Phases
 - Parallel subtask graph orchestration with dependency blocking.
@@ -446,12 +472,12 @@ This is the upgrade path, not the default.
 - Cost/performance policy optimizer for agent/model routing.
 - Replay-based auto-debugging with historical failure fingerprints.
 - Multi-repo synchronized release orchestration.
-- Real-time CI/review webhook upgrade (operator HTTP endpoint).
+- Poll-to-webhook migration where it is implementable without operator intervention; otherwise polling remains.
 
 ## Acceptance Criteria (Definition of Done)
 1. A task can move from intake to `READY_FOR_MERGE_JUDGMENT` with deterministic, auditable state transitions.
 2. Plan gate supports both explicit human approval and policy-based auto-approval.
-3. Execution records evidence of TDD loop (failing -> passing tests) in task timeline, attached as `EvidencePacket` with `completeness == "complete"` or `"partial"` with documented reason.
+3. Execution records evidence of TDD loop (failing -> passing tests) in task timeline.
 4. PR is automatically linked to task metadata and status.
 5. CI failures trigger remediation loops until pass or retry exhaustion.
 6. Blocking review comments are tracked to explicit resolution or documented waiver.
@@ -459,6 +485,52 @@ This is the upgrade path, not the default.
 8. Final state cannot be `MERGED` without explicit Jeffrey merge judgment.
 9. All key actions are traceable via Mission Control timeline and MCP Mail thread IDs.
 10. Pipeline behavior is configurable by policy without code changes for routine routing decisions.
-11. GitHub Actions trigger workflow enforces trusted-actor gate and PR-only filter; fallback notice logged when MC not configured.
+11. GitHub trigger workflow enforces trusted-actor gate and PR-only filter before self-hosted runner execution.
 12. API calls in automation fail fast on non-2xx responses (no silent success on errors).
-13. Evidence packet completeness is verified before `READY_FOR_MERGE_JUDGMENT` transition.
+
+## Current Decisions and Limitations
+
+Decisions locked for Batch A:
+- Source-of-truth defaults: OpenClaw config where applicable.
+- CodeRabbit rate-limit fallback quorum: 1 non-author human approval + green required CI.
+- Evidence schema: based on `.claude/skills/evidence-standards`, generalized for Mission Control bundles.
+- Trigger architecture: prefer webhooks when implementable without operator intervention; keep polling otherwise.
+
+Current limitations:
+- Full webhook replacement for CI/review loop is not yet complete in this phase.
+
+## PR #30 Track A Implementation Evidence (2026-03-04)
+Scope completed on branch `docs/mcp-mail-openclaw-mission-control-design`:
+- Implement unresolved-thread merge gate in `src/orchestration/gh_integration.py` using GraphQL `reviewThreads`.
+- Block merge readiness when unresolved thread count is non-zero.
+- Fail closed when unresolved-thread verification fails (explicit blocker, no silent fallback).
+- Make `get_pending_comments` raise explicit errors on GraphQL failure so callers can gate safely.
+- Align GraphQL pagination with fail-closed principle: `reviewThreads(first: 100)` with `totalCount` overflow guard (blocks merge when >100 threads exist).
+
+TDD evidence (Red -> Green):
+1. RED:
+   - `pytest -q src/tests/test_gh_integration.py -k "unresolved_threads_block_merge or unresolved_thread_check_failure_blocks_merge or test_error_propagates"`
+   - Result: `3 failed, 1 passed, 42 deselected`
+2. GREEN (targeted):
+   - `pytest -q src/tests/test_gh_integration.py -k "unresolved_threads_block_merge or unresolved_thread_check_failure_blocks_merge or test_error_propagates"`
+   - Result: `4 passed, 42 deselected`
+3. GREEN (suite):
+   - `pytest -q src/tests/test_gh_integration.py`
+   - Result: `46 passed`
+4. Regression spot-check:
+   - `pytest -q src/tests/test_gh_triage.py`
+   - Result: `3 passed`
+
+Track A TDD follow-up (query-shape conformance):
+1. RED:
+   - `pytest -q src/tests/test_gh_integration.py -k "uses_review_threads_last_100_query"`
+   - Result: `1 failed, 46 deselected`
+2. GREEN (targeted):
+   - `pytest -q src/tests/test_gh_integration.py -k "uses_review_threads_last_100_query or unresolved_threads_block_merge or unresolved_thread_check_failure_blocks_merge or test_error_propagates"`
+   - Result: `5 passed, 42 deselected`
+3. GREEN (suite):
+   - `pytest -q src/tests/test_gh_integration.py`
+   - Result: `47 passed`
+4. Regression spot-check:
+   - `pytest -q src/tests/test_gh_triage.py`
+   - Result: `3 passed`
