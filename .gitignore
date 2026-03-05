@@ -90,6 +90,12 @@ package-lock.json
 **/*.egg-info/
 .beads/dolt-config.log
 
+# Dolt / Beads local databases
+.doltcfg/
+beads/
+beads_ORCH/
+config.yaml
+
 # Ralph tooling output
 ralph-output.log
 orch-test/
