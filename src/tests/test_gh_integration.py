@@ -556,6 +556,11 @@ class TestGetAutomatedComments:
 
 
 class TestAgentPRFixTriggerWorkflow:
+    def test_single_pr_fix_trigger_workflow_file(self):
+        workflow_dir = Path(__file__).resolve().parents[2] / ".github/workflows"
+        matches = sorted(workflow_dir.glob("*pr*fix*trigger*.yml"))
+        assert [p.name for p in matches] == ["agent-pr-fix-trigger.yml"]
+
     def test_workflow_enforces_pr_and_trusted_actor_guards(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/agent-pr-fix-trigger.yml"
         text = workflow.read_text(encoding="utf-8")
@@ -571,8 +576,13 @@ class TestAgentPRFixTriggerWorkflow:
         text = workflow.read_text(encoding="utf-8")
         assert "jq -n" in text
         assert "jq -rn" in text
-        assert "grep -Eiq '@jleechanclaw'" in text
-        assert 'sub("@jleechanclaw"; ""; "i")' in text
+        assert "grep -Eiq '@jleechanclaw|<@U0AEZC7RX1Q>'" in text
+        assert 'gsub("(?i)@jleechanclaw|<@U0AEZC7RX1Q>"; "")' in text
         assert "--fail-with-body" in text
         assert "/api/v1/boards/$MC_BOARD_ID/tasks" in text
         assert "xargs" not in text
+
+    def test_workflow_allows_slack_style_mention_trigger(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/agent-pr-fix-trigger.yml"
+        text = workflow.read_text(encoding="utf-8")
+        assert "contains(github.event.comment.body, '<@U0AEZC7RX1Q>')" in text

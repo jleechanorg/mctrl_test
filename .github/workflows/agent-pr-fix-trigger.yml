@@ -8,7 +8,10 @@ jobs:
   trigger-agent:
     if: |
       github.event.issue.pull_request &&
-      contains(github.event.comment.body, '@jleechanclaw') &&
+      (
+        contains(github.event.comment.body, '@jleechanclaw') ||
+        contains(github.event.comment.body, '<@U0AEZC7RX1Q>')
+      ) &&
       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     permissions: {}
     runs-on: self-hosted
@@ -31,13 +34,13 @@ jobs:
             exit 1
           fi
 
-          if ! grep -Eiq '@jleechanclaw' <<< "$COMMENT_BODY"; then
-            echo "No @jleechanclaw mention found; skipping."
+          if ! grep -Eiq '@jleechanclaw|<@U0AEZC7RX1Q>' <<< "$COMMENT_BODY"; then
+            echo "No trigger mention found; skipping."
             exit 0
           fi
 
-          # Remove the trigger mention while preserving surrounding text safely.
-          INSTRUCTION="$(jq -rn --arg body "$COMMENT_BODY" '$body | sub("@jleechanclaw"; ""; "i") | gsub("^\\s+|\\s+$"; "")')"
+          # Remove trigger mention(s) while preserving surrounding text safely.
+          INSTRUCTION="$(jq -rn --arg body "$COMMENT_BODY" '$body | gsub("(?i)@jleechanclaw|<@U0AEZC7RX1Q>"; "") | gsub("^\\s+|\\s+$"; "")')"
 
           PAYLOAD="$(jq -n \
             --arg title "PR Fix: $REPO #$PR_NUMBER" \
