@@ -94,6 +94,8 @@ package-lock.json
 .doltcfg/
 beads/
 beads_ORCH/
+beads_REV/
+beads_wc/
 config.yaml
 
 # Ralph tooling output
