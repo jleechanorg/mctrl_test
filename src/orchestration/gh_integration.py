@@ -11,11 +11,14 @@ Key design choices preserved from TS original:
 from __future__ import annotations
 
 import json
+import logging
 import re
 import subprocess
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 ALLOWED_REPOS = frozenset(["jleechanorg/jleechanclaw", "jleechanorg/worldarchitect.ai"])
@@ -132,6 +135,24 @@ def gh(args: list[str]) -> str:
 
 def _repo_flag(pr: PRInfo) -> str:
     return f"{pr.owner}/{pr.repo}"
+
+
+def validate_branch_target(
+    branch_name: str,
+    protected_branches: list[str] = None,
+) -> None:
+    """Validate branch target safety for write operations.
+
+    Raises:
+        ValueError: if branch is protected or has a flat name.
+    """
+    protected = protected_branches if protected_branches is not None else ["main", "master"]
+    if branch_name in protected:
+        raise ValueError(f'Cannot target protected branch "{branch_name}"')
+    if "/" not in branch_name:
+        raise ValueError(f'Branch name "{branch_name}" must contain \'/\'')
+
+    logger.warning("Branch target validated: %s", branch_name)
 
 
 # ---------------------------------------------------------------------------
