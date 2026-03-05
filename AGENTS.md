@@ -233,6 +233,11 @@ Before deleting any file:
 
 **Format:** Clear, concise, with specific function/variable names where relevant
 
+### CodeRabbit Review Protocol
+After pushing fixes that address review comments authored by `coderabbitai`:
+1. Post a PR comment: `@coderabbitai all good`
+2. This triggers CodeRabbit to re-review and verify the fixes are resolved.
+
 ### Commit Guidelines
 
 - Create commits with `scripts/committer "<msg>" <file...>`; avoid manual `git add`/`git commit` so staging stays scoped.

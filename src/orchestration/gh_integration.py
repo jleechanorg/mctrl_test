@@ -321,7 +321,11 @@ def get_pending_comments(pr: PRInfo) -> list[dict]:
     """Get unresolved review threads, excluding bot comments.
 
     Uses GraphQL with -f flag for injection-safe variable passing.
+    Raises RuntimeError on API failure or when pagination makes thread
+    visibility incomplete (fail-closed).
     """
+    # Phase 1: Fetch data from GitHub GraphQL.
+    # Only network/parse errors are caught and re-wrapped here.
     try:
         raw = gh([
             "api", "graphql",
@@ -333,9 +337,11 @@ def get_pending_comments(pr: PRInfo) -> list[dict]:
                 "  repository(owner: $owner, name: $name) {"
                 "    pullRequest(number: $number) {"
                 "      reviewThreads(first: 100) {"
+                "        totalCount"
                 "        nodes {"
                 "          isResolved"
-                "          comments(first: 10) {"
+                "          comments(first: 50) {"
+                "            totalCount"
                 "            nodes {"
                 "              id"
                 "              author { login }"
@@ -354,39 +360,61 @@ def get_pending_comments(pr: PRInfo) -> list[dict]:
             ),
         ])
         data = json.loads(raw)
-        threads = data["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
+        thread_data = data["data"]["repository"]["pullRequest"]["reviewThreads"]
+        threads = thread_data["nodes"]
+    except Exception as exc:
+        raise RuntimeError("Unable to load reviewThreads from GitHub GraphQL") from exc
 
-        result = []
-        for t in threads:
-            if t["isResolved"]:
-                continue
-            comments = t["comments"]["nodes"]
-            if not comments:
-                continue
-            # Find first non-bot comment in thread
-            c = None
-            for candidate in comments:
-                author = (candidate.get("author") or {}).get("login", "unknown")
-                if author not in BOT_AUTHORS:
-                    c = candidate
-                    break
-            if c is None:
-                continue
-            author = (c.get("author") or {}).get("login", "unknown")
-            result.append({
-                "id": c["id"],
-                "author": author,
-                "body": c["body"],
-                "path": c.get("path") or None,
-                "line": c.get("line"),
-                "is_resolved": t["isResolved"],
-                "created_at": c.get("createdAt"),
-                "url": c.get("url"),
-            })
+    # Phase 2: Validate completeness (outside try/except so specific errors propagate).
+    if "totalCount" not in thread_data:
+        raise RuntimeError(
+            "GraphQL response missing totalCount for reviewThreads — "
+            "cannot verify all threads were fetched"
+        )
+    total_count = thread_data["totalCount"]
+    if total_count > len(threads):
+        raise RuntimeError(
+            f"PR has {total_count} review threads but only {len(threads)} "
+            f"were fetched — cannot guarantee all unresolved threads are visible"
+        )
 
-        return result
-    except Exception:
-        return []
+    # Phase 3: Filter to unresolved non-bot threads.
+    result = []
+    for t in threads:
+        if t["isResolved"]:
+            continue
+        comment_data = t["comments"]
+        comments = comment_data["nodes"]
+        comment_total = comment_data.get("totalCount", len(comments))
+        if not comments:
+            continue
+        # Find first non-bot comment in thread
+        c = None
+        for candidate in comments:
+            author = (candidate.get("author") or {}).get("login", "unknown")
+            if author not in BOT_AUTHORS:
+                c = candidate
+                break
+        if c is None:
+            # Fail closed: if there are unfetched comments, a human
+            # comment may be hidden beyond the page boundary.
+            if comment_total > len(comments):
+                c = comments[0]  # Use first comment as placeholder
+            else:
+                continue
+        author = (c.get("author") or {}).get("login", "unknown")
+        result.append({
+            "id": c["id"],
+            "author": author,
+            "body": c["body"],
+            "path": c.get("path") or None,
+            "line": c.get("line"),
+            "is_resolved": t["isResolved"],
+            "created_at": c.get("createdAt"),
+            "url": c.get("url"),
+        })
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -433,6 +461,15 @@ def get_merge_readiness(pr: PRInfo) -> MergeReadiness:
         blockers.append("Changes requested in review")
     elif review_decision == "REVIEW_REQUIRED":
         blockers.append("Review required")
+
+    # Unresolved review thread gate (GraphQL reviewThreads)
+    try:
+        unresolved_threads = get_pending_comments(pr)
+    except Exception:
+        blockers.append("Unable to verify unresolved review threads")
+    else:
+        if unresolved_threads:
+            blockers.append(f"Unresolved review threads: {len(unresolved_threads)}")
 
     # Conflicts
     mergeable = (data.get("mergeable") or "").upper()
@@ -553,4 +590,3 @@ def get_automated_comments(pr: PRInfo) -> list[dict]:
         return result
     except Exception:
         return []
-

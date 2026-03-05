@@ -28,12 +28,25 @@ Enable Jeffrey to hand off a software task once and reliably receive a high-conf
 10. Retry with context, not blind reruns.
 11. Review feedback is treated as work items until resolved or explicitly waived.
 12. Default agent policy is stable; overrides must be explicit.
+13. Duplicate task detection: identical intake payloads within a configurable window (default 5 min) are rejected with a reference to the existing task.
 
 ## Terminology
 - OpenClaw: runtime/orchestration environment for jleechanclaw.
 - Mission Control: task/approval/status UI and control plane.
 - MCP Mail: inter-agent messaging transport.
 - `ai_orch`: agent execution backend (spawn, tmux lifecycle, CLI invocation).
+
+## Component Responsibilities
+
+| Component | Owns | Does Not Own |
+|---|---|---|
+| Mission Control | Task state store (single source of truth). Approval gates, readiness packets, Jeffrey decision surfaces. | Code execution, agent spawning. |
+| `ai_orch` | Agent lifecycle (spawn, tmux, teardown). Reports completion/failure via MCP Mail. Enforces TDD loop. | State persistence. |
+| MCP Mail | Event transport. Thread-based audit trail. | State decisions or transitions. |
+
+**State machine architecture:** Mission Control is the single coordinator. `ai_orch` reports events
+via MCP Mail; Mission Control consumes them and drives transitions. No component self-transitions
+its own state. Jeffrey decisions are the only external inputs that can override orchestrator transitions.
 
 ## End-to-End Lifecycle
 
@@ -112,7 +125,7 @@ System actions:
 |-------|----------------|----------------|
 | CI status | `gh pr checks --repo {repo} {pr_number}` | All required checks pass (no `FAILURE` or `PENDING`) |
 | Review decision | `gh pr view {pr_number} --json reviewDecision` | `reviewDecision == "APPROVED"` |
-| Unresolved threads | GraphQL `pullRequest.reviewThreads(last:100)` filtered to `isResolved == false` | Count == 0 |
+| Unresolved threads | GraphQL `pullRequest.reviewThreads(first:100)` with `totalCount` overflow guard, filtered to `isResolved == false` | Count == 0, totalCount ≤ fetched |
 
 **Unresolved thread detection** must use the GraphQL `reviewThreads` query — not the REST `pulls/{n}/comments` endpoint, which returns all comments (including resolved/historical) and cannot distinguish thread resolution state:
 
@@ -120,7 +133,7 @@ System actions:
 query($owner: String!, $repo: String!, $pr: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
-      reviewThreads(last: 100) {
+      reviewThreads(first: 100) {
         nodes {
           isResolved
           comments(first: 1) {
@@ -171,6 +184,13 @@ Policy:
 
 Exit criteria:
 - `CODERABBIT_APPROVED` or `CODERABBIT_RATE_LIMITED` with fallback evidence attached.
+
+#### Fallback Evidence Requirements (when CODERABBIT_RATE_LIMITED)
+Minimum coverage to allow transition to `READY_FOR_MERGE_JUDGMENT`:
+- At least one human reviewer has approved with no unresolved blocking comments, OR
+- A secondary automated reviewer has completed a full-file review attached to the readiness packet.
+AND the PR limitations section explicitly notes `CODERABBIT_RATE_LIMITED` with timestamp.
+If neither condition is met, task remains in `REVIEW_REMEDIATION` and Jeffrey is notified via escalation.
 
 #### CodeRabbit Rate-Limit Quorum Decision
 
@@ -286,6 +306,37 @@ Override policy:
   - reviewer set
 - All overrides must be logged in task audit metadata with reason.
 
+## Security and Audit Controls
+
+### Agent Permission Scoping
+- Agents operate only on the task-scoped worktree branch.
+- Pushes to `main`/`master` or protected branches are blocked at orchestrator level.
+- Cross-repo mutations require explicit task-level override with audit log entry.
+
+### Credential Handling
+- GitHub tokens injected per-task via `ai_orch` session context; not inherited from environment.
+- MCP Mail credentials scoped to task correlation ID; expire at task terminal state.
+- No credentials in PR bodies, commit messages, or MCP Mail threads.
+
+### Blast-Radius Guardrails
+| Resource | Default Cap | On Breach |
+|---|---|---|
+| Commits per task | 20 | Pause, escalate to HOLD |
+| PRs per task | 1 | Block, escalate to HOLD |
+| Retry cycles | 3 per class | Apply failure policy |
+| Agents spawned | 5 | Queue; no additional spawns |
+
+### Audit Event Schema
+Events logged to Mission Control timeline and MCP Mail thread:
+`task.created`, `task.state_transition`, `task.override_applied`,
+`agent.spawned`, `agent.completed`, `agent.failed`,
+`pr.created`, `pr.push`, `ci.status_change`,
+`review.comment_received`, `review.comment_resolved`,
+`merge_gate.presented`, `merge_gate.decided`
+
+Record shape: `{ task_id, correlation_id, event_type, actor, timestamp, payload_hash }`.
+Retention: minimum 90 days or until task archived.
+
 ## Evidence Schema (Decision)
 
 Use a generalized evidence bundle schema derived from `.claude/skills/evidence-standards` and existing worldarchitect.ai evidence patterns.
@@ -320,6 +371,8 @@ Required integrity and traceability rules:
 `HOLD`
 `REWORK_REQUIRED`
 `FAILED`
+`PLAN_REJECTED`
+`CANCELLED`
 
 ### Transition Rules
 - `NEW -> INTAKE_COMPLETE` only after required metadata validation.
@@ -334,7 +387,40 @@ Required integrity and traceability rules:
 - `REVIEW_REMEDIATION -> PR_OPEN` after responses posted and blockers resolved.
 - `PR_OPEN -> READY_FOR_MERGE_JUDGMENT` when all gates pass.
 - `READY_FOR_MERGE_JUDGMENT -> MERGED | HOLD | REWORK_REQUIRED` only by Jeffrey decision.
+- `PLAN_PENDING_APPROVAL -> PLAN_REJECTED` on explicit Jeffrey rejection.
+- `PLAN_REJECTED -> PLAN_PENDING_APPROVAL` after agent revises plan per rejection feedback.
+- `HOLD -> [prior active state]` on Jeffrey resume decision.
+- `REWORK_REQUIRED -> PLAN_PENDING_APPROVAL` when rework requires re-planning.
+- `REWORK_REQUIRED -> EXECUTING_TDD` when rework is implementation-only.
+- `EXECUTING_TDD -> FAILED` explicitly after N consecutive failed TDD cycles (default 3).
+- Any non-terminal state -> `CANCELLED` on explicit Jeffrey cancellation. (`CANCELLED` is terminal.)
 - Any state -> `FAILED` when retries exhausted or unrecoverable policy error.
+
+### State Transition Diagram
+
+```
+NEW ──────────────────────> INTAKE_COMPLETE
+INTAKE_COMPLETE ──[gate]──> PLAN_PENDING_APPROVAL
+INTAKE_COMPLETE ──[auto]──> PLAN_AUTO_APPROVED
+PLAN_PENDING_APPROVAL ────> PLAN_APPROVED
+PLAN_PENDING_APPROVAL ────> PLAN_REJECTED
+PLAN_REJECTED ──[revised]─> PLAN_PENDING_APPROVAL
+PLAN_APPROVED ────────────> EXECUTING_TDD
+PLAN_AUTO_APPROVED ───────> EXECUTING_TDD
+EXECUTING_TDD ──[green]───> PR_OPEN
+EXECUTING_TDD ──[N fails]─> FAILED
+PR_OPEN ──[CI fail]───────> CI_REMEDIATION
+PR_OPEN ──[review]────────> REVIEW_REMEDIATION
+CI_REMEDIATION ──[fixed]──> PR_OPEN
+REVIEW_REMEDIATION ───────> PR_OPEN
+PR_OPEN ──[all gates]─────> READY_FOR_MERGE_JUDGMENT
+READY_FOR_MERGE_JUDGMENT ─> MERGED | HOLD | REWORK_REQUIRED
+HOLD ──[Jeffrey resume]───> [prior active state]
+REWORK_REQUIRED ──[replan]> PLAN_PENDING_APPROVAL
+REWORK_REQUIRED ──[impl]──> EXECUTING_TDD
+[any non-terminal] ───────> CANCELLED  (Jeffrey cancel, terminal)
+[any state] ──────────────> FAILED     (retries exhausted, terminal)
+```
 
 ## Failure Handling, Retries, and Escalation
 Retry strategy:
@@ -354,6 +440,20 @@ Escalation triggers:
 
 Escalation action:
 - Transition to `HOLD` with explicit escalation note and next-action options for Jeffrey.
+
+### Phase Timeout Defaults
+| Phase | Default Timeout | On Breach |
+|---|---|---|
+| Task intake + validation | 5 min | FAILED (intake_timeout) |
+| Plan generation | 15 min | Escalate to HOLD |
+| TDD execution (per cycle) | 30 min | Mark failed, apply retry policy |
+| CI remediation (per cycle) | 15 min | Mark failed, apply retry policy |
+| Review remediation | 60 min | Escalate to HOLD |
+| Agent watchdog poll | 5 min | Dead-agent alert, spawn replacement |
+
+If a task-level `deadline` constraint was provided at intake: evaluate feasibility at each
+state transition. If remaining time < minimum phase budget, transition to `HOLD` with
+`deadline_at_risk` escalation before beginning the phase.
 
 ## MVP Scope vs Future Phases
 
@@ -398,3 +498,39 @@ Decisions locked for Batch A:
 
 Current limitations:
 - Full webhook replacement for CI/review loop is not yet complete in this phase.
+
+## PR #30 Track A Implementation Evidence (2026-03-04)
+Scope completed on branch `docs/mcp-mail-openclaw-mission-control-design`:
+- Implement unresolved-thread merge gate in `src/orchestration/gh_integration.py` using GraphQL `reviewThreads`.
+- Block merge readiness when unresolved thread count is non-zero.
+- Fail closed when unresolved-thread verification fails (explicit blocker, no silent fallback).
+- Make `get_pending_comments` raise explicit errors on GraphQL failure so callers can gate safely.
+- Align GraphQL pagination with fail-closed principle: `reviewThreads(first: 100)` with `totalCount` overflow guard (blocks merge when >100 threads exist).
+
+TDD evidence (Red -> Green):
+1. RED:
+   - `pytest -q src/tests/test_gh_integration.py -k "unresolved_threads_block_merge or unresolved_thread_check_failure_blocks_merge or test_error_propagates"`
+   - Result: `3 failed, 1 passed, 42 deselected`
+2. GREEN (targeted):
+   - `pytest -q src/tests/test_gh_integration.py -k "unresolved_threads_block_merge or unresolved_thread_check_failure_blocks_merge or test_error_propagates"`
+   - Result: `4 passed, 42 deselected`
+3. GREEN (suite):
+   - `pytest -q src/tests/test_gh_integration.py`
+   - Result: `46 passed`
+4. Regression spot-check:
+   - `pytest -q src/tests/test_gh_triage.py`
+   - Result: `3 passed`
+
+Track A TDD follow-up (query-shape conformance):
+1. RED:
+   - `pytest -q src/tests/test_gh_integration.py -k "uses_review_threads_last_100_query"`
+   - Result: `1 failed, 46 deselected`
+2. GREEN (targeted):
+   - `pytest -q src/tests/test_gh_integration.py -k "uses_review_threads_last_100_query or unresolved_threads_block_merge or unresolved_thread_check_failure_blocks_merge or test_error_propagates"`
+   - Result: `5 passed, 42 deselected`
+3. GREEN (suite):
+   - `pytest -q src/tests/test_gh_integration.py`
+   - Result: `47 passed`
+4. Regression spot-check:
+   - `pytest -q src/tests/test_gh_triage.py`
+   - Result: `3 passed`

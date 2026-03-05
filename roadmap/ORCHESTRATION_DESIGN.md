@@ -384,6 +384,7 @@ The agent runtime itself — memory system, gateway, cron jobs, session manageme
 | What | Where |
 |------|-------|
 | This design doc | `jleechanclaw/roadmap/ORCHESTRATION_DESIGN.md` |
+| TDD execution roadmap | `jleechanclaw/roadmap/TDD_EXECUTION_ROADMAP.md` |
 | SOUL.md (agent identity) | `~/.openclaw/SOUL.md` |
 | ai_orch source | `/Users/jleechan/projects/worldarchitect.ai/orchestration/` |
 | Mission Control reference | `/Users/jleechan/projects_reference/openclaw-mission-control/` |
