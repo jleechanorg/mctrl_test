@@ -453,3 +453,21 @@ class TestLifecyclePoller:
         poller = LifecyclePoller(lifecycle_manager=lm, interval_seconds=60)
         poller.stop()  # Should not error
         assert poller.is_running is False
+
+    def test_poll_fn_exception_logged(self, caplog):
+        """ORCH-1g8: poll_fn exceptions are logged, not silently swallowed."""
+        def failing_fn(_lm):
+            raise RuntimeError("boom")
+
+        lm = LifecycleManager(reactions={})
+        poller = LifecyclePoller(
+            lifecycle_manager=lm,
+            interval_seconds=0,
+            poll_fn=failing_fn,
+        )
+        import logging
+        with caplog.at_level(logging.WARNING, logger="orchestration.lifecycle_reactions"):
+            poller.start()
+            import time; time.sleep(0.1)
+            poller.stop()
+        assert any("poll_fn raised" in r.message for r in caplog.records)

@@ -12,6 +12,7 @@ State machine:
 
 from __future__ import annotations
 
+import logging
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -312,6 +313,9 @@ def determine_status(
 # ---------------------------------------------------------------------------
 
 
+_logger = logging.getLogger(__name__)
+
+
 class LifecyclePoller:
     """Threaded polling loop for the lifecycle manager.
 
@@ -362,5 +366,5 @@ class LifecyclePoller:
                 if self._poll_fn is not None:
                     self._poll_fn(self.lifecycle_manager)
             except Exception:
-                pass  # Never crash the polling loop
+                _logger.warning("LifecyclePoller: poll_fn raised", exc_info=True)
             self._stop_event.wait(self.interval_seconds)

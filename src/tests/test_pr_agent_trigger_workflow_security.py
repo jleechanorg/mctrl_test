@@ -7,7 +7,7 @@ from pathlib import Path
 
 def _workflow_text() -> str:
     repo_root = Path(__file__).resolve().parents[2]
-    return (repo_root / ".github" / "workflows" / "pr-agent-trigger.yml").read_text(
+    return (repo_root / ".github" / "workflows" / "agent-pr-fix-trigger.yml").read_text(
         encoding="utf-8"
     )
 
@@ -32,9 +32,9 @@ def test_workflow_uses_json_safe_payload_construction() -> None:
 def test_workflow_declares_least_privilege_permissions() -> None:
     text = _workflow_text()
     assert "permissions:" in text
-    assert "contents: read" in text
-    assert "issues: read" in text
-    assert "pull-requests: read" in text
+    # Workflow uses `permissions: {}` (no permissions) which is the most
+    # restrictive option — stricter than listing individual read scopes.
+    assert "permissions: {}" in text
 
 
 def test_workflow_avoids_xargs_on_untrusted_comment_body() -> None:
