@@ -99,3 +99,7 @@ config.yaml
 # Ralph tooling output
 ralph-output.log
 orch-test/
+
+# openclaw backup snapshots — never commit (contain OAuth tokens + session logs)
+.openclaw-backups/
+.beads/interactions.jsonl
