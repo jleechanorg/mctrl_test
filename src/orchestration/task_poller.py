@@ -36,7 +36,7 @@ class TaskPoller:
                 result.returncode,
                 result.stderr,
             )
-            return (False, {"exit_code": result.returncode})
+            return (False, {"exit_code": result.returncode, "status": TaskStatus.EXECUTION_FAILED})
         return (True, {})
 
     def _dispatch_task(self, task_id: str) -> bool:
@@ -62,9 +62,10 @@ class TaskPoller:
             return False
 
         if not success:
+            error_status = TaskStatus(meta["status"]) if "status" in meta else TaskStatus.FAILED
             self.client.update_task(
                 task_id,
-                TaskStatus.FAILED,
+                error_status,
                 board_id=self.board_id,
             )
             return False

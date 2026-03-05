@@ -13,6 +13,7 @@ class TaskStatus(StrEnum):
     IN_PROGRESS = "in_progress"
     DONE = "done"
     FAILED = "failed"
+    EXECUTION_FAILED = "execution_failed"
 
 
 class MissionControlClient:
