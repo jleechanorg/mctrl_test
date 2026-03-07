@@ -238,6 +238,8 @@ After pushing fixes that address review comments authored by `coderabbitai`:
 1. Post a PR comment: `@coderabbitai all good`
 2. This triggers CodeRabbit to re-review and verify the fixes are resolved.
 
+Do NOT ping CodeRabbit on a timer or without a preceding push. Only trigger after a fresh commit lands on the PR branch.
+
 ### Commit Guidelines
 
 - Create commits with `scripts/committer "<msg>" <file...>`; avoid manual `git add`/`git commit` so staging stays scoped.
