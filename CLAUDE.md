@@ -28,10 +28,19 @@ openclaw has rich built-in capabilities. Use them:
 | Tool allow/deny list | `openclaw-config/TOOLS.md` or `openclaw.json` |
 | Memory, history, compaction settings | `openclaw.json` (memorySearch, dmHistoryLimit, compaction) |
 | Agent identity / user context | `openclaw-config/USER.md`, `identity/` |
-| Cron / scheduled tasks | `openclaw-config/cron/` |
+| Cron / scheduled tasks (Slack, backup, memory) | `openclaw-config/cron/` |
+| **PR automation** jobs (pr-monitor, fixpr, etc.) | `~/.openclaw/cron/jobs.json` directly — **exception**, not tracked in repo |
 | New Python orchestration logic | `src/orchestration/` — **only if config cannot express it** |
 
 New Python code in `src/` is for capabilities that genuinely don't exist in openclaw's config surface. Everything else is config. See `roadmap/NATURAL_LANGUAGE_DISPATCH.md` for the rationale.
+
+## PR Automation System
+
+Automated PR jobs (comment-validation, fixpr, fix-comment, codex-update) run via **openclaw gateway cron**. On macOS they were migrated off system crontab on 2026-03-04 and do not appear in `crontab -l`. On Linux environments set up with `scripts/claude_start.sh`, a fallback crontab entry may still be present — check both when debugging.
+
+- Definitions (live): `~/.openclaw/cron/jobs.json` — **not** in `openclaw-config/cron/` (that tracks only Slack check-ins and backup jobs)
+- Binary: `/opt/homebrew/bin/jleechanorg-pr-monitor` (`pip install jleechanorg-automation`, source at `~/projects/worldarchitect.ai/automation/`)
+- Executor: `ai.openclaw.gateway` launchd service (cron scheduler is built into the gateway process)
 
 ## Durable Behavior Goal (Not Incident-Only)
 

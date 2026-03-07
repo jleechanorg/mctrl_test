@@ -10,7 +10,7 @@ Inspired by the [Zoe pattern](https://x.com/eRvissun) — a one-person dev team 
 
 ### The Two-Tier Principle
 
-Context windows are zero-sum. Fill it with code and there's no room for business context. Fill it with customer history and there's no room for the codebase.
+Context windows are zero-sum. Fill it with code and there's no room for business context.
 
 **jleechanclaw** (orchestrator) holds business context: project goals, roadmaps, past decisions, what worked, what failed. Coding agents hold code context: files, tests, types. Each agent is loaded with exactly what it needs.
 
@@ -20,7 +20,6 @@ Context windows are zero-sum. Fill it with code and there's no room for business
                     ┌─────────────────────┐
                     │     jleechanclaw     │
                     │   (orchestrator)     │
-                    │                      │
                     │  Business context    │
                     │  Task planning       │
                     │  Agent management    │
@@ -37,6 +36,16 @@ Context windows are zero-sum. Fill it with code and there's no room for business
      └───────────────┘ └──────────────┘ └──────────────┘
 ```
 
+## How jleechanclaw Operates
+
+1. **Receives work** — from Jeffrey via Slack, from GitHub notifications, from scanning failing CI
+2. **Plans tasks** — breaks work into focused pieces, selects the right agent for each
+3. **Spawns agents** — via `ai_orch run` with precise prompts containing full business context
+4. **Monitors progress** — CI status, PR reviews, agent health, openclaw gateway cron
+5. **Handles failures** — diagnoses why an agent failed, writes a better prompt, retries (max 3)
+6. **Delivers results** — notifies Jeffrey when PRs are ready to merge
+7. **Learns** — logs what worked, what didn't, refines future prompts
+
 ## Dependencies
 
 ### Core
@@ -45,23 +54,24 @@ Context windows are zero-sum. Fill it with code and there's no room for business
 |-----------|--------------|---------|
 | [OpenClaw](https://github.com/openclaw/openclaw) | Agent runtime — persistent memory, channels, gateway, cron | `pnpm install` in openclaw repo |
 | [jleechanorg-orchestration](https://pypi.org/project/jleechanorg-orchestration/) | Task dispatch, agent spawning, tmux management | `pip install jleechanorg-orchestration` |
+| [jleechanorg-automation](https://pypi.org/project/jleechanorg-automation/) | PR monitor, comment-validation, codex-update, fixpr | `pip install jleechanorg-automation` |
 
-### Agent CLIs (managed by orchestration library)
+### Agent CLIs
 
-| CLI | Use Case | Docs |
-|-----|----------|------|
-| `claude` | Claude Code — frontend, git ops, fast iteration | [claude.ai/code](https://claude.ai/code) |
-| `codex` | Codex CLI — backend, complex reasoning, workhorse | [github.com/openai/codex](https://github.com/openai/codex) |
-| `gemini` | Gemini CLI — design, UI specs, creative generation | [github.com/google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli) |
-| `cursor-agent` | Cursor Agent — IDE-integrated tasks | [cursor.com](https://cursor.com) |
+| CLI | Use Case |
+|-----|----------|
+| `claude` | Frontend, git ops, fast iteration |
+| `codex` | Backend, complex reasoning, workhorse |
+| `gemini` | Design, UI specs, creative generation |
+| `cursor-agent` | IDE-integrated tasks |
 
 ### Coordination and Monitoring
 
-| Tool | Purpose | Location |
-|------|---------|----------|
-| [OpenClaw Mission Control](https://github.com/abhi1693/openclaw-mission-control) | Web dashboard for agent ops, approvals, and visibility | `/Users/jleechan/projects_reference/openclaw-mission-control` |
-| [MCP Agent Mail](https://github.com/jleechanorg/mcp_mail) | Cross-agent messaging ("Gmail for coding agents") | `/Users/jleechan/projects_other/mcp_mail` |
-| [Beads](https://github.com/nickarls/beads) | Memory/context management for coding sessions | `/Users/jleechan/projects_other/beads` |
+| Tool | Purpose |
+|------|---------|
+| [OpenClaw Mission Control](https://github.com/abhi1693/openclaw-mission-control) | Web dashboard for agent ops, approvals, and visibility |
+| [MCP Agent Mail](https://github.com/jleechanorg/mcp_mail) | Cross-agent messaging ("Gmail for coding agents") |
+| [Beads](https://github.com/nickarls/beads) | Memory/context management for coding sessions |
 
 ### Infrastructure
 
@@ -74,153 +84,221 @@ Context windows are zero-sum. Fill it with code and there's no room for business
 
 ## What's In This Repo
 
-### Scripts
+### `openclaw-config/` — Live OpenClaw configuration
+
+Tracked baseline for `~/.openclaw/`. Changes here should be synced to `~/.openclaw/` for runtime pickup.
+
+| File/Dir | Purpose |
+|----------|---------|
+| `SOUL.md` | jleechanclaw personality, goals, and decision-making rules |
+| `TOOLS.md` | Tool allow/deny list and usage policy |
+| `USER.md` | User context (Jeffrey's preferences, communication style) |
+| `IDENTITY.md` | Agent identity definition |
+| `openclaw.json` | Runtime config (gateway port, auth, memory, compaction) |
+| `cron/jobs.json` | Slack check-ins, backup, memory curation jobs (synced to `~/.openclaw/cron/`). **Note:** PR automation jobs are NOT here — they live only in `~/.openclaw/cron/jobs.json`. |
+| `ai.openclaw.gateway.plist` | launchd plist for the gateway service |
+| `ai.openclaw.mission-control.plist` | launchd plist for Mission Control backend |
+| `ai.openclaw.mission-control-frontend.plist` | launchd plist for Mission Control frontend |
+| `ai.openclaw.task-poller.plist` | launchd plist for the task poller |
+| `ai.openclaw.thread-ack-watcher.plist` | launchd plist for Slack thread ACK watcher |
+| `AUTO_START_GUIDE.md` | How to set up all launchd services from scratch |
+| `BACKUP_AND_RESTORE.md` | Backup and restore runbook |
+| `SLACK_SETUP_GUIDE.md` | Slack app and token setup |
+| `HEARTBEAT.md` | Heartbeat / health-check protocol |
+| `security-policy.md` | Tool execution security policy |
+| `skills/` | Custom openclaw skills (agent-browser, moltbook) |
+| `agents/` | Per-agent config and session state |
+| `canvas/`, `completions/`, `extensions/` | OpenClaw runtime dirs |
+
+### `src/` — Python source
+
+| Module | Purpose |
+|--------|---------|
+| `src/genesis/config.py` | Config generation utilities |
+| `src/genesis/cron.py` | Cron job spec generation |
+| `src/genesis/memory.py` | Memory entry generation |
+| `src/genesis/writer.py` | File writer for generated config |
+| `src/orchestration/agent_registry.py` | Agent registration and selection |
+| `src/orchestration/backup_redaction.py` | Secret redaction for backups |
+| `src/orchestration/evidence.py` | Evidence collection for CI/review |
+| `src/orchestration/gh_integration.py` | GitHub API integration |
+| `src/orchestration/gh_triage.py` | PR triage and classification |
+| `src/integration/run_e2e.py` | End-to-end integration test runner |
+| `src/tests/` | pytest suite for the above |
+
+### `scripts/` — Shell utilities
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/backup-openclaw-full.sh` | Full recursive backup of `~/.openclaw/` with secret redaction |
-| `scripts/run-openclaw-backup.sh` | Backup runner with locking and failure alerts |
-| `scripts/install-openclaw-backup-jobs.sh` | Install launchd plist for scheduled backups |
-| `scripts/check-openclaw-cron-guardrail.sh` | Guardrail check for forbidden OpenClaw `crontab` usage |
+| `backup-openclaw-full.sh` | Full recursive backup of `~/.openclaw/` with secret redaction |
+| `run-openclaw-backup.sh` | Backup runner with locking and failure alerts |
+| `dropbox-openclaw-backup.sh` | Dropbox-targeted backup |
+| `install-openclaw-backup-jobs.sh` | Install launchd plist for scheduled backups |
+| `check-openclaw-cron-guardrail.sh` | CI guardrail: fail if system crontab has OpenClaw jobs |
+| `setup-openclaw-full.sh` | Full first-time OpenClaw setup |
+| `install-launchagents.sh` | Install all openclaw launchd plists from `openclaw-config/` |
+| `install-mc-task-poller.sh` | Install Mission Control task poller launchd job |
+| `run_task_poller.sh` | Run task poller manually |
+| `mc-health-check.sh` | Mission Control health check |
+| `run_thread_mention_ack_watcher.sh` | Run Slack thread mention ACK watcher |
+| `claude_start.sh` | Start Claude Code agent session |
+| `push.sh` | Safe push with branch verification |
+| `sync_branch.sh` | Sync branch with upstream |
+| `resolve_conflicts.sh` | Semi-automated conflict resolution |
+| `create_snapshot.sh` | Create workspace snapshot |
+| `consolidate-workspace-snapshots.sh` | Merge workspace snapshots |
+| `peekaboo-preflight.sh` | Preflight checks for Peekaboo UI automation |
+| `run_lint.sh` | Lint the Python source |
+| `run_tests_with_coverage.sh` | Run tests with coverage report |
+| `codebase_loc.sh` / `loc.sh` | Lines-of-code counters |
+| `setup_email.sh` | Email notification setup |
+| `setup-github-runner.sh` | Self-hosted GitHub Actions runner setup |
+
+### Root-level scripts
+
+| Script | Purpose |
+|--------|---------|
 | `health-check.sh` | Gateway and agent health checks |
 | `create_worktree.sh` | Create isolated git worktrees for parallel agent work |
-| `integrate.sh` | Integration tooling |
 | `blank-to-pr.sh` | Scaffold a branch through to PR |
 | `bootstrap-openclaw-config.sh` | Bootstrap fresh OpenClaw configuration |
 | `enable-auto-backup.sh` | Enable automated backup scheduling |
+| `integrate.sh` | Integration tooling |
 
-### Configuration
-
-| Path | Purpose |
-|------|---------|
-| `openclaw-config/` | Baseline OpenClaw configuration templates |
-| `.openclaw/` | Sync boundary contract for `openclaw-config/` vs repo-only custom artifacts |
-| `.openclaw-backups/` | Timestamped snapshots of `~/.openclaw/` (redacted) |
-
-### Documentation
+### `docs/` — Design docs
 
 | File | Purpose |
 |------|---------|
-| `CLAUDE.md` | Agent instructions (loaded by Claude Code at session start) |
-| `AGENTS.md` | Sub-agent definitions and behavior |
-| `IDENTITY.md` | jleechanclaw identity definition |
-| `GITHUB_REPOS.md` | All jleechanorg repositories with commit counts |
-| `PROJECTS_BEADS.md` | Beads memory context |
-| `docs/GENESIS_DESIGN.md` | Original design doc (historical — renamed to jleechanclaw) |
-| `docs/mcp-mail-openclaw-mission-control-design.md` | Autonomous task-to-PR lifecycle design (Mission Control + MCP Mail + ai_orch) |
-| `docs/openclaw-backup-jobs.md` | Backup job documentation |
-| `roadmap/` | Project roadmap tracking |
+| `GENESIS_DESIGN.md` | Original design doc (historical) |
+| `mcp-mail-openclaw-mission-control-design.md` | Autonomous task-to-PR lifecycle (Mission Control + MCP Mail + ai_orch) |
+| `openclaw-backup-jobs.md` | Backup job documentation |
+| `orchestration-system-justification.md` | Why the Python orchestration layer exists |
+| `user_preferences_learnings.md` | Learned user preferences log |
+| `cmux-mission-control-integration-design.md` | cmux + Mission Control integration design |
+
+### `roadmap/` — Planning docs
+
+| File | Purpose |
+|------|---------|
+| `GENESIS_DESIGN.md` | Renamed jleechanclaw design (canonical) |
+| `ORCHESTRATION_DESIGN.md` | Orchestration system design |
+| `NATURAL_LANGUAGE_DISPATCH.md` | Why config > code for scheduling |
+| `DURABLE_BEHAVIOR_HARDENING_PLAN.md` | Plan for making behavior deterministic |
+| `ORCHESTRATION_EVIDENCE_STANDARDS.md` | Evidence standards for orchestration claims |
+| `OUTCOME_LEDGER_DESIGN.md` | Outcome tracking design |
+| `PEEKABOO_ANTIGRAVITY_UI_AUTOMATION.md` | UI automation design |
+| `TDD_EXECUTION_ROADMAP.md` | TDD execution plan |
+| `BACKUP_REDUNDANCY_DESIGN.md` | Backup redundancy design |
+
+### `.github/workflows/`
+
+| Workflow | Purpose |
+|----------|---------|
+| `agent-pr-trigger.yml` | Trigger agent on new PRs |
+| `agent-pr-fix-trigger.yml` | Trigger agent to fix PR review comments |
+
+### `discord-eng-bot/`
+
+Standalone OpenClaw agent config for a Discord engineering bot — separate `openclaw.json` and `SOUL.md` for a Discord-channel-native agent persona.
+
+## PR Automation System
+
+Automated PR jobs (comment-validation, fixpr, fix-comment, codex-update) are driven by `jleechanorg-pr-monitor`.
+
+These jobs run through the **openclaw gateway's built-in cron scheduler**. On macOS (post-2026-03-04 migration) they do not appear in `crontab -l`. On Linux environments set up with `scripts/claude_start.sh`, a fallback crontab entry may still exist — check both when debugging.
+
+| What | Where |
+|------|-------|
+| Job definitions (live, macOS) | `~/.openclaw/cron/jobs.json` — **not** in `openclaw-config/cron/` (that tracks Slack/backup jobs only) |
+| Binary | `/opt/homebrew/bin/jleechanorg-pr-monitor` |
+| Package | `pip install jleechanorg-automation` |
+| Source library | `~/projects/worldarchitect.ai/automation/` |
+| Executor | `ai.openclaw.gateway` launchd service (cron built into gateway process) |
+| Logs | `~/Library/Logs/worldarchitect-automation/` |
+
+Active scheduled PR jobs (as of 2026-03-07):
+
+| Job | Schedule | Command |
+|-----|----------|---------|
+| `pr-monitor` | `0 */2 * * *` | `jleechanorg-pr-monitor --max-prs 10` |
+| `comment-validation` | `*/30 * * * *` | `jleechanorg-pr-monitor --comment-validation` |
+| `fixpr` | `*/30 * * * *` | `jleechanorg-pr-monitor --fixpr --cli-agent minimax` |
+| `fix-comment` | `45 * * * *` | `jleechanorg-pr-monitor --fix-comment --cli-agent minimax` |
+| `codex-api` | `30 * * * *` | `jleechanorg-pr-monitor --codex-api --codex-apply-and-push` |
+
+```bash
+# Inspect live jobs
+cat ~/.openclaw/cron/jobs.json | python3 -m json.tool
+
+# Add/change a PR automation job: edit ~/.openclaw/cron/jobs.json directly
+```
+
+## OpenClaw Gateway Cron (all scheduled jobs)
+
+The gateway also runs these non-PR jobs (tracked in `openclaw-config/cron/jobs.json`):
+
+| Job | Schedule | Purpose |
+|-----|----------|---------|
+| `Daily Slack Check-in 9AM` | `0 9 * * *` PT | Morning summary to Slack |
+| `Daily Slack Check-in 12PM` | `0 12 * * *` PT | Midday summary |
+| `Daily Slack Check-in 6PM` | `0 18 * * *` PT | Evening summary |
+| `OpenClaw backup (in-app)` | `20 */4 * * *` | Backup `~/.openclaw/` every 4h |
+| `Genesis memory curation` | `0 22 * * 0` PT | Weekly memory curation |
 
 ## Quick Start
 
-### 1. Orchestration CLI
+### Gateway health check
 
 ```bash
-# Install the orchestration library
-pip install jleechanorg-orchestration
-
-# Spawn a Claude Code agent for a task
-ai_orch run --agent-cli claude "Fix flaky integration tests and open PR"
-
-# Spawn Codex for backend work
-ai_orch run --agent-cli codex "Refactor auth middleware"
-
-# Multi-agent with fallback chain
-ai_orch run --agent-cli gemini,claude "Investigate failing CI in PR #42"
-
-# Analyze a task and create agents
-ai_orch dispatcher create --agent-cli claude "Fix PR review blockers"
-```
-
-### 2. Backup
-
-```bash
-# One-time backup
-./scripts/backup-openclaw-full.sh
-
-# Install scheduled backups (launchd)
-./scripts/install-openclaw-backup-jobs.sh
-```
-
-### 3. OpenClaw Gateway
-
-```bash
-# Check health
 ./health-check.sh
 
-# API test
-curl -sS -X POST "http://127.0.0.1:18789/v1/chat/completions" \
-  -H "Authorization: Bearer $OPENCLAW_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"agent":"main","messages":[{"role":"user","content":"Hello"}]}'
+# Or directly
+curl -sS http://127.0.0.1:18789/health
 ```
 
-### 4. Scheduling Guardrail (Gateway Cron Only)
-
-Use OpenClaw gateway cron for reminders/schedules. Do not edit system `crontab` for OpenClaw jobs.
-
-- Tracked cron jobs live in: `openclaw-config/cron/jobs.json`
-- The Genesis weekly curation job is defined there as:
-  - `id: genesis-memory-curation-weekly`
-  - schedule: `0 22 * * 0` (`America/Los_Angeles`)
-- Runtime execution uses OpenClaw's scheduler + agent runtime, so **the OpenClaw gateway must be running**.
-- **Important:** `openclaw-config/cron/jobs.json` is tracked source config; sync it to `~/.openclaw/cron/jobs.json` for runtime pickup.
-
-Quick verify:
+### Spawn an agent
 
 ```bash
-# Inspect gateway cron support
-openclaw cron --help
+pip install jleechanorg-orchestration
 
-# Common operations
-openclaw cron status
-openclaw cron list
+ai_orch run --agent-cli claude "Fix flaky integration tests and open PR"
+ai_orch run --agent-cli codex "Refactor auth middleware"
+```
 
-# Ensure tracked job exists
-jq '.jobs[] | select(.id=="genesis-memory-curation-weekly")' openclaw-config/cron/jobs.json
+### Backup
 
-# Optional runtime check (after sync)
-jq '.jobs[] | select(.id=="genesis-memory-curation-weekly")' ~/.openclaw/cron/jobs.json
+```bash
+./scripts/backup-openclaw-full.sh
+./scripts/install-openclaw-backup-jobs.sh  # set up scheduled backups
+```
+
+### Install launchd services
+
+```bash
+./scripts/install-launchagents.sh  # installs all plists from openclaw-config/
 ```
 
 ## Agent Selection Guide
 
 | Task Type | Agent | Why |
 |-----------|-------|-----|
-| Backend logic, complex bugs, multi-file refactors | Codex | Deep reasoning, thorough, low false-positive rate |
-| Frontend, git operations, fast iteration | Claude Code | Faster, fewer permission issues, broad context |
-| UI design, dashboard specs, creative | Gemini | Design sensibility — Gemini designs, Claude builds |
-| Rapid prototyping, IDE-integrated | Cursor | Tight IDE integration |
-
-## How jleechanclaw Operates
-
-1. **Receives work** — from Jeffrey, from GitHub notifications, from scanning failing CI
-2. **Plans tasks** — breaks work into focused pieces, selects the right agent for each
-3. **Spawns agents** — via `ai_orch run` with precise prompts containing full business context
-4. **Monitors progress** — CI status, PR reviews, agent health
-5. **Handles failures** — diagnoses why an agent failed, writes a better prompt, retries (max 3)
-6. **Delivers results** — notifies Jeffrey when PRs are ready to merge
-7. **Learns** — logs what worked, what didn't, refines future prompts
+| Backend logic, complex bugs, multi-file refactors | Codex | Deep reasoning, low false-positive rate |
+| Frontend, git operations, fast iteration | Claude Code | Fast, broad context |
+| UI design, specs, creative | Gemini | Design sensibility |
+| IDE-integrated tasks | Cursor | Tight IDE integration |
 
 ## Projects Managed
 
-| Repo | Commits | Description |
-|------|---------|-------------|
-| [worldarchitect.ai](https://github.com/jleechanorg/worldarchitect.ai) | 6,341 | AI RPG — primary project |
-| [codex_fork](https://github.com/jleechanorg/codex_fork) | 2,036 | Fork of Codex open source |
-| [beads](https://github.com/jleechanorg/beads) | 1,898 | Memory upgrade for coding agents |
-| [ai_universe](https://github.com/jleechanorg/ai_universe) | 1,285 | MCP Backend Server (Firebase + Cerebras) |
-| [ai_universe_frontend](https://github.com/jleechanorg/ai_universe_frontend) | 321 | Multi-model AI consultation platform |
-| [mcp_mail](https://github.com/jleechanorg/mcp_mail) | 222 | Agent-to-agent mail coordination |
-| [worldai_claw](https://github.com/jleechanorg/worldai_claw) | — | AI RPG powered by OpenClaw |
-| [claude-commands](https://github.com/jleechanorg/claude-commands) | — | Claude command collection |
-
-## Reference Repos
-
-Cloned to `/Users/jleechan/projects_reference/` for study and integration:
-
-- `openclaw/` — OpenClaw source
-- `openclaw-mission-control/` — Agent orchestration dashboard
+| Repo | Description |
+|------|-------------|
+| [worldarchitect.ai](https://github.com/jleechanorg/worldarchitect.ai) | AI RPG — primary project |
+| [codex_fork](https://github.com/jleechanorg/codex_fork) | Fork of Codex open source CLI |
+| [beads](https://github.com/jleechanorg/beads) | Memory upgrade for coding agents |
+| [ai_universe](https://github.com/jleechanorg/ai_universe) | MCP Backend Server (Firebase + Cerebras) |
+| [ai_universe_frontend](https://github.com/jleechanorg/ai_universe_frontend) | Multi-model AI consultation platform |
+| [mcp_mail](https://github.com/jleechanorg/mcp_mail) | Agent-to-agent mail coordination |
+| [worldai_claw](https://github.com/jleechanorg/worldai_claw) | AI RPG powered by OpenClaw |
+| [claude-commands](https://github.com/jleechanorg/claude-commands) | Claude command collection |
 
 ## License
 

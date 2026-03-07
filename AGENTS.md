@@ -15,7 +15,8 @@ This repo's primary job is **configuring openclaw**, not building new software.
 | Change tool access | Edit `openclaw-config/TOOLS.md` or `openclaw.json` |
 | Change memory/history behavior | Edit `openclaw.json` (memorySearch, dmHistoryLimit) |
 | Change agent identity | Edit `openclaw-config/USER.md` |
-| Add cron/scheduled tasks | Edit `openclaw-config/cron/` |
+| Add cron/scheduled tasks (Slack, backup, memory) | Edit `openclaw-config/cron/` |
+| Add/change **PR automation** jobs | Edit `~/.openclaw/cron/jobs.json` directly (exception — not tracked in repo) |
 | Genuinely new orchestration capability | `src/orchestration/` Python — last resort only |
 
 ## Scheduling Guardrail (jleechanclaw-specific)
@@ -26,6 +27,16 @@ This repo's primary job is **configuring openclaw**, not building new software.
 **The test:** if the change could be expressed as a sentence in SOUL.md, it belongs in SOUL.md.
 
 See `roadmap/NATURAL_LANGUAGE_DISPATCH.md` for the design rationale and `CLAUDE.md` for full project rules.
+
+### Where PR automation jobs run
+
+Automated PR comments (comment-validation, fixpr, fix-comment, codex-update) come from `jleechanorg-pr-monitor` running via the **openclaw gateway's built-in cron scheduler**. On macOS, these jobs do not appear in `crontab -l`. On Linux setups bootstrapped with `scripts/claude_start.sh`, a fallback crontab entry may still exist — check both.
+
+- Job definitions (live): `~/.openclaw/cron/jobs.json` — **not** tracked in `openclaw-config/cron/` (that file contains only Slack check-ins and backup jobs)
+- To modify: edit `~/.openclaw/cron/jobs.json` directly
+- Binary: `/opt/homebrew/bin/jleechanorg-pr-monitor` (`pip install jleechanorg-automation`)
+- Source: `~/projects/worldarchitect.ai/automation/`
+- Executor: `ai.openclaw.gateway` launchd service (the cron scheduler is built into the gateway process)
 
 ## Durable Behavior Goal (Non-Oneoff)
 
