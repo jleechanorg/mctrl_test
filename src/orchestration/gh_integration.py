@@ -162,6 +162,75 @@ def detect_pr(branch: str, repo: str) -> Optional[PRInfo]:
 
 
 # ---------------------------------------------------------------------------
+# GitHub webhook parsing helpers
+# ---------------------------------------------------------------------------
+
+
+def parse_github_webhook_pr_number(payload: dict) -> int | None:
+    """Extract PR number from pull_request/review/issue_comment webhook payloads."""
+    pr = payload.get("pull_request")
+    if isinstance(pr, dict):
+        number = pr.get("number")
+        if isinstance(number, int):
+            return number
+
+    issue = payload.get("issue")
+    if isinstance(issue, dict) and isinstance(issue.get("pull_request"), dict):
+        number = issue.get("number")
+        if isinstance(number, int):
+            return number
+
+    return None
+
+
+def parse_github_webhook_repo(payload: dict) -> str | None:
+    """Extract repo as owner/name from webhook payload."""
+    repo = payload.get("repository")
+    if not isinstance(repo, dict):
+        return None
+
+    full_name = repo.get("full_name")
+    if isinstance(full_name, str) and "/" in full_name:
+        return full_name
+
+    owner = repo.get("owner")
+    name = repo.get("name")
+    if isinstance(owner, dict) and isinstance(name, str):
+        login = owner.get("login")
+        if isinstance(login, str) and login:
+            return f"{login}/{name}"
+
+    return None
+
+
+def parse_github_webhook_actor(payload: dict) -> str:
+    """Extract actor login from sender block."""
+    sender = payload.get("sender")
+    if isinstance(sender, dict):
+        login = sender.get("login")
+        if isinstance(login, str):
+            return login
+    return ""
+
+
+def parse_github_webhook_author_association(payload: dict) -> str:
+    """Extract author_association from webhook payload."""
+    comment = payload.get("comment")
+    if isinstance(comment, dict):
+        association = comment.get("author_association")
+        if isinstance(association, str):
+            return association
+
+    review = payload.get("review")
+    if isinstance(review, dict):
+        association = review.get("author_association")
+        if isinstance(association, str):
+            return association
+
+    return ""
+
+
+# ---------------------------------------------------------------------------
 # PR state
 # ---------------------------------------------------------------------------
 

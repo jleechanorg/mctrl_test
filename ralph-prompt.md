@@ -1,104 +1,108 @@
-# Ralph Agent Instructions — Phase 11: Amazon Clone + PR Polish
+# Ralph Agent Instructions — ORCH-g8c.3 Supervisor Integration Test
 
-You are an autonomous agent. Your current goal is to build a working Amazon clone website in /tmp/amazon-clone/ and verify it.
-
-## Exit Criteria (ALL must be true to declare ORCHESTRATION_ALL_DONE)
-
-1. All userStories in ralph-prd.json have passes: true
-2. /tmp/amazon-clone/ exists with 5 files: index.html, product.html, cart.html, style.css, app.js
-3. Summary posted to #worldai as jleechan
+You are an autonomous agent testing the mctrl supervisor daemon and dispatch_task CLI.
+Working directory: /Users/jleechan/project_jleechanclaw/mctrl
 
 ## Your Task Each Iteration
 
-1. Read `ralph-prd.json` (in repo root — the working directory)
-2. Read `ralph-progress.txt` (in repo root — the working directory)
-3. Pick the **lowest wave, lowest priority** story where `passes: false`
-4. Implement it
-5. Verify against acceptanceCriteria
-6. Update ralph-prd.json with `passes: true`
-7. Append to ralph-progress.txt
+1. Read `ralph-prd.json` (repo root)
+2. Read `ralph-progress.txt` (repo root)
+3. Find the **lowest wave, lowest priority** story where `passes: false`
+4. Execute the verification steps exactly as described
+5. If verification passes: set `passes: true` in ralph-prd.json
+6. If verification fails: fix the issue (edit source files if needed), re-verify, then set passes: true
+7. Append what you did to ralph-progress.txt
+8. Stop after completing ONE story per iteration
 
-## Story-Specific Instructions
+## Critical Rules
 
-### AMZN-1: Build Amazon clone scaffold
+- PYTHONPATH must always be `src` when running orchestration modules
+- Never post real Slack messages — set SLACK_BOT_TOKEN= and OPENCLAW_SLACK_BOT_TOKEN= to empty when testing reconciliation
+- If a test fails, check the actual error carefully before patching
+- After fixing any source file, always re-run the full test suite to confirm no regressions
 
-Create the directory and all 5 files in /tmp/amazon-clone/:
+## Story Execution
 
-**index.html**: Homepage with Amazon-style layout:
-- Dark nav bar (#131921) with logo "amazon", search input, cart icon with badge
-- Product grid showing all 8 products from app.js
-- Each product card: image, name, rating stars, price, "Add to Cart" button
-- Import style.css and app.js
-
-**product.html**: Product detail page:
-- Shows single product info (use URL params like ?id=1)
-- Larger image, full description, price, Add to Cart button
-
-**cart.html**: Shopping cart page:
-- Lists cart items from localStorage
-- Shows quantity, subtotal per item, order total
-- Remove from cart buttons
-
-**style.css**: Amazon-inspired styling:
-- `nav { background: #131921; }` orange search button and "Add to Cart" buttons
-- Product card grid with hover shadow
-- Star ratings in orange (#f0c040)
-- Responsive grid layout
-
-**app.js**: Full interactivity:
-```javascript
-const products = [
-  { id: 1, name: "Wireless Headphones", price: 49.99, rating: 4.5, reviewCount: 1234, category: "electronics", imageUrl: "https://via.placeholder.com/200x200?text=Headphones" },
-  { id: 2, name: "Mechanical Keyboard", price: 89.99, rating: 4.8, reviewCount: 567, category: "electronics", imageUrl: "https://via.placeholder.com/200x200?text=Keyboard" },
-  { id: 3, name: "USB-C Hub", price: 34.99, rating: 4.2, reviewCount: 890, category: "electronics", imageUrl: "https://via.placeholder.com/200x200?text=USB+Hub" },
-  { id: 4, name: "Coffee Maker", price: 79.99, rating: 4.6, reviewCount: 2345, category: "kitchen", imageUrl: "https://via.placeholder.com/200x200?text=Coffee+Maker" },
-  { id: 5, name: "Running Shoes", price: 129.99, rating: 4.4, reviewCount: 678, category: "sports", imageUrl: "https://via.placeholder.com/200x200?text=Running+Shoes" },
-  { id: 6, name: "Yoga Mat", price: 29.99, rating: 4.7, reviewCount: 3456, category: "sports", imageUrl: "https://via.placeholder.com/200x200?text=Yoga+Mat" },
-  { id: 7, name: "Desk Lamp", price: 24.99, rating: 4.3, reviewCount: 456, category: "home", imageUrl: "https://via.placeholder.com/200x200?text=Desk+Lamp" },
-  { id: 8, name: "Water Bottle", price: 19.99, rating: 4.9, reviewCount: 7890, category: "sports", imageUrl: "https://via.placeholder.com/200x200?text=Water+Bottle" },
-];
-
-function getCart() { return JSON.parse(localStorage.getItem('cart') || '[]'); }
-function saveCart(cart) { localStorage.setItem('cart', JSON.stringify(cart)); }
-function addToCart(productId) { ... }
-function removeFromCart(productId) { ... }
-function updateCartBadge() { ... }
-function renderProducts(filter = '') { ... } // filters products array by name
-function searchProducts(query) { renderProducts(query); }
-```
-
-Verify with:
+### SUP-1: Supervisor --once with empty registry
 ```bash
-ls -la /tmp/amazon-clone/
-wc -l /tmp/amazon-clone/*.html /tmp/amazon-clone/*.js /tmp/amazon-clone/*.css
+cd /Users/jleechan/project_jleechanclaw/mctrl
+source ~/.bashrc
+PYTHONPATH=src python -m orchestration.supervisor --once
+echo "Exit: $?"
 ```
+Expected: logs starting + stopped, exit 0. Mark passes=true if so.
 
-### AMZN-2: Verify and post to Slack
-
-Run verification checks:
+### SUP-2: Supervisor detects dead session
 ```bash
-grep -c 'addToCart' /tmp/amazon-clone/app.js
-grep 'localStorage' /tmp/amazon-clone/app.js
-grep -i 'search\|filter' /tmp/amazon-clone/app.js
-grep '#131921' /tmp/amazon-clone/style.css
-```
+cd /Users/jleechan/project_jleechanclaw/mctrl
+source ~/.bashrc
 
-Then post to #worldai as jleechan:
+# Create test registry entry
+PYTHONPATH=src python -c "
+from orchestration.session_registry import BeadSessionMapping, upsert_mapping
+upsert_mapping(BeadSessionMapping.create(
+    bead_id='ORCH-sup-test',
+    session_name='fake-dead-session-xyz',
+    worktree_path='/tmp/fake-wt',
+    branch='feat/test',
+    agent_cli='claude',
+    status='in_progress',
+), registry_path='/tmp/test-sup-registry.jsonl')
+print('registry written')
+"
+
+# Run reconciler with blank Slack tokens (no real posts)
+SLACK_BOT_TOKEN= OPENCLAW_SLACK_BOT_TOKEN= PYTHONPATH=src python -c "
+from orchestration.reconciliation import reconcile_registry_once
+emitted = reconcile_registry_once(
+    registry_path='/tmp/test-sup-registry.jsonl',
+    outbox_path='/tmp/test-sup-outbox.jsonl',
+)
+print('emitted:', emitted)
+assert len(emitted) == 1, f'Expected 1 event, got {len(emitted)}'
+assert emitted[0]['event'] == 'task_needs_human', f'Wrong event: {emitted[0][\"event\"]}'
+assert emitted[0]['bead_id'] == 'ORCH-sup-test'
+print('SUP-2 PASS')
+"
+```
+Mark passes=true if prints SUP-2 PASS.
+
+### SUP-3: Parse ai_orch output
 ```bash
-curl -s -X POST https://slack.com/api/chat.postMessage \
-  -H "Authorization: Bearer $SLACK_USER_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"channel":"C0AH3RY3DK6","text":"Amazon clone built at /tmp/amazon-clone/ — 5 files. Products: Wireless Headphones, Mechanical Keyboard, Coffee Maker, Running Shoes, Yoga Mat, Desk Lamp, USB-C Hub, Water Bottle. Cart uses localStorage. Search filters by name. Ready to demo!"}'
+cd /Users/jleechan/project_jleechanclaw/mctrl
+source ~/.bashrc
+PYTHONPATH=src python -c "
+from orchestration.dispatch_task import _parse_ai_orch_output
+sample = '\U0001f9e9 Worktree: /tmp/ai-orch-worktrees/ai-orch-77258 (branch: ai-orch-77258)\n\U0001f680 Async session: ai-claude-dfa2c0\n'
+s, w, b = _parse_ai_orch_output(sample)
+assert s == 'ai-claude-dfa2c0', f'bad session: {s!r}'
+assert w == '/tmp/ai-orch-worktrees/ai-orch-77258', f'bad worktree: {w!r}'
+assert b == 'ai-orch-77258', f'bad branch: {b!r}'
+print('PARSE OK')
+"
 ```
+Mark passes=true if prints PARSE OK.
 
-Verify curl response has ok:true and user == U09GH5BR3QU.
+### SUP-4: Install launchd supervisor
+```bash
+cd /Users/jleechan/project_jleechanclaw/mctrl
+chmod +x scripts/install-mctrl-supervisor.sh
+./scripts/install-mctrl-supervisor.sh
+sleep 5
+launchctl list | grep ai.mctrl.supervisor
+tail -5 ~/Library/Logs/mctrl/supervisor.log
+```
+Mark passes=true if launchctl shows the agent and log exists with content.
 
-## Coding Standards
-- Write actual file contents — do NOT skip or abbreviate
-- ONE story per iteration
-- After AMZN-1: mark passes=true in ralph-prd.json, then stop
-- After AMZN-2: mark passes=true in ralph-prd.json, then stop
+### SUP-5: Full test suite
+```bash
+cd /Users/jleechan/project_jleechanclaw/mctrl
+source ~/.bashrc
+PYTHONPATH=src python -m pytest src/tests/ --tb=short -q 2>&1 | tail -5
+```
+Mark passes=true if 476+ passed, 0 failed.
 
 ## Stop Condition
-When all stories pass AND all exit criteria met, output:
+
+When ALL stories have passes=true, output exactly:
 ORCHESTRATION_ALL_DONE

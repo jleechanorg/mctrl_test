@@ -3,6 +3,13 @@
 > **This file is used by agents working on `jleechanorg/jleechanclaw`.**
 > The sections below the divider are upstream openclaw/openclaw guidelines (kept for reference).
 
+## MiniMax Agent — No Separate Binary
+
+`minimax` is NOT a standalone binary. It uses the `claude` CLI with `ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic`.
+`which minimax` returning nothing is **expected** — do not switch to codex/claude as a workaround.
+
+Full details: `~/.claude/skills/minimax.md`
+
 ## Config-First Principle (jleechanclaw-specific)
 
 This repo's primary job is **configuring openclaw**, not building new software.
@@ -18,6 +25,39 @@ This repo's primary job is **configuring openclaw**, not building new software.
 | Add cron/scheduled tasks (Slack, backup, memory) | Edit `openclaw-config/cron/` |
 | Add/change **PR automation** jobs | Edit `~/.openclaw/cron/jobs.json` directly (exception — not tracked in repo) |
 | Genuinely new orchestration capability | `src/orchestration/` Python — last resort only |
+
+## Slack — Posting as jleechan (not the bot)
+
+To post to Slack **as jleechan** (not as the openclaw bot):
+
+```bash
+source ~/.profile   # loads SLACK_USER_TOKEN — not in env by default in Claude sessions
+curl -s -X POST "https://slack.com/api/chat.postMessage" \
+  -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"channel": "CHANNEL_ID", "text": "your message"}'
+```
+
+- `SLACK_USER_TOKEN` (`xoxp-...`) lives in `~/.profile`; run `source ~/.profile` before use.
+- `OPENCLAW_SLACK_BOT_TOKEN` (`xoxb-...`) is already in env but posts as `openclaw` bot — wrong for "post as me".
+- No Slack MCP server needed. Channel IDs: `#ai-slack-test` → `C0AKALZ4CKW`.
+- Confirm identity: `auth.test` should return `"user":"jleechan"`.
+
+## Testing Philosophy — Real Over Fake
+
+When testing the mctrl dispatch loop, **always run a real test**: real Slack trigger, real ai_orch spawn, real supervisor notification. Do NOT use fake registry entries with dead sessions — that only tests the reconciler in isolation, not the full system.
+
+For any suite or artifact under `testing_*/`, the rule is stricter: **no fakes, no mocks, no monkeypatching, no simulated registry/outbox/session state, and no code/config mutation of the system under test.** `testing_*` is reserved for black-box, observe-only verification. The harness may inject a real trigger (for example, post to Slack as jleechan) and then only observe logs, Slack, OpenClaw-visible outputs, and other externally visible evidence.
+
+Anything that replaces tmux/git/OpenClaw/Slack behavior with controlled outcomes is not a `testing_*` test in this repo. Put that coverage in `src/tests/` and label it as unit/integration/simulated coverage instead of E2E.
+
+Real mctrl test checklist:
+1. `source ~/.profile` — get `SLACK_USER_TOKEN`
+2. Post trigger to `#ai-slack-test` as jleechan, capture `trigger_ts`
+3. Create a real bead: `bd create ...`
+4. Run `PYTHONPATH=src python -m orchestration.dispatch_task --bead-id ... --task "..." --slack-trigger-ts <trigger_ts>`
+5. Wait for `ai.mctrl.supervisor` to detect session exit (≤60s after agent finishes)
+6. Confirm real thread reply appears under trigger, real DM received
 
 ## Scheduling Guardrail (jleechanclaw-specific)
 

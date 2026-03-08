@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from typing import TYPE_CHECKING
+import threading
+from typing import Any
 
-if TYPE_CHECKING:
-    from orchestration.mc_client import MissionControlClient
+from orchestration.openclaw_notifier import drain_outbox, notify_openclaw, notify_slack_done
+from orchestration.session_registry import list_mappings, update_mapping_status
 
 logger = logging.getLogger(__name__)
 
@@ -24,29 +25,110 @@ def run_tmux_sessions() -> set[str]:
         return set()
 
 
-def get_stuck_tasks(
-    client: MissionControlClient,
-    board_id: str,
-    active_sessions: set[str],
-) -> list[dict]:
-    """Return in_progress tasks with no matching active tmux session."""
-    tasks = client.list_tasks(board_id, status="in_progress") or []
-    stuck = []
-    for task in tasks:
-        task_id = task.get("id", "")
-        # Match by task_id prefix in session name
-        has_session = any(
-            f"-{task_id}-" in s or s.startswith(f"{task_id}-") or s.endswith(f"-{task_id}") or s == task_id
-            for s in active_sessions
-        )
-        if not has_session:
-            stuck.append(task)
-            logger.warning("Stuck task detected (no active session): %s - %s", task_id, task.get("title", ""))
-    return stuck
+def _worktree_has_commits(worktree_path: str | None, start_sha: str = "") -> bool:
+    """Return True if the agent made new commits since spawn.
+
+    Uses start_sha..HEAD when available — only counts commits the agent made.
+    Falls back to git status --porcelain (uncommitted changes) for legacy entries.
+    """
+    if not worktree_path:
+        return False
+    try:
+        if start_sha:
+            result = subprocess.run(
+                ["git", "log", "--oneline", f"{start_sha}..HEAD"],
+                cwd=worktree_path,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            return bool(result.returncode == 0 and result.stdout.strip())
+        # No start_sha: cannot distinguish agent commits from pre-existing history.
+        # Default to False (→ needs_human) so humans review rather than silently
+        # misclassifying a dirty-tree crash as task_finished.
+        return False
+    except Exception:
+        return False
 
 
-def reconcile_once(client: MissionControlClient, board_id: str) -> list[str]:
-    """Detect stuck tasks and return their IDs. Does NOT auto-transition — human review required."""
+def reconcile_registry_once(
+    *,
+    registry_path: str,
+    outbox_path: str,
+) -> list[dict[str, Any]]:
+    """Reconcile bead/session mappings when session is gone.
+
+    Only checks in_progress mappings. Distinguishes two exit outcomes:
+    - task_finished: worktree branch has new commits → agent completed work
+    - task_needs_human: no commits found → agent stalled, crashed, or timed out
+    """
+    # Retry any previously failed notifications before emitting new ones.
+    drain_outbox(outbox_path=outbox_path)
+
     active = run_tmux_sessions()
-    stuck = get_stuck_tasks(client, board_id, active)
-    return [t.get("id") for t in stuck if t.get("id")]
+    emitted: list[dict[str, Any]] = []
+
+    for mapping in list_mappings(registry_path=registry_path):
+        # Only check in_progress tasks - queued tasks may have session_name pre-assigned
+        # but the session hasn't started yet (pre-allocation state)
+        if mapping.status != "in_progress":
+            continue
+        if mapping.session_name in active:
+            continue
+
+        # Determine exit outcome by checking for commits the agent made
+        finished = _worktree_has_commits(mapping.worktree_path, mapping.start_sha)
+        new_status = "finished" if finished else "needs_human"
+        event_type = "task_finished" if finished else "task_needs_human"
+        summary = (
+            "ai_orch session completed — worktree branch has new commits"
+            if finished
+            else "ai_orch session exited without committing — may have stalled or failed"
+        )
+        action = "review_and_merge" if finished else "human_decision"
+
+        changed = update_mapping_status(
+            mapping.bead_id,
+            new_status,
+            from_status="in_progress",
+            registry_path=registry_path,
+        )
+        if not changed:
+            continue
+
+        payload = {
+            "event": event_type,
+            "bead_id": mapping.bead_id,
+            "session": mapping.session_name,
+            "summary": summary,
+            "action_required": action,
+            "worktree_path": mapping.worktree_path,
+            "branch": mapping.branch,
+            "agent_cli": mapping.agent_cli,
+            "slack_trigger_ts": mapping.slack_trigger_ts,
+        }
+        # Fire both notifications in parallel: openclaw agent + Slack
+        t_openclaw = threading.Thread(
+            target=notify_openclaw,
+            args=(payload,),
+            kwargs={"outbox_path": outbox_path},
+            daemon=True,
+        )
+        t_slack = threading.Thread(
+            target=notify_slack_done,
+            args=(payload,),
+            daemon=True,
+        )
+        t_openclaw.start()
+        t_slack.start()
+        t_openclaw.join(timeout=35)
+        # Slack posts two requests (DM + public channel) each with 5s network
+        # timeout = 10s max, plus overhead. Use 30s so the join reliably waits
+        # for completion rather than leaving a daemon thread racing the caller.
+        t_slack.join(timeout=30)
+        emitted.append(payload)
+
+    # Attempt to drain any previously failed notifications now that we're in a live code path
+    drain_outbox(outbox_path=outbox_path)
+
+    return emitted

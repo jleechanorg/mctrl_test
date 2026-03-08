@@ -14,6 +14,31 @@ What this repo contains:
 - `roadmap/` — design docs (GENESIS_DESIGN.md, ORCHESTRATION_DESIGN.md)
 - Various shell scripts for backup, sync, and setup
 
+## MiniMax Agent — No Separate Binary
+
+`minimax` is NOT a standalone binary. It uses the `claude` CLI with MiniMax API credentials.
+`which minimax` returning nothing is **expected and correct** — do not switch to codex/claude.
+
+Full details: `~/.claude/skills/minimax.md` and `~/.claude/skills/minimax-cli-fix.md`
+
+---
+
+## OpenClaw Config: Live Files vs This Repo
+
+**The real OpenClaw config lives in `~/.openclaw/` — `openclaw-config/` in this repo is a BACKUP only.**
+
+| Live (what OpenClaw reads) | Backup (this repo) |
+|---|---|
+| `~/.openclaw/SOUL.md` | `openclaw-config/SOUL.md` |
+| `~/.openclaw/TOOLS.md` | `openclaw-config/TOOLS.md` |
+| `~/.openclaw/openclaw.json` | `openclaw-config/openclaw.json` |
+
+**After editing any `openclaw-config/` file, always sync to live and reload:**
+```bash
+cp openclaw-config/SOUL.md ~/.openclaw/SOUL.md
+kill -HUP $(pgrep -f openclaw-gateway)
+```
+
 ---
 
 ## Config-First Principle
@@ -54,6 +79,27 @@ Execution rules:
 5. Validate fixes by replaying the same request style in multiple contexts.
 
 ---
+
+## Testing Philosophy — Real Over Fake
+
+**Always prefer real end-to-end tests.** Fake sessions (stub registry entries pointing to non-existent tmux sessions) are only acceptable for isolated unit tests of the reconciler logic itself.
+
+For this repo, any suite or artifact under `testing_*/` must be **real-only and black-box**. That means:
+- no mocks
+- no monkeypatching
+- no stubbed OpenClaw/Slack/tmux/git behavior
+- no direct registry/outbox/session injection
+- no modifying the system under test while claiming verification
+
+`testing_*` may trigger the system from the outside and then observe evidence only. If a test needs simulated internals, it belongs in `src/tests/` and must not be described as end-to-end proof.
+
+For mctrl integration tests:
+1. Post a real Slack trigger to `#ai-slack-test` as jleechan (`source ~/.profile`, use `SLACK_USER_TOKEN`)
+2. Run `dispatch_task.py` to spawn a real `ai_orch` agent in a real worktree
+3. Wait for the running `ai.mctrl.supervisor` launchd daemon to detect session exit
+4. Verify the real thread reply + DM appear in Slack
+
+Never substitute fake JSONL entries pointing to dead sessions for this loop — it bypasses the actual dispatch and agent execution paths.
 
 ## Critical Rules
 
@@ -134,6 +180,24 @@ File placement:
 - Tests → `src/tests/test_<module>.py`
 - Config → `openclaw-config/`
 - Scripts → `scripts/` or repo root
+
+## Slack — Posting as jleechan (not the bot)
+
+To post to Slack **as jleechan** (user `U09GH5BR3QU`, not the openclaw bot):
+
+```bash
+source ~/.profile   # loads SLACK_USER_TOKEN (xoxp-...) — not in env by default
+curl -s -X POST "https://slack.com/api/chat.postMessage" \
+  -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"channel": "CHANNEL_ID", "text": "your message"}'
+```
+
+- `SLACK_USER_TOKEN` is defined in `~/.profile` (xoxp-... user OAuth token) but **not exported to Claude sessions** — always `source ~/.profile` first.
+- `OPENCLAW_SLACK_BOT_TOKEN` (xoxb-...) is already in env but posts as the **openclaw bot** (`U0AEZC7RX1Q`), not jleechan.
+- No Slack MCP server is configured or needed; the Web API + user token is sufficient.
+- Channel IDs: `#ai-slack-test` → `C0AKALZ4CKW`, `#all-jleechan-ai` → `C09GRLXF9GR`.
+- Verify identity: `curl -s https://slack.com/api/auth.test -H "Authorization: Bearer $SLACK_USER_TOKEN"` should return `"user":"jleechan"`.
 
 ## Gateway (Local Machine)
 

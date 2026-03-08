@@ -10,7 +10,6 @@ import pytest
 
 from orchestration.mc_backend_service import (
     _is_enabled,
-    _resolve_poll_interval_seconds,
     start_in_process_heartbeat_poller,
     run_service,
     DEFAULT_HEARTBEAT_INTERVAL,
@@ -37,28 +36,6 @@ class TestIsEnabled:
         assert _is_enabled("yes") is True
 
 
-class TestResolvePollIntervalSeconds:
-    def test_missing_returns_none(self):
-        assert _resolve_poll_interval_seconds({}) is None
-
-    def test_valid_integer(self):
-        assert _resolve_poll_interval_seconds({
-            "MISSION_CONTROL_POLL_INTERVAL_SECONDS": "30"
-        }) == 30
-
-    def test_invalid_raises(self):
-        with pytest.raises(RuntimeError, match="must be an integer"):
-            _resolve_poll_interval_seconds({
-                "MISSION_CONTROL_POLL_INTERVAL_SECONDS": "bad"
-            })
-
-    def test_zero_raises(self):
-        with pytest.raises(RuntimeError, match="must be > 0"):
-            _resolve_poll_interval_seconds({
-                "MISSION_CONTROL_POLL_INTERVAL_SECONDS": "0"
-            })
-
-
 class TestStartInProcessHeartbeatPoller:
     @patch("orchestration.mc_backend_service.MissionControlClient")
     def test_raises_when_not_configured(self, MockClient):
@@ -71,7 +48,7 @@ class TestStartInProcessHeartbeatPoller:
     def test_starts_daemon_thread(self, MockClient, mock_sync):
         MockClient.return_value.is_configured = True
         # Long interval so the thread parks immediately after the initial sync.
-        thread = start_in_process_heartbeat_poller(board_id="board-123", interval_seconds=3600)
+        thread, stop_event = start_in_process_heartbeat_poller(board_id="board-123", interval_seconds=3600)
         assert isinstance(thread, threading.Thread)
         assert thread.daemon is True
         assert thread.is_alive()
@@ -86,7 +63,7 @@ class TestStartInProcessHeartbeatPoller:
 
         # Long interval: the initial (pre-loop) sync fires synchronously on thread start,
         # so we only need to wait for the thread to execute rather than relying on timing.
-        thread = start_in_process_heartbeat_poller(board_id="board-abc", interval_seconds=3600)
+        thread, stop_event = start_in_process_heartbeat_poller(board_id="board-abc", interval_seconds=3600)
         thread.join(timeout=1.0)  # Wait briefly; thread parks in stop_event.wait after initial sync.
 
         # sync_agents_to_mission_control should be called at least once (initial sync)
@@ -99,9 +76,8 @@ class TestStartInProcessHeartbeatPoller:
 class TestRunServiceHeartbeatIntegration:
     @patch("orchestration.mc_backend_service._run_uvicorn")
     @patch("orchestration.mc_backend_service.start_in_process_heartbeat_poller")
-    @patch("orchestration.mc_backend_service.start_in_process_task_poller")
     def test_starts_heartbeat_alongside_poller(
-        self, mock_task_poller, mock_heartbeat_poller, mock_uvicorn
+        self, mock_heartbeat_poller, mock_uvicorn
     ):
         env = {
             POLLER_ENABLE_ENV: "1",
@@ -109,18 +85,14 @@ class TestRunServiceHeartbeatIntegration:
         }
         run_service(app="app.main:app", host="127.0.0.1", port=9010, env=env)
 
-        mock_task_poller.assert_called_once_with(
-            board_id="board-xyz", poll_interval_seconds=None
-        )
         mock_heartbeat_poller.assert_called_once_with(
             board_id="board-xyz", interval_seconds=DEFAULT_HEARTBEAT_INTERVAL
         )
 
     @patch("orchestration.mc_backend_service._run_uvicorn")
     @patch("orchestration.mc_backend_service.start_in_process_heartbeat_poller")
-    @patch("orchestration.mc_backend_service.start_in_process_task_poller")
     def test_heartbeat_interval_from_env(
-        self, mock_task_poller, mock_heartbeat_poller, mock_uvicorn
+        self, mock_heartbeat_poller, mock_uvicorn
     ):
         env = {
             POLLER_ENABLE_ENV: "1",
@@ -135,21 +107,18 @@ class TestRunServiceHeartbeatIntegration:
 
     @patch("orchestration.mc_backend_service._run_uvicorn")
     @patch("orchestration.mc_backend_service.start_in_process_heartbeat_poller")
-    @patch("orchestration.mc_backend_service.start_in_process_task_poller")
-    def test_no_heartbeat_when_poller_disabled(
-        self, mock_task_poller, mock_heartbeat_poller, mock_uvicorn
+    def test_no_heartbeat_when_board_id_missing(
+        self, mock_heartbeat_poller, mock_uvicorn
     ):
-        env = {POLLER_ENABLE_ENV: "0"}
+        env = {POLLER_ENABLE_ENV: "1"}
         run_service(app="app.main:app", host="127.0.0.1", port=9010, env=env)
 
-        mock_task_poller.assert_not_called()
         mock_heartbeat_poller.assert_not_called()
 
     @patch("orchestration.mc_backend_service._run_uvicorn")
     @patch("orchestration.mc_backend_service.start_in_process_heartbeat_poller")
-    @patch("orchestration.mc_backend_service.start_in_process_task_poller")
     def test_invalid_heartbeat_interval_raises(
-        self, mock_task_poller, mock_heartbeat_poller, mock_uvicorn
+        self, mock_heartbeat_poller, mock_uvicorn
     ):
         env = {
             POLLER_ENABLE_ENV: "1",
@@ -161,9 +130,8 @@ class TestRunServiceHeartbeatIntegration:
 
     @patch("orchestration.mc_backend_service._run_uvicorn")
     @patch("orchestration.mc_backend_service.start_in_process_heartbeat_poller")
-    @patch("orchestration.mc_backend_service.start_in_process_task_poller")
     def test_zero_heartbeat_interval_raises(
-        self, mock_task_poller, mock_heartbeat_poller, mock_uvicorn
+        self, mock_heartbeat_poller, mock_uvicorn
     ):
         env = {
             POLLER_ENABLE_ENV: "1",

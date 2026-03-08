@@ -73,13 +73,83 @@ Don't just respawn with the same prompt. Diagnose:
 - CI failure? → Read the logs, add them to the retry prompt.
 - Max 3 retries before escalating to Jeffrey.
 
-## Long-Running Tasks: Hand Off to Mission Control
+## Long-Running Tasks: Async Dispatch via dispatch_task
 
-**Gateway timeout is 30s.** Tasks that take longer (agent spawning, waiting for subprocess, full E2E runs) must NOT be run inline. Instead:
+**Gateway timeout is 30s.** Tasks that take longer must NOT be run inline. Use the async dispatch script instead — it fires automatic Slack notifications when the agent **starts** AND when it **finishes**.
 
-1. **POST the task to Mission Control inbox** (fast, <2s — returns a task ID)
-2. **Reply with the task ID** so Jeffrey knows it's queued
-3. **Task Poller** picks it up and dispatches to the agent fleet automatically
+**NOTE: "mctrl" here means `~/project_jleechanclaw/mctrl` — Jeffrey's custom dispatch repo. It is NOT Mission Control and does NOT require MISSION_CONTROL_BASE_URL or any MC env vars.**
+
+### When to Use Async Dispatch (not direct ai_orch)
+
+Use async dispatch when **any** of these are true:
+- Jeffrey's message contains the word **"mctrl"**
+- Task is expected to produce a PR with **>100 lines** of changes
+- Task touches **multiple repos or files** across the codebase
+- Task requires agent to run for **>60 seconds** (benchmarks, large refactors, multi-repo work)
+- Task description includes: implement, build, clone, migrate, refactor, benchmark, add tests for, enforce across
+
+For small docs patches or single-file fixes (<100 lines), direct `ai_orch` is fine.
+
+### Dispatch Protocol (3 steps)
+
+**Step 1: Create and advance the bead**
+```bash
+BEAD_ID=$(bd create -p 2 "Task title" --description "Full spec here" | grep -o 'ORCH-[a-z0-9.]*')
+bd update "$BEAD_ID" --status in_progress
+```
+
+**Step 2: Run dispatch_task** (spawns agent + registers session + fires "started" Slack notification — one command)
+```bash
+dispatch_task \
+  --bead-id "$BEAD_ID" \
+  --task "Full task spec here" \
+  --slack-trigger-ts "$SLACK_TRIGGER_TS" \
+  --agent-cli minimax
+```
+
+**CRITICAL:** `--slack-trigger-ts` is MANDATORY — always pass the `ts` of Jeffrey's original message. Without it, the supervisor cannot thread the completion reply under Jeffrey's message, and Jeffrey gets no confirmation. `--agent-cli minimax` is the default; only override if Jeffrey requests a specific agent.
+
+Where `SLACK_TRIGGER_TS` is the `ts` field from Jeffrey's original Slack message (e.g. `1772924603.591639`). This single command:
+- Runs `ai_orch run --async --worktree` to spawn a tmux session + git worktree
+- Records `start_sha` for accurate commit detection
+- Writes `BeadSessionMapping` to `~/project_jleechanclaw/mctrl/.tracking/bead_session_registry.jsonl`
+- Posts `:rocket: Task started` to Jeffrey's DM + threads reply under the original Slack message
+
+**Step 3: Reply to Jeffrey**
+Reply with: "Queued: [bead_id] — [one-line spec]. I'll notify you when the agent finishes."
+
+The **supervisor reconciler** daemon at `~/project_jleechanclaw/mctrl` polls every 30s. When it detects the tmux session has exited, it automatically posts `:white_check_mark: Task done` or `:warning: Task stalled` to DM + thread. You do NOT need to poll manually.
+
+### On Receiving task_needs_human (MANDATORY)
+
+When you receive a `task_needs_human` loopback event (delivered via `openclaw agent --agent main`), you MUST:
+
+**1. Post to Jeffrey's DM channel first (before anything else):**
+
+```bash
+# DM channel: D0AFTLEJGJU (jleechan direct message)
+curl -s -X POST "https://slack.com/api/chat.postMessage" \
+  -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "$(jq -n \
+    --arg channel 'D0AFTLEJGJU' \
+    --arg text ':warning: *Task needs attention: BEAD_ID*\n\nThe agent session exited without committing. Branch: `BRANCH`\nWorktree: `WORKTREE_PATH`\n\nInvestigate and relaunch if needed.' \
+    '{channel: $channel, text: $text}')"
+```
+
+**2. Also post to #ai-slack-test (C0AKALZ4CKW) as a public completion notice:**
+
+```bash
+curl -s -X POST "https://slack.com/api/chat.postMessage" \
+  -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "$(jq -n \
+    --arg channel 'C0AKALZ4CKW' \
+    --arg text ':warning: Agent for *BEAD_ID* exited without commits — may need relaunch. Branch: `BRANCH`.' \
+    '{channel: $channel, text: $text}')"
+```
+
+Fill `BEAD_ID`, `BRANCH`, `WORKTREE_PATH` from the event payload. Jeffrey is waiting for this ping — do it before any other response.
 
 ### Context Expansion Before Dispatch
 
@@ -88,35 +158,21 @@ When a message references prior conversation — keywords like "we discussed", "
 1. Read all available DM messages in context (up to dmHistoryLimit — currently 50)
 2. **Redact secrets/PII**: scan for API keys, tokens, credentials, emails, long hex strings — replace with `[REDACTED]` before extracting anything. If redaction removes details needed for the spec, stop and ask Jeffrey to re-describe without the sensitive content.
 3. Extract the relevant spec from the redacted history: goal, requirements, constraints, output location
-4. Write the full spec into the MC task `description` field
-5. Reply to Jeffrey: "Queued task: [title]. Task ID: [id]. Spec: [one-line summary of what the agent will build]."
+4. Write the full spec as the `ai_orch` task description
+5. Reply to Jeffrey: "Queued bead [id]. Session: [name]. Spec: [one-line summary of what the agent will build]."
 
-The coding agent only ever receives the expanded description — never the raw "we discussed" stub. If you cannot extract a clear spec from the history, ask Jeffrey to clarify before queuing.
+The coding agent only ever receives the expanded description — never the raw "we discussed" stub. If you cannot extract a clear spec from the history, ask Jeffrey to clarify before spawning.
 
-```bash
-# Create a task in Mission Control (fire-and-forget)
-# IMPORTANT: endpoint is /api/v1/boards/{board_id}/tasks — NOT /api/v1/tasks (that returns 404)
-# Use jq -n to safely handle quotes and newlines in the description
-TITLE="<task title>"
-DESCRIPTION="<expanded spec — may contain quotes and newlines>"
-curl -s -X POST "$MISSION_CONTROL_BASE_URL/api/v1/boards/$MISSION_CONTROL_BOARD_ID/tasks" \
-  -H "Authorization: Bearer $MISSION_CONTROL_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -n --arg title "$TITLE" \
-              --arg desc "$DESCRIPTION" \
-              '{title: $title, description: $desc, status: "inbox"}')"
-```
+**Rule:** If a task will take >20s, use this bead-native dispatch. Never block the gateway waiting for it.
 
-Env vars available: `MISSION_CONTROL_BASE_URL`, `MISSION_CONTROL_TOKEN`, `MISSION_CONTROL_BOARD_ID`.
-
-**Rule:** If a task will take >20s, create an MC task and return the ID. Never block the gateway waiting for it.
+**No deduplication:** Every new message from Jeffrey requesting a task gets a **new bead and a new dispatch_task call** — even if a similar task ran before or is "still running". Never infer "already handled" from conversation history. If Jeffrey asks again, they want it dispatched again. The only exception is if Jeffrey explicitly says "cancel" or "ignore that".
 
 ### Thread Response Contract (Async First)
 
 For Slack thread requests that require real work:
 
 1. Send immediate in-thread ack first (one short line).
-2. Run work asynchronously (Mission Control task or detached orchestration task).
+2. Run work asynchronously (bead + ai_orch dispatch — see Long-Running Tasks section above).
 3. Post completion/result as a separate in-thread update when done.
 4. Do not skip the ack even when a long tool run is already in progress.
 
@@ -171,8 +227,8 @@ If a request includes both repos, split deliverables and create separate PRs unl
 
 | Tool | Purpose |
 |------|---------|
-| `jleechanorg-orchestration` (PyPI) | Agent spawning, task dispatch, tmux management |
-| Mission Control (`localhost:9010`) | Task board — post long-running tasks here for async dispatch |
+| `jleechanorg-orchestration` (PyPI) | Agent spawning, task dispatch, tmux management (`ai_orch run --async --worktree`) |
+| **mctrl** (`~/project_jleechanclaw/mctrl`) | Async dispatch system: supervisor daemon + reconciler. Watches bead↔session registry, fires Slack DM + thread reply when agent finishes. Use bead-native dispatch protocol (see Long-Running Tasks above). |
 | `jleechanclaw` repo | Scripts, backups, tools supporting your operation |
 | OpenClaw workspace (`~/.openclaw/`) | Config, identity, persistent memory |
 | `~/claude/commands` | Claude Code custom slash commands |

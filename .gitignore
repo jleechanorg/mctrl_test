@@ -102,6 +102,11 @@ config.yaml
 ralph-output.log
 orch-test/
 
+# Runtime agent/orchestration state (never commit)
+.messages/
+.tracking/
+RESUME.md
+
 # openclaw backup snapshots — block everything, un-ignore only session logs for LFS
 .openclaw-backups/latest/*
 !.openclaw-backups/latest/agents/

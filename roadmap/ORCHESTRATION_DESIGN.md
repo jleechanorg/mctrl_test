@@ -6,6 +6,115 @@
 
 Jeffrey talks to **jleechanclaw** (the OpenClaw agent). jleechanclaw orchestrates coding agents (Claude Code, Codex, Gemini, Cursor) and manages their full lifecycle — task planning, agent spawning, monitoring, PR delivery — with a dashboard for visibility.
 
+## Locked Direction (2026-03-05)
+
+We are keeping `ai_orch` as a long-term execution component.
+
+**Authoritative stack (current):**
+1. `openclaw` / jleechanclaw = outer-ralph planning brain (LLM orchestrator)
+2. `ai_orch` + `ralph-pair.sh` = deterministic execution building blocks
+3. AO patterns = selectively ported into an AO-lite kernel (plugin contracts, restore metadata, lifecycle primitives)
+
+Mission Control is optional for visibility, never an execution lifecycle authority.
+
+## Authoritative Architecture (Current)
+
+``` 
+  Jeffrey (human)
+         |
+         v
+  jleechanclaw / OpenClaw (outer-ralph: intent + policy + convergence decisions)
+         |
+         v
+  deterministic tools: ai_orch + gh_integration + evidence + beads + /pair
+         |
+         v
+  Claude Code / Codex / Gemini / Cursor runtimes
+```
+
+Single-writer rule:
+- Outer ralph is the only lifecycle decision writer.
+- Tooling plugins execute deterministic actions and report state.
+- Optional dashboards mirror state; they do not mutate canonical lifecycle.
+
+MVP implementation reference: `roadmap/MVP_OPENCLAW_AIORCH_MULTI_AGENT.md`.
+
+## AO Feature-for-Feature Audit (2026-03-05)
+
+Scope for this audit:
+- `agent-orchestrator` source (`packages/core`, `packages/cli`, `packages/plugins/scm-github`, `packages/web`)
+- `mctrl` source (`src/orchestration/*`)
+- `worldarchitect.ai` orchestration source (`orchestration/*`)
+- Local `/copilot` implementation (`~/.claude/commands/copilot.md`, `~/.claude/commands/_copilot_modules/commentfetch.py`)
+
+Scoring rubric:
+- `better` = stronger implementation than AO for the same capability
+- `equal` = same capability coverage and operational quality
+- `worse` = missing or materially weaker than AO
+
+### AO Capability Matrix
+
+| AO Capability | mctrl | worldarchitect.ai | Evidence |
+|---|---|---|---|
+| Plugin slot architecture + registry (runtime/agent/workspace/tracker/scm/notifier/terminal) | worse | worse | AO: `packages/core/src/types.ts`, `packages/core/src/plugin-registry.ts`; no equivalent registry in `mctrl`/`worldarchitect.ai` |
+| Typed core contracts for session/runtime/agent/workspace/tracker/scm/notifier/terminal | worse | worse | AO: `packages/core/src/types.ts`; Python stacks are ad-hoc module contracts |
+| Orchestrator config model (defaults, notification routing, reactions, per-project overrides) | worse | worse | AO: `packages/core/src/types.ts`; no equivalent central schema in both Python stacks |
+| Interactive + auto config generation (`ao init`, repo/default-branch detection) | worse | worse | AO: `packages/cli/src/commands/init.ts` |
+| Preflight checks (tmux/gh auth/ports/build) before orchestration actions | worse | worse | AO: `packages/cli/src/lib/preflight.ts`; partial CLI checks in `worldarchitect.ai` are not orchestration-wide |
+| Built-in plugin loading + config-aware plugin initialization | worse | worse | AO: `packages/core/src/plugin-registry.ts` |
+| Session spawn with tracker validation + tracker branch naming | worse | worse | AO: `packages/core/src/session-manager.ts` |
+| Workspace lifecycle API (create/destroy/list/postCreate/restore) | worse | worse | AO: `packages/core/src/types.ts`, `packages/core/src/session-manager.ts` |
+| Metadata-backed session archiving + restore from archive | worse | worse | AO: `packages/core/src/session-manager.ts`, `packages/core/src/metadata.ts` |
+| Session liveness + activity enrichment during list/get | worse | worse | AO: `packages/core/src/session-manager.ts` |
+| Runtime-abstracted session messaging (`send`) | worse | equal | AO: `packages/core/src/session-manager.ts`; worldai has tmux send/resume in `orchestration/runner.py` |
+| Cleanup terminated/completed sessions with tracker + PR checks | worse | worse | AO: `packages/core/src/session-manager.ts` |
+| Lifecycle manager state machine (15 statuses) | worse | worse | AO: `packages/core/src/types.ts`, `packages/core/src/lifecycle-manager.ts` |
+| Transition-driven event model with priorities | worse | worse | AO: `packages/core/src/types.ts`, `packages/core/src/lifecycle-manager.ts` |
+| Reaction engine (`send-to-agent`/`notify`/`auto-merge`) | worse | worse | AO: `packages/core/src/lifecycle-manager.ts` |
+| Retry/time-based escalation rules in reactions | worse | worse | AO: `packages/core/src/lifecycle-manager.ts` |
+| System-level `summary.all_complete` reaction | worse | worse | AO: `packages/core/src/lifecycle-manager.ts` |
+| Detect PR by branch | equal | worse | AO: `packages/plugins/scm-github/src/index.ts`; mctrl: `src/orchestration/gh_integration.py` |
+| CI checks parsing + fail-closed CI summary | equal | worse | AO: `packages/plugins/scm-github/src/index.ts`; mctrl: `src/orchestration/gh_integration.py` |
+| Review decision parsing | equal | worse | AO: `packages/plugins/scm-github/src/index.ts`; mctrl: `src/orchestration/gh_integration.py` |
+| Unresolved review-thread detection (GraphQL `reviewThreads.isResolved`) | equal | worse | AO: `packages/plugins/scm-github/src/index.ts`; mctrl: `src/orchestration/gh_integration.py` |
+| Automated/bot comment extraction + severity inference | equal | worse | AO: `packages/plugins/scm-github/src/index.ts`; mctrl: `src/orchestration/gh_integration.py` |
+| Merge readiness aggregation (CI/review/conflicts/draft/blockers) | equal | worse | AO: `packages/plugins/scm-github/src/index.ts`; mctrl: `src/orchestration/gh_integration.py` |
+| PR merge + close operations | equal | worse | AO: `packages/plugins/scm-github/src/index.ts`; mctrl: `src/orchestration/gh_integration.py` |
+| CLI command surface (`start/status/spawn/batch/send/session/review-check/dashboard/open`) | worse | worse | AO: `packages/cli/src/index.ts`, `packages/cli/src/commands/*` |
+| Web API + dashboard mutation endpoints with validation | worse | worse | AO: `packages/web/src/app/api/*`; no equivalent in these Python repos |
+| SSE event stream for near-real-time dashboard state | worse | worse | AO: `packages/web/src/app/api/events/route.ts`; worldai dashboard is terminal polling (`orchestration/dashboard.py`) |
+| Priority-based multi-notifier routing | worse | worse | AO: `packages/core/src/types.ts`, notifier plugins |
+| Tracker integrations (GitHub + Linear plugins) | worse | worse | AO: plugin set in `packages/core/src/plugin-registry.ts` |
+| Terminal integration plugins (`iterm2`, `web`) | worse | worse | AO: plugin set in `packages/core/src/plugin-registry.ts` |
+| Integration-test matrix across runtime/agent/workspace/notifier/tracker/scm combos | worse | worse | AO: `packages/integration-tests/src/*` |
+
+### Non-AO Strengths in Current Python Stack
+
+Capabilities where your current code is stronger than AO today (outside AO's native feature envelope):
+- `worldarchitect.ai` CLI-chain fallback + runtime preflight before launch attempts (`orchestration/task_dispatcher.py`).
+- `worldarchitect.ai` A2A `TaskPool` with atomic file-lock claiming and constraint validation (`orchestration/a2a_integration.py`).
+- `mctrl` webhook hardening with trusted-actor gate and optional signature validation (`src/orchestration/webhook_bridge.py`).
+- `mctrl` explicit `EvidencePacket` completeness model for auditable stage transitions (`src/orchestration/evidence.py`).
+- Local `/copilot` workflow's per-comment accountability/coverage gating (`~/.claude/commands/copilot.md` + `_copilot_modules/commentfetch.py`).
+
+### AO Review Handling vs `/copilot`
+
+For PR comment-remediation depth specifically:
+- AO (`ao review-check`) is intentionally thin: detect unresolved threads, send a generic fix prompt into tmux.
+- `/copilot` is more advanced on per-comment accountability: severity rules, 100% coverage gates, idempotent carry-forward, explicit response typing, and CI/state rechecks.
+
+Verdict:
+- `/copilot` is better as a review-remediation workflow.
+- AO is better as a generic reusable control-plane primitive.
+- We still keep ORCH-edi open to preserve AO's unresolved-thread semantics inside `/copilot` classification paths.
+
+### What This Means for Stack Direction
+
+1. Keep AO as control plane authority (lifecycle + routing), not because Python stacks are weak, but because AO is the only codebase here that already has the full reusable control-plane envelope.
+2. Keep `ai_orch` as execution substrate because worldai is strongest at deterministic tmux/worktree/CLI execution mechanics.
+3. Keep `/copilot` patterns for deep review remediation logic and port only missing AO signal semantics where needed.
+4. Keep TaskPoller separation on its own track (`ORCH-xnf`) so architecture decisions here are not blocked by in-process coupling drift.
+
 ## Current Systems
 
 ### System 1: jleechanorg-orchestration (PyPI, v0.1.78)
@@ -37,13 +146,26 @@ Weaknesses:
 - Designed for gateway-native agents, not tmux-based CLI agents
 - No awareness of `ai_orch` agent types or worktree isolation
 
+### System 3: agent-orchestrator (AO control plane patterns)
+
+What it does well:
+- Lifecycle state machine and reaction loop patterns
+- Plugin architecture for isolating execution adapters
+- SCM/readiness primitives we can port and harden
+
+Weaknesses for direct adoption:
+- TypeScript monorepo migration cost for existing Python runtime
+- Requires adaptation to our OpenClaw-driven planning workflow
+
 ## The Problem
 
-Two orchestration systems with different state models:
-- `ai_orch` thinks agents are alive because tmux sessions exist and `/tmp` JSON files say so
-- Mission Control thinks agents are alive because gateway WebSocket sessions are connected
+Split-brain appears whenever more than one system writes lifecycle state for the same task/session.
 
-Running both creates split-brain state. Gemini's review called this "an architectural death sentence."
+Historical example:
+- `ai_orch` inferred liveness from tmux and `/tmp` state
+- Mission Control inferred liveness from gateway connectivity
+
+Design rule going forward: one authoritative writer per state domain.
 
 ## Beads Tracker
 
@@ -52,15 +174,15 @@ All work items tracked via beads (`bd list`). Design doc sections reference bead
 ### Epic
 | ID | Title | Priority | Status |
 |----|-------|----------|--------|
-| ORCH-3h2 | jleechanclaw + Mission Control + ai_orch Integration | P1 | open |
+| ORCH-3h2 | jleechanclaw + AO + ai_orch Integration | P1 | open |
 
 ### Implementation Phases
 | ID | Title | Priority | Depends On |
 |----|-------|----------|------------|
-| ORCH-x3o | Phase 1: Webhook Bridge | P1 | ORCH-3h2 |
-| ORCH-0a9 | Phase 2: Heartbeat Integration | P1 | ORCH-x3o |
-| ORCH-hab | Phase 3: Task Assignment from Dashboard | P2 | ORCH-0a9 |
-| ORCH-7zk | Phase 4: State Unification | P3 | ORCH-hab |
+| ORCH-x3o | Phase 1: AO Execution Adapter Bridge | P1 | ORCH-3h2 |
+| ORCH-0a9 | Phase 2: Heartbeat + Lease Integration | P1 | ORCH-x3o |
+| ORCH-hab | Phase 3: Optional Mission Control Mirror | P2 | ORCH-0a9 |
+| ORCH-7zk | Phase 4: State Durability Unification | P3 | ORCH-hab |
 
 ### Ports from agent-orchestrator
 | ID | Title | Priority | Depends On |
@@ -80,156 +202,113 @@ All work items tracked via beads (`bd list`). Design doc sections reference bead
 | ORCH-8z2 | Superpower 6: Cross-Repo Coordination | P2 | ORCH-3h2 |
 | ORCH-7et | Superpower 7: Approval Gates for Production | P2 | ORCH-3h2 |
 
-## Design Decision: Phased Integration (Not Rewrite)
+## Historical Plan: AO-First (Superseded)
 
 Gemini recommends nuking one system. That's the clean answer but ignores reality:
 - `ai_orch` works today and has 78 releases of battle-tested agent spawning
+- AO patterns are strong for lifecycle ownership and split-brain prevention
 - Mission Control provides the UI/dashboard layer we need but can't spawn tmux agents
 - A full rewrite would take weeks and break working automation
 
-**Decision: Keep ai_orch as the executor, add Mission Control as the visibility layer, and incrementally unify state.**
+This AO-first plan is retained for historical context and pattern extraction only.
+It is superseded by the minimal-stack direction above and tracked reconciliation work (`ORCH-a68.1`).
 
-## Architecture
+## Historical Architecture (AO-First, Superseded)
 
-```
-  ┌──────────────────────────────────────────────────────────┐
-  │                      Jeffrey (human)                      │
-  │              Talks via Slack / Telegram / CLI              │
-  └──────────────────────────┬───────────────────────────────┘
-                             │
-                             ▼
-  ┌──────────────────────────────────────────────────────────┐
-  │                     jleechanclaw                          │
-  │               (OpenClaw agent identity)                   │
-  │                                                           │
-  │  Holds: business context, project goals, past decisions   │
-  │  Reads: SOUL.md, USER.md, MEMORY.md, extraPaths          │
-  │  Decides: what to build, which agent, what context        │
-  └──────────┬────────────────────────────┬──────────────────┘
-             │                            │
-             ▼                            ▼
-  ┌─────────────────────┐    ┌──────────────────────────────┐
-  │   ai_orch (executor) │    │  Mission Control (dashboard) │
-  │                      │    │                              │
-  │  Spawns tmux agents  │───▶│  Boards, tasks, approvals   │
-  │  Manages worktrees   │    │  Agent status + timeline     │
-  │  Runs CLI tools      │    │  Webhook ingestion           │
-  │  Monitors output     │    │  SSE real-time updates       │
-  └──────────┬───────────┘    └──────────────────────────────┘
-             │
-    ┌────────┼────────┐
-    ▼        ▼        ▼
- Claude    Codex    Gemini
-  Code               CLI
+``` 
+  Jeffrey (human)
+         |
+         v
+  jleechanclaw (OpenClaw brain: intent + policy)
+         |
+         v
+  agent-orchestrator (AO control plane: lifecycle + routing)
+      |                                |
+      v                                v
+  ai_orch (AO plugin: cmux + CLI)   Mission Control (optional read-only UI mirror)
+      |
+      v
+  Claude Code / Codex / Gemini / Cursor runtimes
 ```
 
 ### Data Flow
 
 1. Jeffrey messages jleechanclaw via Slack/Telegram
 2. jleechanclaw plans the work, selects agents
-3. jleechanclaw calls `ai_orch run --agent-cli claude "task prompt"`
-4. ai_orch spawns tmux session + worktree, starts agent
-5. ai_orch POSTs webhook to Mission Control: `{event: "agent_started", agent: "...", task: "..."}`
-6. Agent works, creates PR
-7. ai_orch detects completion, POSTs webhook: `{event: "task_complete", pr: 123, ci: "passed"}`
-8. Mission Control updates board, task moves to "review"
-9. jleechanclaw notifies Jeffrey: "PR #123 ready to merge"
+3. jleechanclaw submits intent to AO
+4. AO dispatches to `ai_orch` plugin (`run --backend cmux --agent-cli <cli>`)
+5. ai_orch spawns session/worktree, starts agent, streams execution events back to AO
+6. AO owns lifecycle transitions and readiness policy
+7. Optional: AO/jleechanclaw mirrors events to Mission Control for visibility
+8. jleechanclaw notifies Jeffrey: "PR #123 ready to merge"
 
 ## Implementation Phases
 
-### Phase 1: Webhook Bridge (ORCH-x3o)
+### Phase 1: AO Execution Adapter Bridge (ORCH-x3o)
 
-**Goal**: ai_orch reports events to Mission Control. Dashboard shows what's happening.
+**Goal**: AO dispatches execution through `ai_orch` with explicit event contracts.
 
 Changes to `ai_orch`:
 ```python
-# Add to orchestrate_unified.py — fire-and-forget webhook after agent events
-def _notify_mission_control(event: str, payload: dict):
-    """POST event to Mission Control webhook. Best-effort, never blocks."""
-    webhook_url = os.environ.get("MISSION_CONTROL_WEBHOOK_URL")
-    if not webhook_url:
-        return
-    try:
-        import urllib.request, json
-        req = urllib.request.Request(
-            webhook_url,
-            data=json.dumps({"event": event, **payload}).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        urllib.request.urlopen(req, timeout=5)
-    except Exception:
-        pass  # Never block orchestration for dashboard
+# ai_orch adapter surface consumed by AO
+def run_task(task: TaskSpec, emit: Callable[[str, dict], None]) -> RunHandle:
+    # spawn session/worktree/CLI
+    emit("agent_started", {...})
+    # stream progress/events
+    emit("task_complete", {...})  # or agent_failed / agent_killed
 ```
 
-Events to emit:
+Events emitted to AO:
 | Event | When | Payload |
 |-------|------|---------|
-| `agent_started` | tmux session created | agent_name, cli, task, worktree, branch |
+| `agent_started` | session created | agent_name, cli, task, worktree, branch |
 | `agent_failed` | agent exits non-zero or timeout | agent_name, exit_code, last_output |
 | `task_complete` | PR created or task done | agent_name, pr_url, ci_status |
 | `agent_killed` | manual or auto cleanup | agent_name, reason |
 
-Mission Control setup:
-1. Deploy Mission Control locally via Docker Compose
-2. Create a board: "jleechanclaw Operations"
-3. Create a webhook on that board
-4. Set `MISSION_CONTROL_WEBHOOK_URL` in environment
+AO consumes these events and owns all lifecycle transitions.
 
-**No changes to Mission Control code.** Webhooks are a built-in feature.
+### Phase 2: Heartbeat + Lease Integration (ORCH-0a9)
 
-### Phase 2: Heartbeat Integration (ORCH-0a9)
-
-**Goal**: Mission Control knows which agents are alive in real-time.
+**Goal**: AO can prove liveness/ownership of every running execution session.
 
 Add a lightweight heartbeat loop to `ai_orch` that periodically:
-1. Lists running tmux sessions (`tmux list-sessions`)
-2. POSTs heartbeat for each to Mission Control (`POST /agents/{id}/heartbeat`)
-3. Detects dead sessions, POSTs `agent_failed` event
+1. Lists active sessions (`tmux` now, `cmux` in Phase 2 runtime migration)
+2. Sends heartbeat to AO for known run handles
+3. Marks missing sessions as failed with reason `session_disappeared`
 
-This runs as a background thread in `ai_orch` or as a cron job.
+This runs as a background thread in `ai_orch` or as a supervised sidecar.
 
 ```python
-# heartbeat_bridge.py — runs every 60s
-def sync_agents_to_mission_control():
+def sync_sessions_to_ao():
     running = SafeAgentMonitor().list_agents()
-    for agent_name in running:
-        mc_agent_id = lookup_or_create_mc_agent(agent_name)
-        post_heartbeat(mc_agent_id)
-    # Detect agents that disappeared
-    for known in get_known_mc_agents():
-        if known not in running:
-            post_agent_event("agent_failed", known, reason="session_disappeared")
+    for session in running:
+        ao_heartbeat(session)
+    reconcile_missing_sessions(running)
 ```
 
-### Phase 3: Task Assignment from Dashboard (ORCH-hab)
+### Phase 3: Optional Mission Control Mirror (ORCH-hab)
 
-**Goal**: Create tasks in Mission Control UI, jleechanclaw picks them up and dispatches.
+**Goal**: Human visibility and approvals without adding a second lifecycle authority.
 
-jleechanclaw polls Mission Control for unassigned tasks:
-```
-GET /boards/{board_id}/tasks?status=inbox&assigned_agent_id=null
-```
+Flow:
+1. AO/jleechanclaw mirrors lifecycle events to Mission Control (webhook/API)
+2. Mission Control displays boards/timelines/approvals
+3. Any human action in Mission Control is translated to intent and routed back through AO
 
-For each task:
-1. jleechanclaw reads the task description
-2. Decides which agent CLI to use (based on task content + heuristics)
-3. Calls `ai_orch run --agent-cli <cli> "<task description>"`
-4. Updates task in Mission Control: status → in_progress, assigned_agent_id → self
+Mission Control never directly invokes executors or writes canonical lifecycle state.
 
-This closes the loop: humans create tasks in the dashboard, jleechanclaw executes them autonomously.
+### Phase 4: State Durability Unification (ORCH-7zk)
 
-### Phase 4: State Unification (ORCH-7zk)
+**Goal**: Remove `/tmp` state and keep one durable execution ledger.
 
-**Goal**: Single source of truth for agent state.
+Migrate `ai_orch` local ephemeral state into AO-managed persistence:
+- Agent/session registry
+- Task lifecycle + retry metadata
+- Execution results and artifacts
+- Lease ownership and handoff history
 
-Migrate `ai_orch` state from `/tmp` JSON files to Mission Control's PostgreSQL:
-- Agent registry → `POST /agents` + heartbeat
-- Task pool → Mission Control tasks with dependencies
-- A2A messages → Mission Control task comments or a new endpoint
-- Results → stored as task attachments or comments
-
-This is the "nuke /tmp" step Gemini recommended, but done incrementally after the bridge is proven.
+Mission Control can mirror this data for UI, but AO remains source of truth.
 
 ## Key Design Principles
 
@@ -237,12 +316,13 @@ This is the "nuke /tmp" step Gemini recommended, but done incrementally after th
 
 Dashboard integration is fire-and-forget. If Mission Control is down, `ai_orch` keeps working. Agents keep spawning. PRs keep shipping. The dashboard is a visibility layer, not a dependency.
 
-### 2. ai_orch Owns Execution, Mission Control Owns Visibility
+### 2. AO Owns Lifecycle, ai_orch Owns Execution
 
-- ai_orch: spawning, worktrees, tmux, CLI invocation, output capture
-- Mission Control: boards, tasks, approvals, activity log, UI
+- AO: lifecycle state machine, retry/escalation policy, orchestration routing
+- ai_orch: spawning, worktrees, cmux/tmux backend ops, CLI invocation, output capture
+- Mission Control (optional): boards, tasks, approvals, activity log, UI mirror
 
-Don't put execution logic in Mission Control. Don't put UI logic in ai_orch.
+Don't duplicate lifecycle decisions across AO and Mission Control. Don't put execution logic in UI layers.
 
 ### 3. jleechanclaw Is the Brain, Not Either System
 
@@ -251,10 +331,50 @@ Neither ai_orch nor Mission Control decides what to build. jleechanclaw (the Ope
 ### 4. Incremental, Not Big-Bang
 
 Each phase is independently useful:
-- Phase 1 alone gives you a dashboard showing what agents are doing
-- Phase 2 alone gives you real-time agent health
-- Phase 3 alone gives you task-driven orchestration
-- Phase 4 alone cleans up the architecture
+- Phase 1 alone gives deterministic AO -> ai_orch dispatch contracts
+- Phase 2 alone gives real-time session health + ownership enforcement
+- Phase 3 alone gives human visibility/approval workflows without dual-writer risk
+- Phase 4 alone removes `/tmp` fragility with durable lifecycle state
+
+## Autonomous Completion Contract
+
+This system is considered successful only when jleechanclaw can run an autonomous repair loop from idea/design input to merge-ready output with explicit stop conditions.
+
+### Loop Invariant
+
+For every active task, jleechanclaw repeats:
+1. plan + dispatch
+2. detect PR/CI/review state
+3. auto-remediate CI/review failures with updated context
+4. re-check readiness gates
+
+The loop continues until either:
+- all merge-readiness gates pass, or
+- escalation criteria are met and human decision is required.
+
+### Merge-Readiness Gates (Authoritative)
+
+A PR is `ready/mergeable` only when all of the following are true:
+1. CI is green (all required GitHub Actions checks pass).
+2. Relevant tests pass for the changed scope.
+3. PR has no merge conflicts (GitHub mergeable state is mergeable).
+4. No serious unresolved review comments remain.
+5. CodeRabbit is approved or rate-limited (rate-limited is acceptable, not a blocker).
+
+### Escalation Gates (Stop Autonomy, Request Human Input)
+
+jleechanclaw must stop auto-iteration and request explicit human action when any of the following hold:
+1. Retry limit or time-based escalation threshold is exceeded for CI/review remediation.
+2. Task is stuck/needs_input/errored and cannot progress deterministically.
+3. Required credentials, permissions, or external service access are missing.
+4. Product-level ambiguity requires judgment (scope change, conflicting requirements, risky tradeoff).
+
+### System Boundaries
+
+1. OpenClaw/jleechanclaw is the planning and policy brain.
+2. ai_orch/cmux is the execution substrate (spawn, isolate, run, collect outputs).
+3. Mission Control is optional visibility + approvals (never authoritative for execution lifecycle).
+4. Lifecycle state transitions are owned by AO; jleechanclaw is the policy brain above AO.
 
 ## Superpowers Brainstorm
 
@@ -370,6 +490,7 @@ The agent runtime itself — memory system, gateway, cron jobs, session manageme
 | Dependency | Version | Purpose |
 |-----------|---------|---------|
 | OpenClaw | latest | Agent runtime, gateway, persistent memory |
+| agent-orchestrator | latest reference patterns | Lifecycle control-plane design + plugin model |
 | jleechanorg-orchestration | 0.1.78+ | Task dispatch, agent spawning, tmux management |
 | openclaw-mission-control | latest | Dashboard, boards, tasks, approvals, webhooks |
 | Docker + Docker Compose | any | Mission Control deployment |
@@ -394,3 +515,96 @@ The agent runtime itself — memory system, gateway, cron jobs, session manageme
 | agent-orchestrator SCM plugin | `agent-orchestrator/packages/plugins/scm-github/src/index.ts` |
 | agent-orchestrator lifecycle | `agent-orchestrator/packages/core/src/lifecycle-manager.ts` |
 | agent-orchestrator types | `agent-orchestrator/packages/core/src/types.ts` |
+
+---
+
+## Architecture Revision: Dispatch Simplification (2026-03-04)
+
+### Decision: Eliminate the Task Poller
+
+`task_poller.py` is an **architectural smell** — a queue consumer that only exists because MC and `ai_orch` don't talk to each other. It introduces:
+- 60s polling latency, split-brain risk, false heartbeats, race conditions
+
+**New direction (two phases):**
+
+| Phase | Dispatch model | Executor | MC role |
+|-------|---------------|----------|---------|
+| **Phase 1** (now) | jleechanclaw → AO → `ai_orch` plugin | tmux + ai_orch | Optional read-only updates |
+| **Phase 2** (cmux) | jleechanclaw → AO → `ai_orch --backend cmux` | ai_orch + cmux terminal backend | Optional read-only updates |
+
+### Locked Architectural Decisions (2026-03-04)
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **cmux vs tmux** | **cmux only** — not optional, not a fallback | Once cmux is stable, ai_orch uses it as the sole backend. tmux is removed. |
+| **Lifecycle state authority** | **AO only** — single writer for orchestration lifecycle | ai_orch reports execution signals; OpenClaw provides policy/intent; no dual-writer ambiguity. |
+| **MC authority** | **Non-authoritative** — visibility/approvals only | MC mirrors state and supports humans; it does not drive execution transitions. |
+| **Stuck task policy** | **Human review required** — no auto-fail timeout | Stuck tasks surface to Jeffrey for explicit retry or cancel. System never silently fails tasks. |
+
+### Control Plane Rules (cmux Era)
+
+To avoid split-brain and terminal corruption once multiple systems are connected:
+
+1. **Single writer to cmux**: only `ai_orch` mutates cmux state (`ensure_terminal`, `run_command`, `attach`, `kill`).
+2. **Single writer to lifecycle state**: only AO mutates canonical task/session lifecycle.
+3. **Intent path is linear**: OpenClaw/jleechanclaw submits intent to AO; AO invokes `ai_orch`; Mission Control never invokes executors directly.
+4. **Per-session lease required for mutation**: every mutating action carries a lease owner (`auto:<controller>` or `human:<user>`). Writes without active lease are rejected.
+5. **Human takeover is first-class**: when Jeffrey claims a panel/session lease, autonomous writes for that session are paused until explicit handback.
+6. **Read paths are multi-reader**: all controllers may read session snapshots, logs, and status simultaneously.
+7. **A2A remains inside ai_orch agent mesh**: agent-to-agent messaging stays available regardless of which controller initiated the parent task.
+
+These rules let OpenClaw, AO, and optional Mission Control coordinate on the same execution substrate without dual-writer races.
+
+### Phase 1: Gateway-Direct Dispatch (ORCH-7sy)
+
+```
+Jeffrey → jleechanclaw → AO.dispatch(task)
+                       ↓
+                  AO → ai_orch.run --agent-cli claude "task"
+                       ↓
+                  AO.update_state(DISPATCHING → IN_PROGRESS → DONE|EXECUTION_FAILED)
+                       ↓
+                  Optional MC mirror update
+```
+
+### Phase 2: cmux as ai_orch Backend (ORCH-zyo)
+
+```
+Jeffrey → jleechanclaw → AO.dispatch(task)
+                       ↓
+                  AO → ai_orch.run --backend cmux --agent-cli claude "task"
+                       ↓
+                  cmux.ensure_terminal("mc:{branch}")
+                  cmux.run_command(handle, "claude --print ...")
+                  AO.update_state(status)
+                  Optional MC mirror update
+```
+
+### Open Gaps (Beads)
+
+| Bead | Gap |
+|------|-----|
+| ORCH-7sy | Gateway-direct dispatch (eliminates task_poller) |
+| ORCH-zyo | cmux as ai_orch backend (Phase 2) — depends on ORCH-7sy |
+| ORCH-k9n | Reconciliation loop: surfaces stuck tasks to human review |
+| ORCH-qxw | DISPATCHING atomic state (race condition fix) |
+| ORCH-8w8 | EXECUTION_FAILED state + error propagation |
+| ORCH-5gc | Enforce autonomous completion readiness gates (CI/tests/conflicts/review/CodeRabbit) |
+| ORCH-36u | Implement escalation gate policy for autonomous loop |
+| ORCH-jvd | Add integration tests for Autonomous Completion Contract |
+| ORCH-dkj | cmux single-writer gateway in ai_orch (all mutating commands brokered) |
+| ORCH-z1i | Per-session lease model (auto owner vs human owner) for cmux mutations |
+| ORCH-9l4 | Human takeover/handoff protocol (pause automation on claimed panel) |
+| ORCH-xrf | Branch contamination prevention (ORCH-qli.2) |
+| ORCH-jym | Repo-routing allowlist for cross-repo ops (ORCH-qli.3) |
+| ORCH-afl | CodeRabbit cron hardening (ORCH-qli.5) |
+| ORCH-cvg | Convergence orchestration gateway foundation |
+| ORCH-dep | ai_orch plugin hardening under AO control plane (depends on ORCH-cvg) |
+| ORCH-cil | Convergence Intelligence Layer (depends on ORCH-cvg) |
+| ORCH-7rw | Event-sourced Convergence Twin (depends on ORCH-5gc, ORCH-36u, ORCH-z1i) |
+| ORCH-nrl | Nested Ralph Loops (outer + inner) (depends on ORCH-cvg, ORCH-cil) |
+| ORCH-rce | Python reaction engine fallback (depends on ORCH-7sy) |
+| ORCH-ams | Auto-mode selection + environment config (depends on ORCH-cvg, ORCH-rce) |
+| ORCH-xnf | Split TaskPoller into separate service; remove in-process coupling |
+| ORCH-edi | Port AO unresolved review-thread semantics into `/copilot` classification |
+| ORCH-zpf | Complete AO feature-by-feature parity audit vs `mctrl` + `worldarchitect.ai` |

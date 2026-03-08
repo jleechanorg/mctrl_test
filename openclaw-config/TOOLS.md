@@ -86,3 +86,49 @@ gh pr merge 123 --repo jleechanorg/worldarchitect.ai --squash
 ```
 
 Add whatever helps you do your job. This is your cheat sheet.
+
+## mctrl — Async Dispatch & Supervisor
+
+**mctrl** is the local async task dispatch system at `~/project_jleechanclaw/mctrl`. It is NOT Mission Control and does NOT need MC env vars.
+
+**RULE: NEVER call `ai_orch run --async --worktree` directly for coding tasks. Always use `dispatch_task`.** Direct ai_orch bypasses the registry and supervisor — Jeffrey gets no start/done notifications.
+
+### When to use dispatch_task
+
+Use `dispatch_task` for any task expected to produce **>100 lines of changes**, touch multiple repos, or run >60 seconds. For tiny single-file docs fixes, direct `ai_orch` is acceptable.
+
+### How to dispatch
+
+```bash
+dispatch_task \
+  --bead-id "$BEAD_ID" \
+  --task "full task description" \
+  --slack-trigger-ts "$SLACK_TRIGGER_TS" \
+  --agent-cli claude
+```
+
+`dispatch_task` is a command on PATH (`~/bin/dispatch_task`). It:
+- Spawns `ai_orch run --async --worktree` internally
+- Registers the session in the bead↔session registry
+- Posts `:rocket: Task started` to Jeffrey's DM + threads under the Slack trigger
+
+### What the supervisor does
+
+The **supervisor daemon** (`ai.mctrl.supervisor`) polls every 30s. When the tmux session exits:
+- Posts `:white_check_mark: Task done` or `:warning: Task stalled` to Jeffrey's DM + thread
+- You do NOT need to poll or check manually
+
+### Key paths
+
+| Path | Purpose |
+|------|---------|
+| `~/bin/dispatch_task` | Command on PATH — use this |
+| `mctrl/.tracking/bead_session_registry.jsonl` | Live bead↔session registry |
+| `~/Library/Logs/mctrl/supervisor.log` | Supervisor daemon logs |
+
+### Supervisor status
+
+```bash
+launchctl list ai.mctrl.supervisor   # check if running
+tail -20 ~/Library/Logs/mctrl/supervisor.log
+```

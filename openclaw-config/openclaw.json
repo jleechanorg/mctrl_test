@@ -361,7 +361,7 @@
       "botToken": "PLACEHOLDER-botToken",
       "appToken": "PLACEHOLDER-appToken",
       "userTokenReadOnly": true,
-      "allowBots": false,
+      "allowBots": true,
       "groupPolicy": "allowlist",
       "historyLimit": 200,
       "dmHistoryLimit": 200,
@@ -382,6 +382,10 @@
         ]
       },
       "channels": {
+        "C0AKALZ4CKW": {
+          "allow": true,
+          "requireMention": false
+        },
         "C0AJQ5M0A0Y": {
           "allow": true,
           "requireMention": false
@@ -391,7 +395,8 @@
           "requireMention": false
         },
         "*": {
-          "allow": true
+          "allow": true,
+          "requireMention": false
         }
       }
     }
