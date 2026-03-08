@@ -1,10 +1,7 @@
-"""Tests for app.py."""
+"""Tests for hello package."""
 from __future__ import annotations
 
-import subprocess
-import sys
-
-from app import greet
+from hello import greet
 
 
 def test_greet_default() -> None:
@@ -20,17 +17,7 @@ def test_greet_returns_string() -> None:
 
 
 def test_main_output(capsys) -> None:
-    import app
-    app.main()
+    import hello
+    hello.main()
     captured = capsys.readouterr()
     assert captured.out.strip() == "Hello, World!"
-
-
-def test_module_runs_as_script() -> None:
-    result = subprocess.run(
-        [sys.executable, "app.py"],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0
-    assert result.stdout.strip() == "Hello, World!"

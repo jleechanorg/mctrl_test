@@ -1,4 +1,4 @@
-"""Simple hello world application."""
+"""Hello world package."""
 from __future__ import annotations
 
 
