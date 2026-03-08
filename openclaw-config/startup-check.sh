@@ -4,13 +4,34 @@
 
 LOG_FILE="$HOME/.openclaw/logs/startup-check.log"
 LOG_DIR="$(dirname "$LOG_FILE")"
-OPENCLAW_BIN="$(command -v openclaw || true)"
+export PATH="$HOME/.nvm/versions/node/current/bin:$HOME/.nvm/versions/node/v22.22.0/bin:$HOME/Library/pnpm:$HOME/.bun/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 TARGET="${OPENCLAW_WHATSAPP_TARGET:-}"
 TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
 
+resolve_openclaw_bin() {
+    local candidate
+    for candidate in \
+        "$(command -v openclaw 2>/dev/null || true)" \
+        "$HOME/.nvm/versions/node/current/bin/openclaw" \
+        "$HOME/.nvm/versions/node/v22.22.0/bin/openclaw" \
+        "$HOME/Library/pnpm/openclaw" \
+        "$HOME/.bun/bin/openclaw" \
+        "/opt/homebrew/bin/openclaw" \
+        "/usr/local/bin/openclaw"
+    do
+        if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+OPENCLAW_BIN="$(resolve_openclaw_bin || true)"
+
 # Ensure openclaw CLI exists
 if [ -z "$OPENCLAW_BIN" ]; then
-    echo "[$TIMESTAMP] ❌ openclaw CLI not found in PATH" >&2
+    echo "[$TIMESTAMP] ❌ openclaw CLI not found; PATH=$PATH" >&2
     exit 1
 fi
 
@@ -21,8 +42,8 @@ if ! mkdir -p "$LOG_DIR"; then
 fi
 
 if [ -z "$TARGET" ]; then
-    echo "[$TIMESTAMP] ❌ OPENCLAW_WHATSAPP_TARGET is not set. Set it before enabling startup confirmation." >> "$LOG_FILE"
-    exit 1
+    echo "[$TIMESTAMP] ℹ️ OPENCLAW_WHATSAPP_TARGET is not set; skipping startup confirmation." >> "$LOG_FILE"
+    exit 0
 fi
 
 # Wait for network to be available (max 30 seconds)

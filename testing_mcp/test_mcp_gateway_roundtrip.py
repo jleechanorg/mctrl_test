@@ -1,0 +1,262 @@
+"""testing_mcp: Deterministic MCP gateway E2E tests.
+
+These mirror testing_llm/test_slack_loopback_roundtrip but replace the Slack
+Socket Mode trigger with a direct HTTP call to the OpenClaw gateway endpoint.
+
+This makes the trigger path deterministic:
+  - No dependency on Slack Socket Mode connection for the INPUT trigger
+  - Direct HTTP POST to http://localhost:18789/v1/chat/completions
+  - Auth via Bearer token (gateway.auth.token in openclaw.json)
+  - Output notification still posts real Slack DM (bot token)
+
+Hard rules (inherited from testing_mcp/CLAUDE.md):
+  - No mocks, no monkeypatching, no stubs
+  - All Slack / tmux / git interactions are real
+  - Only real artifacts constitute proof
+
+test_gateway_connectivity
+  Smoke: verify the OpenClaw gateway HTTP endpoint is up and responds to auth.
+  No agent spawn. Deterministic and fast.
+
+test_mcp_gateway_dispatch_roundtrip  [REAL — requires ai_orch, Slack bot token, gateway up]
+  Full E2E identical to test_slack_loopback_roundtrip except:
+    - Trigger: HTTP POST to OpenClaw gateway (not Slack)
+    - No slack_trigger_ts → no thread reply expected → only DM verified
+  Proves the complete chain without Slack Socket Mode on the INPUT side.
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import time
+import uuid
+from pathlib import Path
+from typing import Any
+from urllib.error import URLError
+from urllib.request import Request, urlopen
+
+import pytest
+
+from orchestration.dispatch_task import dispatch
+from orchestration.openclaw_notifier import (
+    SLACK_DM_CHANNEL as _DM_CHANNEL,
+    drain_outbox,
+)
+from orchestration.reconciliation import reconcile_registry_once
+from orchestration.session_registry import get_mapping
+
+GATEWAY_URL = "http://localhost:18789"
+GATEWAY_TOKEN = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "")
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _gateway_post(path: str, body: dict[str, Any], timeout: int = 120) -> dict[str, Any]:
+    """POST JSON to the OpenClaw gateway; return parsed JSON response."""
+    data = json.dumps(body).encode()
+    req = Request(
+        f"{GATEWAY_URL}{path}",
+        data=data,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {GATEWAY_TOKEN}",
+            # Force non-streaming JSON response (gateway defaults to SSE stream)
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    with urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read())
+
+
+def _slack_history(token: str, channel: str, oldest: str, limit: int = 100) -> list[dict[str, Any]]:
+    url = (
+        f"https://slack.com/api/conversations.history"
+        f"?channel={channel}&oldest={oldest}&limit={limit}&inclusive=false"
+    )
+    req = Request(url, headers={"Authorization": f"Bearer {token}"})
+    with urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read()).get("messages", [])
+
+
+def _poll_for_text(
+    token: str, channel: str, needle: str, oldest: str,
+    timeout: float = 30.0, interval: float = 2.0,
+) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            msgs = _slack_history(token, channel, oldest)
+            if any(needle in m.get("text", "") for m in msgs):
+                return True
+        except URLError:
+            pass
+        time.sleep(interval)
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+def test_gateway_connectivity() -> None:
+    """Smoke: gateway is up, auth works, returns a well-formed chat completion.
+
+    Deterministic — no agent spawn. Completes in < 120 s (LLM latency applies).
+    """
+    assert GATEWAY_TOKEN, (
+        "OPENCLAW_GATEWAY_TOKEN must be set (source ~/.openclaw/set-slack-env.sh)"
+    )
+    resp = _gateway_post(
+        "/v1/chat/completions",
+        {
+            "model": "gpt-4",
+            "messages": [{"role": "user", "content": "reply with exactly: GATEWAY_OK"}],
+            "max_tokens": 10,
+            "stream": False,
+        },
+    )
+    assert resp.get("object") == "chat.completion", f"Unexpected response: {resp}"
+    choices = resp.get("choices") or []
+    assert choices, "No choices in response"
+    content = choices[0].get("message", {}).get("content", "")
+    assert content, "Empty content in gateway response"
+    print(f"\n[gateway] response content: {content!r}")
+
+
+def test_mcp_gateway_dispatch_roundtrip(tmp_path: Path) -> None:
+    """Full E2E loopback via OpenClaw MCP gateway instead of Slack trigger.
+
+    Proves the complete chain:
+      1. POST dispatch instruction to OpenClaw gateway /v1/chat/completions
+      2. dispatch() spawns real ai_orch agent in real git worktree via real tmux
+      3. Agent commits and exits — tmux session dies for real
+      4. reconcile_registry_once detects dead session (ZERO monkeypatching)
+      5. notify_slack_done posts real Slack DM
+      6. Poll Slack DM to confirm it landed
+
+    Key difference from test_slack_loopback_roundtrip:
+      - INPUT trigger is HTTP POST to OpenClaw gateway (no Slack Socket Mode)
+      - slack_trigger_ts is None → no thread reply → only DM verified
+      - Deterministic: trigger path has no Slack Socket Mode dependency
+
+    Requires: OPENCLAW_SLACK_BOT_TOKEN, ai_orch in PATH, gateway on :18789
+    Duration: 3–10 minutes (real agent execution)
+    """
+    bot_token = (
+        os.environ.get("OPENCLAW_SLACK_BOT_TOKEN")
+        or os.environ.get("SLACK_BOT_TOKEN")
+        or ""
+    )
+    assert bot_token, "OPENCLAW_SLACK_BOT_TOKEN must be set (source ~/.openclaw/set-slack-env.sh)"
+    assert GATEWAY_TOKEN, (
+        "OPENCLAW_GATEWAY_TOKEN must be set (source ~/.openclaw/set-slack-env.sh)"
+    )
+    assert subprocess.run(["which", "ai_orch"], capture_output=True).returncode == 0, (
+        "ai_orch must be in PATH"
+    )
+
+    bead_id = f"ORCH-mcp-{uuid.uuid4().hex[:6]}"
+    registry = tmp_path / "registry.jsonl"
+    outbox = tmp_path / "outbox.jsonl"
+
+    # Step 1: Announce the task to OpenClaw via MCP gateway HTTP endpoint.
+    # This replaces the Slack trigger — proves gateway is the INPUT path.
+    gateway_msg = (
+        f"[mctrl-mcp-e2e] Dispatching task {bead_id} via MCP gateway. "
+        "This is a real E2E test — agent will create e2e-done.txt and commit."
+    )
+    gw_resp = _gateway_post(
+        "/v1/chat/completions",
+        {
+            "model": "gpt-4",
+            "messages": [{"role": "user", "content": gateway_msg}],
+            "max_tokens": 10,
+            "stream": False,
+        },
+    )
+    assert gw_resp.get("object") == "chat.completion", (
+        f"Gateway announcement failed: {gw_resp}"
+    )
+    gw_content = (gw_resp.get("choices") or [{}])[0].get("message", {}).get("content", "")
+    print(f"\n[mcp-gateway] ack content: {gw_content!r}")
+
+    # Step 2: Real dispatch via ai_orch. Creates real tmux session + real git worktree.
+    # No slack_trigger_ts — trigger was via MCP, not Slack.
+    task = (
+        f"Create a file named e2e-done.txt containing the text '{bead_id} done'. "
+        "Then run: git add e2e-done.txt && git commit -m 'e2e: done'. Then stop."
+    )
+    mapping = dispatch(
+        bead_id=bead_id,
+        task=task,
+        slack_trigger_ts=None,
+        agent_cli="minimax",
+        registry_path=str(registry),
+    )
+    session_name = mapping.session_name
+    print(f"\n[dispatch] session={session_name} worktree={mapping.worktree_path}")
+
+    # Step 3: Wait for the real tmux session to exit (agent finished).
+    # Timeout 8 minutes — real agent execution.
+    deadline = time.monotonic() + 480
+    while time.monotonic() < deadline:
+        if subprocess.run(
+            ["tmux", "has-session", "-t", session_name],
+            capture_output=True,
+        ).returncode != 0:
+            break
+        time.sleep(5)
+    else:
+        pytest.fail(f"tmux session {session_name!r} still alive after 8 minutes")
+
+    # Step 4: Run the real reconciler — ZERO monkeypatching.
+    # ts_before: 15s backfill so the DM sent inside reconcile's daemon thread
+    # (which runs during t_slack.join and completes within ~10s) is always
+    # captured. limit=100 (in _slack_history) handles supervisor/cron DM bursts
+    # so the target message is never pushed past the cutoff.
+    ts_before = str(time.time() - 15)
+    emitted = reconcile_registry_once(
+        registry_path=str(registry),
+        outbox_path=str(outbox),
+    )
+
+    assert len(emitted) == 1, f"Expected 1 event, got {len(emitted)}: {emitted}"
+    assert emitted[0]["event"] == "task_finished", (
+        f"Expected task_finished but got {emitted[0]['event']} — "
+        "agent may not have committed; check session logs"
+    )
+    assert emitted[0]["bead_id"] == bead_id
+
+    # Capture git log evidence.
+    final_mapping = get_mapping(bead_id, registry_path=str(registry))
+    assert final_mapping is not None
+    assert final_mapping.status == "finished"
+
+    git_log_result = subprocess.run(
+        ["git", "log", "--oneline", f"{final_mapping.start_sha}..HEAD"],
+        cwd=final_mapping.worktree_path,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    agent_commits = git_log_result.stdout.strip()
+    assert agent_commits, (
+        f"git log {final_mapping.start_sha}..HEAD in {final_mapping.worktree_path} "
+        "returned no commits — contradicts task_finished classification"
+    )
+    print(f"\n[evidence] agent commits:\n{agent_commits}")
+
+    # Step 5: Drain the outbox to deliver the real Slack DM.
+    # (supervisor may have already drained it; drain_outbox is idempotent if empty)
+    delivered = drain_outbox(outbox_path=str(outbox))
+    print(f"\n[outbox] drained {delivered} messages")
+
+    # Step 6: Poll Slack DM to verify bot DM landed.
+    # No thread reply expected because slack_trigger_ts was None.
+    dm_found = _poll_for_text(bot_token, _DM_CHANNEL, bead_id, ts_before, timeout=300)
+    assert dm_found, f"No DM mentioning {bead_id} in {_DM_CHANNEL} within 300s"
+    print(f"\n[evidence] DM confirmed in {_DM_CHANNEL} mentioning {bead_id}")

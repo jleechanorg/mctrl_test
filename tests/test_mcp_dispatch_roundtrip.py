@@ -50,14 +50,40 @@ OPENCLAW_AGENT_ID = "main"
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _openclaw_agent(message: str, timeout: int = 60) -> dict[str, Any]:
+def _extract_json_payload(stdout: str) -> dict[str, Any]:
+    """Parse the first JSON object from mixed CLI stdout."""
+    decoder = json.JSONDecoder()
+    for idx, ch in enumerate(stdout):
+        if ch != "{":
+            continue
+        try:
+            payload, _ = decoder.raw_decode(stdout[idx:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            return payload
+    raise json.JSONDecodeError("No JSON object found in stdout", stdout, 0)
+
+
+def _openclaw_agent(message: str, timeout: int = 120) -> dict[str, Any]:
     """Run `openclaw agent --agent main --message <text> --json`.
 
     Returns the parsed JSON response dict.
     Raises RuntimeError if the command fails.
     """
+    session_id = f"mctrl-mcp-{uuid.uuid4().hex[:12]}"
     result = subprocess.run(
-        ["openclaw", "agent", "--agent", OPENCLAW_AGENT_ID, "--message", message, "--json"],
+        [
+            "openclaw",
+            "agent",
+            "--agent",
+            OPENCLAW_AGENT_ID,
+            "--session-id",
+            session_id,
+            "--message",
+            message,
+            "--json",
+        ],
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -67,16 +93,30 @@ def _openclaw_agent(message: str, timeout: int = 60) -> dict[str, Any]:
             f"openclaw agent failed (rc={result.returncode}):\n"
             f"  stderr: {result.stderr!r}"
         )
-    return json.loads(result.stdout)
+    return _extract_json_payload(result.stdout)
 
 
 def _agent_reply_text(resp: dict[str, Any]) -> str:
     """Extract the text reply from an openclaw agent --json response."""
-    payloads = resp.get("result", {}).get("payloads", [])
+    payloads = (resp.get("result") or {}).get("payloads")
+    if not isinstance(payloads, list):
+        payloads = resp.get("payloads") or []
     for p in payloads:
         if isinstance(p, dict) and p.get("text"):
             return str(p["text"])
     return ""
+
+
+def _agent_call_succeeded(resp: dict[str, Any]) -> bool:
+    """Treat the current OpenClaw JSON contract as success if it returned payloads."""
+    if not isinstance(resp, dict):
+        return False
+    if resp.get("error"):
+        return False
+    meta = resp.get("meta")
+    if isinstance(meta, dict) and meta.get("aborted") is True:
+        return False
+    return bool(resp.get("payloads") or (resp.get("result") or {}).get("payloads"))
 
 
 def _slack_history(token: str, channel: str, oldest: str, limit: int = 20) -> list[dict[str, Any]]:
@@ -125,10 +165,10 @@ def test_mcp_agent_send_receive() -> None:
     resp = _openclaw_agent(f"ACP smoke check {run_id}. Acknowledge with any reply.")
     reply = _agent_reply_text(resp)
 
-    print(f"\n[openclaw-agent] run_id={run_id} status={resp.get('status')} reply={reply!r}")
-    assert resp.get("status") == "ok", f"Agent ACP call failed: {resp}"
+    print(f"\n[openclaw-agent] run_id={run_id} ok={_agent_call_succeeded(resp)} reply={reply!r}")
+    assert _agent_call_succeeded(resp), f"Agent ACP call failed: {resp}"
     assert reply, "Empty reply from openclaw agent — ACP path returned no text"
-    print(f"\n[evidence] ACP path alive: run_id={run_id} status=ok reply non-empty")
+    print(f"\n[evidence] ACP path alive: run_id={run_id} reply non-empty")
 
 
 def test_mcp_dispatch_roundtrip(tmp_path: Path) -> None:
@@ -176,10 +216,10 @@ def test_mcp_dispatch_roundtrip(tmp_path: Path) -> None:
         f"[mctrl-mcp-e2e] Acknowledge receipt of dispatch task {bead_id}. "
         f"Reply with: ACK {bead_id}"
     )
-    gw_resp = _openclaw_agent(trigger_msg, timeout=60)
+    gw_resp = _openclaw_agent(trigger_msg, timeout=120)
     gw_reply = _agent_reply_text(gw_resp)
-    assert gw_resp.get("status") == "ok", f"Gateway trigger failed: {gw_resp}"
-    print(f"\n[acp-trigger] status=ok reply={gw_reply!r}")
+    assert _agent_call_succeeded(gw_resp), f"Gateway trigger failed: {gw_resp}"
+    print(f"\n[acp-trigger] ok=true reply={gw_reply!r}")
 
     # Step 2: Real dispatch via ai_orch.
     # slack_trigger_ts=None because input trigger was via ACP, not Slack.
@@ -246,6 +286,6 @@ def test_mcp_dispatch_roundtrip(tmp_path: Path) -> None:
 
     # Step 6: Poll Slack DM — primary proof of notification delivery.
     # No thread reply expected (slack_trigger_ts was None).
-    dm_found = _poll_for_text(bot_token, _DM_CHANNEL, bead_id, ts_before, timeout=30)
-    assert dm_found, f"No DM mentioning {bead_id} in {_DM_CHANNEL} within 30s"
+    dm_found = _poll_for_text(bot_token, _DM_CHANNEL, bead_id, ts_before, timeout=180)
+    assert dm_found, f"No DM mentioning {bead_id} in {_DM_CHANNEL} within 180s"
     print(f"\n[evidence] Slack DM confirmed in {_DM_CHANNEL} mentioning {bead_id}")

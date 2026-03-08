@@ -100,7 +100,6 @@ Tracked baseline for `~/.openclaw/`. Changes here should be synced to `~/.opencl
 | `ai.openclaw.mission-control.plist` | launchd plist for Mission Control backend |
 | `ai.openclaw.mission-control-frontend.plist` | launchd plist for Mission Control frontend |
 | `ai.openclaw.task-poller.plist` | launchd plist for the task poller |
-| `ai.openclaw.thread-ack-watcher.plist` | launchd plist for Slack thread ACK watcher |
 | `AUTO_START_GUIDE.md` | How to set up all launchd services from scratch |
 | `BACKUP_AND_RESTORE.md` | Backup and restore runbook |
 | `SLACK_SETUP_GUIDE.md` | Slack app and token setup |
@@ -140,7 +139,6 @@ Tracked baseline for `~/.openclaw/`. Changes here should be synced to `~/.opencl
 | `install-mc-task-poller.sh` | Install Mission Control task poller launchd job |
 | `run_task_poller.sh` | Run task poller manually |
 | `mc-health-check.sh` | Mission Control health check |
-| `run_thread_mention_ack_watcher.sh` | Run Slack thread mention ACK watcher |
 | `claude_start.sh` | Start Claude Code agent session |
 | `push.sh` | Safe push with branch verification |
 | `sync_branch.sh` | Sync branch with upstream |

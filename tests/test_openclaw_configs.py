@@ -12,11 +12,15 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 DISCORD_CONFIG = REPO_ROOT / "discord-eng-bot" / "openclaw.json"
 MAIN_CONFIG = REPO_ROOT / "openclaw-config" / "openclaw.json"
 MC_PLIST = REPO_ROOT / "openclaw-config" / "ai.openclaw.mission-control.plist"
 START_MC_SCRIPT = REPO_ROOT / "scripts" / "start-mc.sh"
+GATEWAY_INSTALL_SCRIPT = REPO_ROOT / "scripts" / "install-launchagents.sh"
+STARTUP_CHECK_PLIST = REPO_ROOT / "openclaw-config" / "ai.openclaw.startup-check.plist"
+STARTUP_CHECK_SCRIPT = REPO_ROOT / "openclaw-config" / "startup-check.sh"
+MCTRL_SUPERVISOR_PLIST = REPO_ROOT / "scripts" / "mctrl-supervisor.plist.template"
 
 CORE_TOOLS = {"read", "write", "edit", "exec", "bash", "process"}
 SECOND_OPINION_TOOLS = {
@@ -237,6 +241,56 @@ class TestMissionControlRuntimeWiring:
         """Manual startup path should match launchd runtime wiring."""
         script_text = START_MC_SCRIPT.read_text(encoding="utf-8")
         assert "orchestration.mc_backend_service" in script_text
+
+
+class TestLaunchAgentInstallers:
+    def test_install_launchagents_uses_gateway_cli_installer(self):
+        """Gateway should be installed via the supported OpenClaw CLI service path."""
+        script_text = GATEWAY_INSTALL_SCRIPT.read_text(encoding="utf-8")
+        assert "openclaw gateway install --force" in script_text
+
+    def test_install_launchagents_installs_startup_check(self):
+        """Startup-check launch agent must be installed alongside the gateway."""
+        script_text = GATEWAY_INSTALL_SCRIPT.read_text(encoding="utf-8")
+        assert "ai.openclaw.startup-check.plist" in script_text
+
+    def test_install_launchagents_refreshes_runtime_startup_script(self):
+        """The installer must update the script the launch agent actually executes."""
+        script_text = GATEWAY_INSTALL_SCRIPT.read_text(encoding="utf-8")
+        assert 'install -m 755 "$CONFIG_DIR/startup-check.sh" "$OPENCLAW_HOME/startup-check.sh"' in script_text
+
+    def test_install_launchagents_rejects_placeholder_mc_token(self):
+        """Launchd installer must not stamp the checked-in placeholder token into services."""
+        script_text = GATEWAY_INSTALL_SCRIPT.read_text(encoding="utf-8")
+        assert "is_valid_mc_token()" in script_text
+        assert "your-local-auth-token-here" in script_text
+        assert "Generated new local Mission Control token for launchd services." in script_text
+
+    def test_startup_check_plist_runs_at_load(self):
+        """Startup verification should trigger automatically after login/restart."""
+        plist_text = STARTUP_CHECK_PLIST.read_text(encoding="utf-8")
+        assert "<string>ai.openclaw.startup-check</string>" in plist_text
+        assert "<key>RunAtLoad</key>" in plist_text
+        assert "<true/>" in plist_text  # RunAtLoad must be enabled, not just present
+
+    def test_startup_check_script_resolves_openclaw_without_login_shell(self):
+        """Startup-check should resolve the CLI even under launchd's minimal PATH."""
+        script_text = STARTUP_CHECK_SCRIPT.read_text(encoding="utf-8")
+        assert "resolve_openclaw_bin()" in script_text
+        assert ".nvm/versions/node/current/bin" in script_text
+        assert "/opt/homebrew/bin/openclaw" in script_text
+
+    def test_startup_check_treats_missing_target_as_non_fatal(self):
+        """Missing optional WhatsApp target should not fail the one-shot startup verifier."""
+        script_text = STARTUP_CHECK_SCRIPT.read_text(encoding="utf-8")
+        assert "skipping startup confirmation" in script_text
+        assert "exit 0" in script_text
+
+    def test_mctrl_supervisor_template_has_throttle_interval(self):
+        """Supervisor launchd template should back off between restart attempts."""
+        plist_text = MCTRL_SUPERVISOR_PLIST.read_text(encoding="utf-8")
+        assert "<key>ThrottleInterval</key>" in plist_text
+        assert "<integer>10</integer>" in plist_text  # ThrottleInterval must have a positive value
 
 
 # ---------------------------------------------------------------------------

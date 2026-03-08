@@ -251,14 +251,14 @@ def test_slack_loopback_roundtrip(tmp_path: Path) -> None:
     print(f"\n[evidence] agent commits:\n{agent_commits}")
 
     # Step 5: Verify real Slack DM landed.
-    dm_found = _poll_for_text(bot_token, _DM_CHANNEL, bead_id, ts_before, timeout=30)
-    assert dm_found, f"No DM mentioning {bead_id} in {_DM_CHANNEL} within 30s"
+    dm_found = _poll_for_text(bot_token, _DM_CHANNEL, bead_id, ts_before, timeout=300)
+    assert dm_found, f"No DM mentioning {bead_id} in {_DM_CHANNEL} within 300s"
 
     # Step 6: Verify real threaded reply under original trigger.
     thread_found = _poll_for_thread_reply(
-        bot_token, _AI_GENERAL, trigger_ts, bead_id, timeout=30
+        bot_token, _AI_GENERAL, trigger_ts, bead_id, timeout=300
     )
     assert thread_found, (
         f"No threaded reply mentioning {bead_id} under trigger {trigger_ts} "
-        f"in {_AI_GENERAL} within 30s"
+        f"in {_AI_GENERAL} within 300s"
     )

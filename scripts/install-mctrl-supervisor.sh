@@ -28,9 +28,10 @@ sed \
   "$REPO_DIR/scripts/mctrl-supervisor.plist.template" \
   > "$PLIST"
 
-# Reload if already loaded
-launchctl unload "$PLIST" 2>/dev/null || true
-launchctl load "$PLIST"
+if ! launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null; then
+  launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$PLIST"
+fi
 
 echo "Installed $LABEL"
 echo "Logs: $LOG_DIR/supervisor.log"

@@ -13,7 +13,9 @@ if [[ -z "${SLACK_BOT_TOKEN:-}" && -z "${OPENCLAW_SLACK_BOT_TOKEN:-}" ]]; then
   fi
 fi
 
-# Load SLACK_USER_TOKEN if needed
+# Source ~/.profile to pick up user-scoped Slack/env values that are not part of
+# the launchd environment, primarily SLACK_USER_TOKEN and any related shell
+# exports used by local OpenClaw tooling.
 if [[ -f "$HOME/.profile" ]]; then
   # shellcheck disable=SC1091
   source "$HOME/.profile" 2>/dev/null || true
