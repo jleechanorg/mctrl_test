@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    name: pytest (Python 3.12)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pytest
+
+      - name: Run tests
+        run: pytest test_app.py -v
+
+  # Claude lane — uses MiniMax M2.5 via Anthropic-compatible API
+  claude-minimax:
+    name: Claude lane (MiniMax M2.5)
+    runs-on: ubuntu-latest
+    if: ${{ vars.ENABLE_CLAUDE_LANE == 'true' }}
+
+    env:
+      # MiniMax M2.5 Anthropic-compatible endpoint
+      ANTHROPIC_BASE_URL: ${{ secrets.MINIMAX_BASE_URL }}
+      ANTHROPIC_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+      # Model mapping: Claude → MiniMax M2.5
+      CLAUDE_MODEL: "MiniMax-M2-5"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pytest anthropic
+
+      - name: Verify MiniMax M2.5 connectivity
+        run: |
+          python3 - <<'EOF'
+          import anthropic, os
+
+          client = anthropic.Anthropic(
+              base_url=os.environ["ANTHROPIC_BASE_URL"],
+              api_key=os.environ["ANTHROPIC_API_KEY"],
+          )
+          model = os.environ["CLAUDE_MODEL"]
+          msg = client.messages.create(
+              model=model,
+              max_tokens=64,
+              messages=[{"role": "user", "content": "Say hello in one word."}],
+          )
+          print(f"MiniMax M2.5 response via {model}: {msg.content[0].text}")
+          EOF
+
+      - name: Run tests (Claude lane)
+        run: pytest test_app.py -v
