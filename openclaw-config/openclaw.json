@@ -95,10 +95,10 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "openai-codex/gpt-5.3-codex",
+        "primary": "minimax-portal/MiniMax-M2.5",
         "fallbacks": [
-          "openai-codex/gpt-5.3-codex-spark",
-          "minimax-portal/MiniMax-M2.5"
+          "openai-codex/gpt-5.3-codex",
+          "openai-codex/gpt-5.3-codex-spark"
         ]
       },
       "models": {
