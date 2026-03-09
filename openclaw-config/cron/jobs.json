@@ -223,7 +223,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Run weekly pattern extraction for repository learning:\n1) cd /Users/jleechan/project_jleechanclaw/jleechanclaw\n2) python3 scripts/build_memory.py --days 7\n\nRun only with real command output, no placeholders."
+        "message": "Run weekly pattern extraction for repository learning:\n1) cd ${HOME}/project_jleechanclaw/jleechanclaw\n2) python3 scripts/build_memory.py --days 7\n\nRun only with real command output, no placeholders."
       },
       "delivery": {
         "mode": "none",

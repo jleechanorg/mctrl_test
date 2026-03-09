@@ -60,7 +60,7 @@ A PR is NOT done until:
 
 ## Learned Patterns (auto-updated weekly)
 
-- Placeholder section for extractor. See `scripts/extract_patterns.py` for update rules.
+- Placeholder section for extractor. See `scripts/build_memory.py` for update rules.
 - Source window and evidence snapshot are refreshed on each scheduled run.
 
 ## Decision Rules

@@ -90,7 +90,7 @@ Weekly memory files (`~/.openclaw/memory/YYYY-WNN.md`):
 ### jleechanclaw
 - Built notifier retry handling + outbox transient failure retries
 - Hardened launchd args and Slack polling helpers
-- Key learning: gateway HUP doesn't re-embed new memory files, need explicit `openclaw memory index`
+- Key learning: gateway HUP doesn't re-embed new memory files; restart the gateway to pick up new indexed memory files
 
 ### worldai_claw
 - Replaced deterministic world generators with LLM planning
@@ -151,8 +151,8 @@ One-time script that processes a year of git history into weekly memory files.
 
 **Output:**
 - `~/.openclaw/memory/YYYY-WNN.md` (≈52 files for a year)
-- Add `~/.openclaw/memory/` directory to extraPaths (single entry, not per-file)
-- Run `openclaw memory index`
+- Add `~/.openclaw/memory/` directory to `agents.defaults.memorySearch.extraPaths` (single entry, not per-file)
+- Restart the OpenClaw gateway to re-index (`launchctl stop/start gui/$UID/ai.openclaw.gateway`)
 
 **Estimated cost:** ~52 API calls × haiku pricing ≈ negligible
 

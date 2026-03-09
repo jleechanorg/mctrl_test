@@ -9,22 +9,22 @@ REPOS=(
 
 echo "=== Genesis Memory L0 validation (dry-run pipeline) ==="
 echo
-echo "[1/3] seed_memory dry-run over rolling window"
-python3 scripts/seed_memory.py \
-  --since "8 days ago" \
-  --until now \
-  --repo "${REPOS[0]}" \
-  --repo "${REPOS[1]}" \
-  --repo "${REPOS[2]}" \
+echo "[1/3] build_memory collect+synthesize dry-run over rolling 8-day window"
+python3 scripts/build_memory.py \
+  --days 8 \
+  --repo "worldarchitect.ai:${REPOS[0]}" \
+  --repo "jleechanclaw:${REPOS[1]}" \
+  --repo "worldai_claw:${REPOS[2]}" \
   --dry-run
 
 echo
-echo "[2/3] extract_patterns dry-run over last 7 days"
-python3 scripts/extract_patterns.py \
+echo "[2/3] build_memory write dry-run (pattern extraction, last 7 days)"
+python3 scripts/build_memory.py \
   --days 7 \
-  --repo "${REPOS[0]}" \
-  --repo "${REPOS[1]}" \
-  --repo "${REPOS[2]}" \
+  --stage write \
+  --repo "worldarchitect.ai:${REPOS[0]}" \
+  --repo "jleechanclaw:${REPOS[1]}" \
+  --repo "worldai_claw:${REPOS[2]}" \
   --dry-run
 
 echo

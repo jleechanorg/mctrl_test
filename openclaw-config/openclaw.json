@@ -426,7 +426,7 @@
     },
     "auth": {
       "mode": "token",
-      "token": "08594b0c0a25e880680c874df473521ac37320a865620725"
+      "token": "${OPENCLAW_GATEWAY_TOKEN}"
     },
     "tailscale": {
       "mode": "off",
@@ -582,11 +582,11 @@
               "transport": "stdio",
               "command": "python3",
               "args": [
-                "${HOME}/projects/worktree_worker2/${PROJECT_ROOT}/mcp_api.py",
+                "${HOME}/projects/worldarchitect.ai/mvp_site/mcp_api.py",
                 "--stdio"
               ],
               "env": {
-                "PYTHONPATH": "${HOME}/projects/worktree_worker2"
+                "PYTHONPATH": "${HOME}/projects/worldarchitect.ai"
               }
             }
           ],
