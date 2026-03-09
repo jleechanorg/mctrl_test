@@ -461,7 +461,7 @@
             {
               "name": "mcp-agent-mail",
               "transport": "http",
-              "url": "http://127.0.0.1:8765/mcp/",
+              "url": "${MCP_AGENT_MAIL_URL}",
               "headers": {
                 "Authorization": "Bearer PLACEHOLDER-mcp-agent-mail"
               }
@@ -533,7 +533,7 @@
             {
               "name": "render",
               "transport": "http",
-              "url": "https://mcp.render.com/mcp",
+              "url": "${RENDER_MCP_URL}",
               "headers": {
                 "Authorization": "Bearer ${RENDER_API_KEY}"
               }

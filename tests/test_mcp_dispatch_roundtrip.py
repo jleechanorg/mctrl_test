@@ -240,13 +240,18 @@ async def _poll_for_thread_reply_async(
     return False
 
 
-def _poll_for_thread_reply_with_tokens(
-    tokens: list[str], channel: str, thread_ts: str, needle: str,
+async def _poll_for_text_with_tokens_async(
+    tokens: list[str], channel: str, needle: str, oldest: str,
     timeout: float = 30.0, interval: float = 2.0,
 ) -> bool:
-    for token in tokens:
-        if token and _poll_for_thread_reply(token, channel, thread_ts, needle, timeout, interval):
-            return True
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        for token in tokens:
+            if not token:
+                continue
+            if await _poll_for_text_async(token, channel, needle, oldest, timeout=interval, interval=interval):
+                return True
+        await _sleep(interval)
     return False
 
 
