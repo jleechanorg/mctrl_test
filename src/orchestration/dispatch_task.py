@@ -8,15 +8,20 @@ Usage:
         --bead-id ORCH-xxx \\
         --task "implement feature X" \\
         --slack-trigger-ts 1772857900.668299 \\
+        [--slack-trigger-channel C0A... ] \\
         [--agent-cli claude] \\
         [--registry-path .tracking/bead_session_registry.jsonl]
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
+import logging
 import os
 import re
+import shlex
 import shutil
+import site
 import subprocess
 import sys
 import tempfile
@@ -24,6 +29,8 @@ import time
 
 from orchestration.openclaw_notifier import notify_slack_started
 from orchestration.session_registry import BeadSessionMapping, upsert_mapping
+
+logger = logging.getLogger(__name__)
 
 
 def find_existing_worktree(branch: str, repo_root: str) -> str | None:
@@ -210,11 +217,148 @@ def _get_start_sha(worktree_path: str) -> str:
 _DEFAULT_WORKTREE_BASE = os.path.expanduser("~/.mctrl/worktrees")
 
 
+def _task_with_push_instruction(task: str, branch: str = "") -> str:
+    """Append a durable push requirement if the task does not already include one."""
+    normalized = task.lower()
+    if "git push" in normalized:
+        return task
+    push_text = (
+        f"`git push origin {branch}`"
+        if branch
+        else "`git push origin <your-branch>`"
+    )
+    return (
+        f"{task.rstrip()}\n\n"
+        f"Before stopping, push your branch so the work is reviewable remotely: "
+        f"{push_text}."
+    )
+
+
+def _unique_session_name(bead_id: str, session_name: str) -> str:
+    """Build a bead-traceable tmux session name for this dispatch run."""
+    bead_token = re.sub(r"[^a-zA-Z0-9]+", "-", bead_id).strip("-").lower() or "bead"
+    return f"{bead_token}-{int(time.time())}-{session_name}"
+
+
+def _make_async_session_name(agent_cli: str, repo_root: str) -> str:
+    cwd_hash = hashlib.md5(os.path.realpath(repo_root).encode()).hexdigest()[:6]
+    return f"ai-{agent_cli}-{cwd_hash}"
+
+
+def _create_new_worktree(repo_root: str, worktree_base: str) -> tuple[str, str]:
+    """Create a fresh worktree + branch for direct CLI dispatch."""
+    os.makedirs(worktree_base, exist_ok=True)
+    branch = f"ai-orch-{int(time.time()) % 100000}"
+    worktree_path = os.path.join(worktree_base, branch)
+    result = subprocess.run(
+        ["git", "worktree", "add", "-b", branch, worktree_path],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"git worktree add failed: {result.stderr.strip()}")
+    return worktree_path, branch
+
+
+def _build_cursor_shell_cmd(task: str, worktree_path: str) -> str:
+    """Run Cursor in headless trusted mode so dispatch never blocks on trust UI."""
+    model = os.environ.get("MCTRL_CURSOR_MODEL", "auto")
+    return " ".join(
+        [
+            "cursor-agent",
+            "--print",
+            "--trust",
+            "--approve-mcps",
+            "--output-format",
+            "text",
+            "--model",
+            shlex.quote(model),
+            "--workspace",
+            shlex.quote(worktree_path),
+            "--yolo",
+            shlex.quote(task),
+        ]
+    )
+
+
+def _build_ai_orch_env() -> dict[str, str]:
+    """Build a clean env so ai_orch does not import mctrl's local orchestration package."""
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+
+    user_site = site.getusersitepackages()
+    if user_site:
+        env["PYTHONPATH"] = user_site
+
+    return env
+
+
+def _dispatch_cursor_direct(
+    *,
+    bead_id: str,
+    task: str,
+    branch: str,
+    repo_root: str,
+) -> tuple[str, str, str]:
+    """Dispatch Cursor via tmux directly, bypassing ai_orch's interactive fallback."""
+    worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
+    if branch:
+        worktree_path, _ = resolve_worktree_for_branch(branch, repo_root, worktree_base)
+        effective_branch = branch
+    else:
+        worktree_path, effective_branch = _create_new_worktree(repo_root, worktree_base)
+
+    session_name = _make_async_session_name("cursor", repo_root)
+    shell_cmd = _build_cursor_shell_cmd(
+        _task_with_push_instruction(task, effective_branch),
+        worktree_path,
+    )
+    result = subprocess.run(
+        ["tmux", "new-session", "-d", "-s", session_name, "-c", worktree_path, shell_cmd],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"cursor tmux dispatch failed: {result.stderr.strip()}")
+    return session_name, worktree_path, effective_branch
+
+
+def _rename_tmux_session(session_name: str, bead_id: str) -> str:
+    """Rename the tmux session to a bead-traceable name when it is still alive."""
+    target_name = _unique_session_name(bead_id, session_name)
+    if target_name == session_name:
+        return session_name
+
+    result = subprocess.run(
+        ["tmux", "rename-session", "-t", session_name, target_name],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if result.returncode == 0:
+        return target_name
+
+    stderr = (result.stderr or "").strip().lower()
+    if "can't find session" in stderr or "no such session" in stderr:
+        return session_name
+    logger.warning(
+        "Could not rename tmux session %r to %r: %s",
+        session_name,
+        target_name,
+        result.stderr.strip(),
+    )
+    return session_name
+
+
 def dispatch(
     *,
     bead_id: str,
     task: str,
     slack_trigger_ts: str = "",
+    slack_trigger_channel: str = "",
     agent_cli: str = "claude",
     registry_path: str,
     branch: str = "",
@@ -229,30 +373,46 @@ def dispatch(
 
     Without branch, ai_orch creates a new worktree via --worktree (new task).
     """
-    if branch:
-        worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
-        os.makedirs(worktree_base, exist_ok=True)
-        cwd, _ = resolve_worktree_for_branch(branch, repo_root, worktree_base)
-        cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, task]
+    if slack_trigger_ts and not slack_trigger_channel:
+        raise ValueError("slack_trigger_channel is required when slack_trigger_ts is set")
+
+    if agent_cli == "cursor":
+        session_name, worktree_path, parsed_branch = _dispatch_cursor_direct(
+            bead_id=bead_id,
+            task=task,
+            branch=branch,
+            repo_root=repo_root,
+        )
     else:
-        cwd = None
-        cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, task]
+        if branch:
+            worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
+            os.makedirs(worktree_base, exist_ok=True)
+            cwd, _ = resolve_worktree_for_branch(branch, repo_root, worktree_base)
+            agent_task = _task_with_push_instruction(task, branch)
+            cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, agent_task]
+        else:
+            cwd = repo_root
+            agent_task = _task_with_push_instruction(task)
+            cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, agent_task]
 
-    result = subprocess.run(
-        cmd,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    output = result.stdout + result.stderr
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=_build_ai_orch_env(),
+        )
+        output = result.stdout + result.stderr
 
-    if result.returncode != 0:
-        raise RuntimeError(f"ai_orch failed (exit {result.returncode}):\n{output}")
+        if result.returncode != 0:
+            raise RuntimeError(f"ai_orch failed (exit {result.returncode}):\n{output}")
 
-    session_name, worktree_path, parsed_branch = _parse_ai_orch_output(output)
-    if not session_name or not worktree_path:
-        raise RuntimeError(f"Could not parse ai_orch output:\n{output}")
+        session_name, worktree_path, parsed_branch = _parse_ai_orch_output(output)
+        if not session_name or not worktree_path:
+            raise RuntimeError(f"Could not parse ai_orch output:\n{output}")
+
+    session_name = _rename_tmux_session(session_name, bead_id)
 
     effective_branch = branch or parsed_branch
     start_sha = _get_start_sha(worktree_path)
@@ -266,6 +426,7 @@ def dispatch(
         status="in_progress",
         start_sha=start_sha,
         slack_trigger_ts=slack_trigger_ts,
+        slack_trigger_channel=slack_trigger_channel,
     )
     upsert_mapping(mapping, registry_path=registry_path)
     notify_slack_started({
@@ -276,6 +437,7 @@ def dispatch(
         "branch": effective_branch,
         "agent_cli": agent_cli,
         "slack_trigger_ts": slack_trigger_ts,
+        "slack_trigger_channel": slack_trigger_channel,
     })
     return mapping
 
@@ -285,7 +447,8 @@ def main() -> None:
     parser.add_argument("--bead-id", required=True, help="Bead ID (e.g. ORCH-xxx)")
     parser.add_argument("--task", required=True, help="Task description passed to ai_orch")
     parser.add_argument("--slack-trigger-ts", default="", help="Slack ts of trigger message (for threading)")
-    parser.add_argument("--agent-cli", default="claude", help="Agent CLI: claude, codex, gemini")
+    parser.add_argument("--slack-trigger-channel", default="", help="Slack channel ID of trigger message (for threading)")
+    parser.add_argument("--agent-cli", default="claude", help="Agent CLI: claude, codex, gemini, minimax, cursor")
     parser.add_argument(
         "--registry-path",
         default=".tracking/bead_session_registry.jsonl",
@@ -298,6 +461,7 @@ def main() -> None:
             bead_id=args.bead_id,
             task=args.task,
             slack_trigger_ts=args.slack_trigger_ts,
+            slack_trigger_channel=args.slack_trigger_channel,
             agent_cli=args.agent_cli,
             registry_path=args.registry_path,
         )

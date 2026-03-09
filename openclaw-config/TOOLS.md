@@ -104,8 +104,11 @@ dispatch_task \
   --bead-id "$BEAD_ID" \
   --task "full task description" \
   --slack-trigger-ts "$SLACK_TRIGGER_TS" \
+  --slack-trigger-channel "$SLACK_TRIGGER_CHANNEL" \
   --agent-cli claude
 ```
+
+If Jeffrey explicitly asks for `codex`, use the same `dispatch_task` path with `--agent-cli codex`. Do not try ACP Codex or a separate subagent fallback before dispatching. If codex dispatch is unavailable, fail fast and report that it was not queued.
 
 `dispatch_task` is a command on PATH (`~/bin/dispatch_task`). It:
 - Spawns `ai_orch run --async --worktree` internally

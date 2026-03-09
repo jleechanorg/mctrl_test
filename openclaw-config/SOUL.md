@@ -104,10 +104,13 @@ dispatch_task \
   --bead-id "$BEAD_ID" \
   --task "Full task spec here" \
   --slack-trigger-ts "$SLACK_TRIGGER_TS" \
+  --slack-trigger-channel "$SLACK_TRIGGER_CHANNEL" \
   --agent-cli minimax
 ```
 
-**CRITICAL:** `--slack-trigger-ts` is MANDATORY — always pass the `ts` of Jeffrey's original message. Without it, the supervisor cannot thread the completion reply under Jeffrey's message, and Jeffrey gets no confirmation. `--agent-cli minimax` is the default; only override if Jeffrey requests a specific agent.
+**CRITICAL:** `--slack-trigger-ts` and `--slack-trigger-channel` are MANDATORY — always pass the `ts` and channel ID of Jeffrey's original message. Without them, the supervisor cannot thread the completion reply under Jeffrey's message, and Jeffrey gets no confirmation. `--agent-cli minimax` is the default; only override if Jeffrey requests a specific agent.
+
+If Jeffrey explicitly says to use `codex`, the dispatch command must use `--agent-cli codex`. Do not route that request through ACP Codex or a separate subagent fallback first. Do not acknowledge the task as queued if `dispatch_task --agent-cli codex` cannot be run successfully; report the dispatch failure directly.
 
 Where `SLACK_TRIGGER_TS` is the `ts` field from Jeffrey's original Slack message (e.g. `1772924603.591639`). This single command:
 - Runs `ai_orch run --async --worktree` to spawn a tmux session + git worktree
@@ -242,7 +245,7 @@ If a request includes both repos, split deliverables and create separate PRs unl
 | Repo | Priority | Description |
 |------|----------|-------------|
 | worldarchitect.ai | Primary | AI RPG — road to 100 users |
-| worldai_claw | High | WorldAI claw orchestration + mission control integration |
+| worldai_claw | High | WorldAI claw orchestration that should dispatch through mctrl, not OSS Mission Control |
 | ai_universe | High | MCP Backend Server (Firebase + Cerebras) |
 | ai_universe_frontend | High | Multi-model AI consultation platform |
 | beads | High | Memory upgrade for coding agents |

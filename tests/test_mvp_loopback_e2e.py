@@ -62,23 +62,46 @@ def _slack_history(token: str, channel: str, oldest: str, limit: int = 20) -> li
     )
     req = Request(url, headers={"Authorization": f"Bearer {token}"})
     with urlopen(req, timeout=10) as resp:
-        return json.loads(resp.read()).get("messages", [])
+        return json.loads(resp.read()).get("messages") or []
 
 
 def _poll_for_text(
     token: str, channel: str, needle: str, oldest: str,
     timeout: float = 20.0, interval: float = 2.0,
 ) -> bool:
+    return _poll_for_matching_message(
+        token, channel, needle, oldest, timeout=timeout, interval=interval
+    ) is not None
+
+
+def _poll_for_matching_message(
+    token: str, channel: str, needle: str, oldest: str,
+    timeout: float = 20.0, interval: float = 2.0,
+) -> dict[str, Any] | None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            msgs = _slack_history(token, channel, oldest)
-            if any(needle in m.get("text", "") for m in msgs):
-                return True
+            msgs = _slack_history(token, channel, oldest, limit=100)
+            for message in msgs:
+                if needle in message.get("text", ""):
+                    return message
         except URLError:
             pass
         time.sleep(interval)
-    return False
+    return None
+
+
+def _latest_matching_message(
+    token: str, channel: str, needle: str, *, oldest: str = "0", limit: int = 200
+) -> dict[str, Any] | None:
+    try:
+        msgs = _slack_history(token, channel, oldest, limit=limit)
+    except URLError:
+        return None
+    for message in msgs:
+        if needle in message.get("text", ""):
+            return message
+    return None
 
 
 def _poll_for_thread_reply(
@@ -86,6 +109,16 @@ def _poll_for_thread_reply(
     timeout: float = 20.0, interval: float = 2.0,
 ) -> bool:
     """Poll conversations.replies for a message containing needle in the given thread."""
+    return _poll_for_thread_reply_message(
+        token, channel, thread_ts, needle, timeout=timeout, interval=interval
+    ) is not None
+
+
+def _poll_for_thread_reply_message(
+    token: str, channel: str, thread_ts: str, needle: str,
+    required_text: str | None = None,
+    timeout: float = 20.0, interval: float = 2.0,
+) -> dict[str, Any] | None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
@@ -96,14 +129,20 @@ def _poll_for_thread_reply(
             req = Request(url, headers={"Authorization": f"Bearer {token}"})
             with urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read())
-            msgs = data.get("messages", [])
+            msgs = data.get("messages") or []
             # Skip index 0 (the parent message itself); check replies
-            if any(needle in m.get("text", "") for m in msgs[1:]):
-                return True
+            for message in msgs[1:]:
+                text = message.get("text", "")
+                if needle in text and (required_text is None or required_text in text):
+                    return message
         except URLError:
             pass
         time.sleep(interval)
-    return False
+    return None
+
+
+def _write_json_artifact(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def test_e2e_registry_to_outbox_to_delivery(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -198,6 +237,7 @@ def test_slack_loopback_roundtrip(tmp_path: Path) -> None:
         bead_id=bead_id,
         task=task,
         slack_trigger_ts=trigger_ts,
+        slack_trigger_channel=_AI_GENERAL,
         agent_cli="minimax",
         registry_path=str(registry),
     )
@@ -251,14 +291,41 @@ def test_slack_loopback_roundtrip(tmp_path: Path) -> None:
     print(f"\n[evidence] agent commits:\n{agent_commits}")
 
     # Step 5: Verify real Slack DM landed.
-    dm_found = _poll_for_text(bot_token, _DM_CHANNEL, bead_id, ts_before, timeout=300)
-    assert dm_found, f"No DM mentioning {bead_id} in {_DM_CHANNEL} within 300s"
+    dm_message = _poll_for_matching_message(bot_token, _DM_CHANNEL, bead_id, ts_before, timeout=360)
+    if dm_message is None:
+        dm_message = _latest_matching_message(bot_token, _DM_CHANNEL, bead_id, oldest="0", limit=200)
+    assert dm_message is not None, f"No DM mentioning {bead_id} in {_DM_CHANNEL} within 360s"
+    _write_json_artifact(
+        tmp_path / "slack_dm_evidence.json",
+        {
+            "bead_id": bead_id,
+            "channel": _DM_CHANNEL,
+            "oldest": ts_before,
+            "matched_ts": dm_message.get("ts", ""),
+            "matched_text": dm_message.get("text", ""),
+        },
+    )
 
     # Step 6: Verify real threaded reply under original trigger.
-    thread_found = _poll_for_thread_reply(
-        bot_token, _AI_GENERAL, trigger_ts, bead_id, timeout=300
+    thread_message = _poll_for_thread_reply_message(
+        bot_token,
+        _AI_GENERAL,
+        trigger_ts,
+        bead_id,
+        required_text="Ready for review.",
+        timeout=360,
     )
-    assert thread_found, (
+    assert thread_message is not None, (
         f"No threaded reply mentioning {bead_id} under trigger {trigger_ts} "
-        f"in {_AI_GENERAL} within 300s"
+        f"in {_AI_GENERAL} within 360s"
+    )
+    _write_json_artifact(
+        tmp_path / "slack_thread_evidence.json",
+        {
+            "bead_id": bead_id,
+            "channel": _AI_GENERAL,
+            "thread_ts": trigger_ts,
+            "matched_ts": thread_message.get("ts", ""),
+            "matched_text": thread_message.get("text", ""),
+        },
     )

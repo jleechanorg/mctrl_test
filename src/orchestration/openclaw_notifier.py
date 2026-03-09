@@ -8,13 +8,33 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.request import Request, urlopen
 
-# DM channel: jleechan direct message; trigger channel: #ai-slack-test
+# DM channel: jleechan direct message; trigger channel: #ai-slack-test (legacy constant)
 SLACK_DM_CHANNEL = "D0AFTLEJGJU"
-SLACK_TRIGGER_CHANNEL = "C0AKALZ4CKW"  # #ai-slack-test — thread replies go here
+SLACK_TRIGGER_CHANNEL = "C0AKALZ4CKW"  # #ai-slack-test
 
 EventSender = Callable[[dict[str, Any]], bool]
 
 DEFAULT_OUTBOX_PATH = ".messages/outbox.jsonl"
+
+
+def _normalize_trigger_ts(value: Any) -> str:
+    """Return a usable Slack thread ts, treating None-like values as missing."""
+    if value is None:
+        return ""
+    trigger_ts = str(value).strip()
+    if not trigger_ts or trigger_ts.lower() == "none":
+        return ""
+    return trigger_ts
+
+
+def _normalize_trigger_channel(value: Any) -> str:
+    """Return a usable Slack channel id, treating None-like values as missing."""
+    if value is None:
+        return ""
+    trigger_channel = str(value).strip()
+    if not trigger_channel or trigger_channel.lower() == "none":
+        return ""
+    return trigger_channel
 
 
 def notify_openclaw(
@@ -97,10 +117,19 @@ def _parse_jsonl_lines(text: str) -> list[dict[str, Any]]:
 
 
 def enqueue_outbox(payload: dict[str, Any], *, outbox_path: str = DEFAULT_OUTBOX_PATH) -> None:
+    normalized_payload = dict(payload)
+    if "slack_trigger_ts" in normalized_payload:
+        normalized_payload["slack_trigger_ts"] = _normalize_trigger_ts(
+            normalized_payload.get("slack_trigger_ts")
+        )
+    if "slack_trigger_channel" in normalized_payload:
+        normalized_payload["slack_trigger_channel"] = _normalize_trigger_channel(
+            normalized_payload.get("slack_trigger_channel")
+        )
     path = Path(outbox_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(payload, sort_keys=True))
+        fh.write(json.dumps(normalized_payload, sort_keys=True))
         fh.write("\n")
 
 
@@ -116,7 +145,7 @@ def notify_slack_started(payload: dict[str, Any]) -> bool:
     """Post task-started notification to Slack. Best-effort, never blocks.
 
     Posts a DM to jleechan. If slack_trigger_ts is set, also threads a reply
-    under the original trigger message in #ai-slack-test.
+    under the original trigger message channel/thread.
     """
     token = os.environ.get("OPENCLAW_SLACK_BOT_TOKEN") or os.environ.get("SLACK_BOT_TOKEN")
     if not token:
@@ -127,7 +156,8 @@ def notify_slack_started(payload: dict[str, Any]) -> bool:
     worktree = str(payload.get("worktree_path", "unknown"))
     session = str(payload.get("session", "unknown"))
     agent_cli = str(payload.get("agent_cli", "unknown"))
-    trigger_ts = str(payload.get("slack_trigger_ts", ""))
+    trigger_ts = _normalize_trigger_ts(payload.get("slack_trigger_ts"))
+    trigger_channel = _normalize_trigger_channel(payload.get("slack_trigger_channel"))
 
     dm_text = (
         f":rocket: *Task started: {bead_id}*\n\n"
@@ -138,9 +168,9 @@ def notify_slack_started(payload: dict[str, Any]) -> bool:
     thread_text = f":rocket: Agent started — *{bead_id}* running in `{session}` on `{branch}`."
 
     posts: list[dict[str, Any]] = [{"channel": SLACK_DM_CHANNEL, "text": dm_text}]
-    if trigger_ts:
+    if trigger_ts and trigger_channel:
         posts.append({
-            "channel": SLACK_TRIGGER_CHANNEL,
+            "channel": trigger_channel,
             "text": thread_text,
             "thread_ts": trigger_ts,
         })
@@ -171,7 +201,7 @@ def notify_slack_done(payload: dict[str, Any]) -> bool:
     """Post task-done notification to Slack. Best-effort, never blocks.
 
     Posts a DM to jleechan. If slack_trigger_ts is set, also threads a reply
-    under the original trigger message in #all-jleechan-ai.
+    under the original trigger message channel/thread.
     Uses OPENCLAW_SLACK_BOT_TOKEN only — never falls back to user token.
     """
     # Use bot token only — never fall back to SLACK_USER_TOKEN (that posts as
@@ -185,7 +215,8 @@ def notify_slack_done(payload: dict[str, Any]) -> bool:
     worktree = str(payload.get("worktree_path", "unknown"))
     event = payload.get("event", "task_needs_human")
     session = str(payload.get("session", "unknown"))
-    trigger_ts = str(payload.get("slack_trigger_ts", ""))
+    trigger_ts = _normalize_trigger_ts(payload.get("slack_trigger_ts"))
+    trigger_channel = _normalize_trigger_channel(payload.get("slack_trigger_channel"))
 
     if event == "task_finished":
         dm_text = (
@@ -197,20 +228,34 @@ def notify_slack_done(payload: dict[str, Any]) -> bool:
         thread_text = f":done: Agent done — *{bead_id}* committed to `{branch}`. Ready for review."
     else:
         # task_needs_human: agent exited without committing (stall/crash/timeout)
-        dm_text = (
-            f":warning: *Task stalled: {bead_id}*\n\n"
-            f"Agent session `{session}` exited without committing.\n"
-            f"Branch: `{branch}`\n"
-            f"Worktree: `{worktree}`\n"
-            f"Investigate and relaunch if needed."
-        )
-        thread_text = f":warning: Agent for *{bead_id}* exited without commits — may need relaunch. Branch: `{branch}`."
+        action_required = str(payload.get("action_required", "human_decision"))
+        if action_required == "push_or_salvage":
+            dm_text = (
+                f":warning: *Task stranded: {bead_id}*\n\n"
+                f"Agent session `{session}` committed locally but did not push to origin.\n"
+                f"Branch: `{branch}`\n"
+                f"Worktree: `{worktree}`\n"
+                f"Push or salvage the branch before cleanup."
+            )
+            thread_text = (
+                f":warning: Agent for *{bead_id}* committed locally but did not push `{branch}`. "
+                "Human follow-up required."
+            )
+        else:
+            dm_text = (
+                f":warning: *Task stalled: {bead_id}*\n\n"
+                f"Agent session `{session}` exited without committing.\n"
+                f"Branch: `{branch}`\n"
+                f"Worktree: `{worktree}`\n"
+                f"Investigate and relaunch if needed."
+            )
+            thread_text = f":warning: Agent for *{bead_id}* exited without commits — may need relaunch. Branch: `{branch}`."
 
     posts: list[dict[str, Any]] = [{"channel": SLACK_DM_CHANNEL, "text": dm_text}]
     # Thread the completion reply under the original trigger message if we have its ts.
-    if trigger_ts:
+    if trigger_ts and trigger_channel:
         posts.append({
-            "channel": SLACK_TRIGGER_CHANNEL,
+            "channel": trigger_channel,
             "text": thread_text,
             "thread_ts": trigger_ts,
         })

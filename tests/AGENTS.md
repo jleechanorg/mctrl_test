@@ -29,8 +29,7 @@ python -m pytest tests/ -v --tb=short
 | `test_reconciliation.py` | Reconciler logic: in_progress only, task_finished vs needs_human, CAS guard |
 | `test_session_registry.py` | JSONL upsert, CAS update, malformed-line skipping, atomic writes |
 | `test_openclaw_notifier.py` | Outbox enqueue, drain atomicity, notify_openclaw fallback |
-| `test_mc_backend_service.py` | Heartbeat interval env vars, stop_event exposure, is_configured guard |
-| `test_webhook_bridge.py` | HMAC validation, event filtering, empty body handling |
+| `test_supervisor.py` | Supervisor env parsing and startup safeguards |
 
 ## Not Proved Here
 

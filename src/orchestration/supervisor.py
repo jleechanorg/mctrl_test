@@ -35,6 +35,22 @@ OUTBOX_PATH = os.environ.get(
     "MCTRL_OUTBOX_PATH", ".messages/outbox.jsonl"
 )
 
+
+def _get_archive_after_days(default: int = 7) -> int:
+    raw = os.environ.get("MCTRL_ARCHIVE_AFTER_DAYS", str(default))
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning(
+            "Invalid MCTRL_ARCHIVE_AFTER_DAYS value %r; falling back to %d",
+            raw,
+            default,
+        )
+        return default
+
+
+ARCHIVE_AFTER_DAYS = _get_archive_after_days()
+
 _running = True
 
 
@@ -71,10 +87,19 @@ def _ensure_slack_token() -> None:
 def run_once() -> list[dict]:
     # Import here so PYTHONPATH is resolved at runtime
     from orchestration.reconciliation import reconcile_registry_once
-    return reconcile_registry_once(
+    from orchestration.session_registry import archive_terminal_mappings
+
+    emitted = reconcile_registry_once(
         registry_path=REGISTRY_PATH,
         outbox_path=OUTBOX_PATH,
     )
+    archived = archive_terminal_mappings(
+        registry_path=REGISTRY_PATH,
+        archive_after_days=ARCHIVE_AFTER_DAYS,
+    )
+    if archived:
+        logger.info("Archived %d terminal mapping(s)", archived)
+    return emitted
 
 
 def main() -> None:

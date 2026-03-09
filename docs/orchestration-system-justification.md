@@ -42,12 +42,14 @@ This repo's orchestration layer (`src/orchestration/`) is Python. OpenClaw is Ty
 
 ### Why not openclaw Mission Control code?
 
-Mission Control (reference at `~/projects_reference/openclaw-mission-control/`) is a UI/control-plane application. It provides task state management and approval surfaces, not GitHub SCM integration primitives. The design doc (`docs/mcp-mail-openclaw-mission-control-design.md`) explicitly separates concerns:
-- Mission Control: task state store, approval gates
-- `ai_orch`: agent lifecycle
-- `gh_integration.py`: GitHub SCM queries
+Mission Control was evaluated as a UI/control-plane application, not as the
+authoritative execution path for this repo. The current direction is documented
+in `roadmap/MCTRL_NO_OSS_MISSION_CONTROL.md`: `mctrl` owns orchestration state,
+`ai_orch` owns execution, and GitHub/Slack integrations hang directly off that
+stack.
 
-Mission Control would *consume* `gh_integration.py` outputs, not replace them.
+Mission Control would have consumed `gh_integration.py` outputs, not replaced
+them.
 
 ### Why not `ai_orch` code?
 
@@ -125,18 +127,16 @@ The [Unresolved Review Threads Action](https://github.com/marketplace/actions/un
 
 **Why it exists**: TDD methodology — every behavior change starts with a failing test. Tests verify fail-closed invariants that would be invisible in production until a merge gate silently fails open.
 
-### `docs/mcp-mail-openclaw-mission-control-design.md` (new, 136 lines)
+### `roadmap/MCTRL_NO_OSS_MISSION_CONTROL.md`
 
-**Purpose**: Canonical design doc for the autonomous task-to-merge-ready-PR pipeline.
+**Purpose**: Canonical decision doc for removing OSS Mission Control from the
+supported architecture.
 
-**Why it exists**: Consolidates design decisions from PR #29 operational content + CodeRabbit review gaps into a single authoritative reference. Covers:
-- End-to-end lifecycle (7 phases)
-- State machine with 16 states and explicit transition rules
-- Component responsibilities (Mission Control vs ai_orch vs MCP Mail)
-- Security controls, phase timeouts, polling protocol
-- CodeRabbit handling with fallback evidence requirements
-
-**Why not just update ORCHESTRATION_DESIGN.md**: That doc covers the broader orchestration system architecture. This doc is specifically about the Mission Control delivery pipeline — a focused subsystem with its own state machine, security model, and acceptance criteria.
+**Why it exists**: Consolidates the architectural direction in one place:
+- `mctrl` is the lifecycle authority
+- `ai_orch` is the execution substrate
+- beads are canonical task state
+- Mission Control is out of the target architecture
 
 ### `roadmap/TDD_EXECUTION_ROADMAP.md` (new, 90 lines)
 

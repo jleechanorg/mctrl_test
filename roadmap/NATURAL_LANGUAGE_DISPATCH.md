@@ -5,8 +5,8 @@
 ```
 "build the discord bot we discussed"
   → jleechanclaw reads DM history, extracts spec
-  → creates MC task with full description
-  → task_poller dispatches to minimax agent
+  → dispatches a bead-tracked mctrl task with full description
+  → mctrl dispatches to minimax agent
   → agent builds /tmp/discord-eng-bot/openclaw.json
   → result posted back to Slack
 ```
@@ -30,7 +30,7 @@ openclaw.json already provides everything needed:
 
 ## The Fix: SOUL.md Instruction (ORCH-7wk)
 
-Add to SOUL.md under "Long-Running Tasks: Hand Off to Mission Control":
+Add to SOUL.md under the long-running task dispatch section:
 
 ```markdown
 ### Context Expansion Before Dispatch
@@ -41,7 +41,7 @@ do NOT dispatch the raw short message. Instead:
 
 1. Read the last 20 DM messages (dmHistoryLimit provides this automatically)
 2. Extract the relevant spec: goal, requirements, constraints, output location
-3. Write the full spec into the MC task `description` field
+3. Write the full spec into the dispatched bead/mctrl task
 4. Confirm to Jeffrey: "Queued: [task title]. Spec: [one-line summary]."
 
 The coding agent only gets the expanded description — never the raw "we discussed" stub.
@@ -72,7 +72,7 @@ Python code in `src/` is for capabilities that genuinely don't exist in openclaw
 
 ## Discord Bot Project (immediate)
 
-Full spec for the minimax agent, ready to paste into an MC task description:
+Full spec for the minimax agent, ready to paste into a dispatched task:
 
 ```
 Build an openclaw.json agent config for a public Discord engineering Q&A bot.

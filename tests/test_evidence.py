@@ -379,13 +379,64 @@ class TestReceiveGitHubEvent:
         payload = {
             "action": "submitted",
             "review": {"state": "approved"},
-            "pull_request": {"number": 3},
+            "pull_request": {"number": 3, "head": {"sha": "review-sha"}},
             "sender": {"login": "reviewer"},
             "repository": {"full_name": "owner/repo"},
         }
         result = self.receive(payload, "pull_request_review")
         assert result is not None
         assert result["pr_number"] == 3
+        assert result["workflow_lane"] == "fix-comment"
+        assert result["run_outcome"] == "executed"
+        assert result["idempotency_key"] == "3|review-sha|fix-comment"
+
+    def test_review_comment_routes_to_fix_comment(self) -> None:
+        payload = {
+            "action": "created",
+            "comment": {"author_association": "MEMBER", "body": "please fix this"},
+            "pull_request": {"number": 8, "head": {"sha": "comment-sha"}},
+            "sender": {"login": "reviewer"},
+            "repository": {"full_name": "owner/repo"},
+        }
+        result = self.receive(payload, "pull_request_review_comment")
+        assert result is not None
+        assert result["workflow_lane"] == "fix-comment"
+        assert result["run_outcome"] == "executed"
+        assert result["idempotency_key"] == "8|comment-sha|fix-comment"
+
+    def test_check_suite_failure_routes_to_fixpr(self) -> None:
+        payload = {
+            "action": "completed",
+            "check_suite": {"conclusion": "failure", "head_sha": "failed-sha"},
+            "pull_request": {"number": 9},
+            "sender": {"login": "github-actions[bot]"},
+            "repository": {"full_name": "owner/repo"},
+        }
+        result = self.receive(payload, "check_suite")
+        assert result is not None
+        assert result["workflow_lane"] == "fixpr"
+        assert result["run_outcome"] == "executed"
+        assert result["idempotency_key"] == "9|failed-sha|fixpr"
+
+    def test_duplicate_previous_run_is_suppressed(self) -> None:
+        payload = {
+            "action": "opened",
+            "pull_request": {"number": 10, "head": {"sha": "dup-sha"}},
+            "sender": {"login": "owner"},
+            "repository": {"full_name": "owner/repo"},
+        }
+        result = self.receive(
+            payload,
+            "pull_request",
+            previous_runs=[{
+                "idempotency_key": "10|dup-sha|comment-validation",
+                "run_outcome": "executed",
+            }],
+        )
+        assert result is not None
+        assert result["workflow_lane"] == "comment-validation"
+        assert result["run_outcome"] == "duplicate_suppressed"
+        assert result["skip_reason"] == "duplicate_event_same_head_sha"
 
     def test_unsupported_event_type_rejected(self) -> None:
         payload = {"pusher": {"name": "dev"}}
@@ -464,4 +515,3 @@ class TestReceiveGitHubEvent:
         )
         assert result is not None
         assert result["event_type"] == "issue_comment"
-

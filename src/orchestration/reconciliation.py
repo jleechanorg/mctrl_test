@@ -51,6 +51,62 @@ def _worktree_has_commits(worktree_path: str | None, start_sha: str = "") -> boo
         return False
 
 
+def _remote_branch_exists(branch: str, worktree_path: str | None) -> bool | None:
+    """Return remote verification state for the local HEAD.
+
+    Returns:
+    - True: origin/<branch> contains local HEAD
+    - False: remote branch is reachable and does not contain local HEAD
+    - None: remote verification could not be completed (transient failure)
+    """
+    if not branch or not worktree_path:
+        return False
+    try:
+        fetch_result = subprocess.run(
+            ["git", "fetch", "--no-tags", "origin", branch],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if fetch_result.returncode != 0:
+            logger.warning(
+                "Could not verify remote branch %s in %s: %s",
+                branch,
+                worktree_path,
+                (fetch_result.stderr or "").strip(),
+            )
+            return None
+
+        remote_ref = f"origin/{branch}"
+        remote_result = subprocess.run(
+            ["git", "rev-parse", "--verify", remote_ref],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if remote_result.returncode != 0:
+            return False
+
+        ancestry_result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", "HEAD", remote_ref],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return ancestry_result.returncode == 0
+    except Exception as exc:
+        logger.warning(
+            "Remote verification failed for %s in %s: %s",
+            branch,
+            worktree_path,
+            exc,
+        )
+        return None
+
+
 def reconcile_registry_once(
     *,
     registry_path: str,
@@ -77,15 +133,31 @@ def reconcile_registry_once(
             continue
 
         # Determine exit outcome by checking for commits the agent made
-        finished = _worktree_has_commits(mapping.worktree_path, mapping.start_sha)
-        new_status = "finished" if finished else "needs_human"
-        event_type = "task_finished" if finished else "task_needs_human"
-        summary = (
-            "ai_orch session completed — worktree branch has new commits"
-            if finished
-            else "ai_orch session exited without committing — may have stalled or failed"
-        )
-        action = "review_and_merge" if finished else "human_decision"
+        has_commits = _worktree_has_commits(mapping.worktree_path, mapping.start_sha)
+        pushed_remote = has_commits and _remote_branch_exists(mapping.branch, mapping.worktree_path)
+        if has_commits and pushed_remote is None:
+            logger.info(
+                "Deferred reconciliation for %s due to transient remote verification failure",
+                mapping.bead_id,
+            )
+            continue
+        finished = has_commits and pushed_remote
+
+        if finished:
+            new_status = "finished"
+            event_type = "task_finished"
+            summary = "ai_orch session completed — branch is reviewable on origin"
+            action = "review_and_merge"
+        elif has_commits:
+            new_status = "needs_human"
+            event_type = "task_needs_human"
+            summary = "ai_orch session committed locally but did not push the branch to origin"
+            action = "push_or_salvage"
+        else:
+            new_status = "needs_human"
+            event_type = "task_needs_human"
+            summary = "ai_orch session exited without committing — may have stalled or failed"
+            action = "human_decision"
 
         changed = update_mapping_status(
             mapping.bead_id,
@@ -106,6 +178,7 @@ def reconcile_registry_once(
             "branch": mapping.branch,
             "agent_cli": mapping.agent_cli,
             "slack_trigger_ts": mapping.slack_trigger_ts,
+            "slack_trigger_channel": mapping.slack_trigger_channel,
         }
         # Fire both notifications in parallel: openclaw agent + Slack
         t_openclaw = threading.Thread(

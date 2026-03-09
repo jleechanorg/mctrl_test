@@ -5,13 +5,14 @@ import os
 import tempfile
 import threading
 from dataclasses import asdict, dataclass, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
 TaskLifecycleStatus = Literal["queued", "in_progress", "needs_human", "finished"]
 
 DEFAULT_REGISTRY_PATH = ".tracking/bead_session_registry.jsonl"
+DEFAULT_ARCHIVE_AFTER_DAYS = 7
 
 # Process-local lock for registry updates (not needed for cross-process atomicity
 # since os.replace is atomic, but prevents race conditions within a process)
@@ -33,6 +34,9 @@ class BeadSessionMapping:
     # Slack ts of the original trigger message in #all-jleechan-ai — used to
     # thread the completion reply under that message. Empty for non-Slack tasks.
     slack_trigger_ts: str = ""
+    # Slack channel ID for the original trigger message. Used with thread_ts
+    # to post completion/start replies in the same thread.
+    slack_trigger_channel: str = ""
 
     @classmethod
     def create(
@@ -46,6 +50,7 @@ class BeadSessionMapping:
         status: TaskLifecycleStatus,
         start_sha: str = "",
         slack_trigger_ts: str = "",
+        slack_trigger_channel: str = "",
     ) -> BeadSessionMapping:
         return cls(
             bead_id=bead_id,
@@ -56,7 +61,10 @@ class BeadSessionMapping:
             status=status,
             updated_at=_utcnow_iso(),
             start_sha=start_sha,
-            slack_trigger_ts=slack_trigger_ts,
+            slack_trigger_ts=_normalize_slack_trigger_ts(slack_trigger_ts),
+            slack_trigger_channel=_normalize_slack_trigger_channel(
+                slack_trigger_channel
+            ),
         )
 
     @classmethod
@@ -70,7 +78,10 @@ class BeadSessionMapping:
             status=str(payload["status"]),  # type: ignore[arg-type]
             updated_at=str(payload["updated_at"]),
             start_sha=str(payload.get("start_sha", "")),
-            slack_trigger_ts=str(payload.get("slack_trigger_ts", "")),
+            slack_trigger_ts=_normalize_slack_trigger_ts(payload.get("slack_trigger_ts", "")),
+            slack_trigger_channel=_normalize_slack_trigger_channel(
+                payload.get("slack_trigger_channel", "")
+            ),
         )
 
 
@@ -151,6 +162,44 @@ def list_mappings(*, registry_path: str = DEFAULT_REGISTRY_PATH) -> list[BeadSes
     return results
 
 
+def archive_terminal_mappings(
+    *,
+    registry_path: str = DEFAULT_REGISTRY_PATH,
+    archive_after_days: int = DEFAULT_ARCHIVE_AFTER_DAYS,
+    now: datetime | None = None,
+) -> int:
+    """Archive old terminal mappings whose worktrees no longer exist."""
+    if archive_after_days < 0:
+        return 0
+
+    cutoff = (now or datetime.now(tz=timezone.utc)) - timedelta(days=archive_after_days)
+    archive_path = _archive_path_for(registry_path)
+
+    with _registry_lock:
+        items = list_mappings(registry_path=registry_path)
+        keep: list[BeadSessionMapping] = []
+        archive: list[BeadSessionMapping] = []
+
+        for item in items:
+            if (
+                item.status in {"finished", "needs_human"}
+                and _parse_iso8601(item.updated_at) <= cutoff
+                and not Path(item.worktree_path).exists()
+            ):
+                archive.append(item)
+            else:
+                keep.append(item)
+
+        if not archive:
+            return 0
+
+        archived_items = _read_archive(archive_path)
+        archived_items.extend(archive)
+        _write_all(keep, registry_path=registry_path)
+        _write_all(archived_items, registry_path=str(archive_path))
+        return len(archive)
+
+
 def _write_all(
     items: list[BeadSessionMapping],
     *,
@@ -185,3 +234,55 @@ def _write_all(
 
 def _utcnow_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+
+
+def _normalize_slack_trigger_ts(value: object) -> str:
+    if value is None:
+        return ""
+    trigger_ts = str(value).strip()
+    if not trigger_ts or trigger_ts.lower() == "none":
+        return ""
+    return trigger_ts
+
+
+def _normalize_slack_trigger_channel(value: object) -> str:
+    if value is None:
+        return ""
+    trigger_channel = str(value).strip()
+    if not trigger_channel or trigger_channel.lower() == "none":
+        return ""
+    return trigger_channel
+
+
+def _archive_path_for(registry_path: str) -> Path:
+    path = Path(registry_path)
+    if path.suffix == ".jsonl":
+        return path.with_name(f"{path.stem}.archive{path.suffix}")
+    return path.with_name(f"{path.name}.archive")
+
+
+def _parse_iso8601(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _read_archive(path: Path) -> list[BeadSessionMapping]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return []
+    results: list[BeadSessionMapping] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            results.append(BeadSessionMapping.from_dict(json.loads(line)))
+        except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+            continue
+    return results

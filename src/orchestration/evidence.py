@@ -8,8 +8,7 @@ Evidence completeness classifications:
   PARTIAL   — queue + executor present; artifact or handoff partial/missing.
   MISSING   — one or more of queue or executor sections absent.
 
-Sections mirror the canonical design contract in
-docs/mcp-mail-openclaw-mission-control-design.md:
+Sections mirror the canonical orchestration evidence contract:
   A) Queue evidence  (ArtifactType.QUEUE_RECORD)
   B) Executor evidence (ArtifactType.EXECUTOR_LOG)
   C) Artifact evidence (ArtifactType.DIFF | TEST_OUTPUT | CI_CHECK)

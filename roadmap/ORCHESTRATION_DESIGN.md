@@ -2,6 +2,10 @@
 
 > How jleechanclaw talks to you, spawns agents, and manages work through a unified system.
 
+Note: Mission Control-heavy sections in this document are historical design
+context. The current architectural direction is in
+`roadmap/MCTRL_NO_OSS_MISSION_CONTROL.md`.
+
 ## Goal
 
 Jeffrey talks to **jleechanclaw** (the OpenClaw agent). jleechanclaw orchestrates coding agents (Claude Code, Codex, Gemini, Cursor) and manages their full lifecycle — task planning, agent spawning, monitoring, PR delivery — with a dashboard for visibility.
@@ -436,6 +440,10 @@ Key design choices we're preserving:
 - **Bot filtering** — hardcoded list of known bot logins (github-actions, dependabot, codecov)
 
 #### 2. Lifecycle Reaction Engine → `lifecycle_reactions.py` (ORCH-y77)
+
+The current canonical design for this port now lives in
+`roadmap/MCTRL_AGENT_ORCHESTRATOR_PARITY.md`. Treat the section below as the
+historical sketch and the parity doc as the implementation plan.
 
 The lifecycle manager (`packages/core/src/lifecycle-manager.ts`) runs a polling loop every 5-30s that auto-detects state transitions and triggers reactions. State machine:
 

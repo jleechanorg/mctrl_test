@@ -43,14 +43,27 @@ PYTHONPATH=src python -m orchestration.dispatch_task \
   --bead-id ORCH-xxx \
   --task "full task description for the agent" \
   --slack-trigger-ts "$SLACK_TRIGGER_TS" \
+  --slack-trigger-channel "$SLACK_TRIGGER_CHANNEL" \
   --agent-cli claude
 ```
+
+If Jeffrey explicitly requests `codex`, change the command to `--agent-cli codex`. Do not fall back to ACP Codex or a separate subagent path before attempting the mctrl dispatch. If the codex dispatch command fails, report the failure instead of claiming the task was queued.
 
 This will:
 - Run `ai_orch run --async --worktree` to spawn a new tmux session + git worktree
 - Record `start_sha` (HEAD at spawn time) for accurate commit detection
 - Write the BeadSessionMapping to `.tracking/bead_session_registry.jsonl`
 - The supervisor loop will watch the session and notify you when it finishes
+
+For GitHub/PR automation, the lifecycle lane should map directly into this
+dispatch path. `comment-validation`, `fix-comment`, and `fixpr` are mctrl
+lanes, not Mission Control board tasks.
+
+The dispatcher will ensure the task text instructs the agent to push before it
+stops. If your task text does not already include that, `dispatch_task.dispatch()`
+appends it automatically. You may also include wording like:
+
+> After making and committing the change, run `git push origin <branch>` and only then stop.
 
 ### 4. Confirm dispatch
 
@@ -68,15 +81,17 @@ bd update ORCH-xxx --append-notes "Dispatched to session ai-claude-xxxxxx. Super
 
 The mctrl supervisor loop (`ai.mctrl.supervisor` launchd agent) runs every 30s and:
 1. Checks if the tmux session is still alive
-2. When session ends: checks `git log start_sha..HEAD` for commits
+2. When session ends: checks `git log start_sha..HEAD` for commits and verifies the branch is reachable on `origin`
 3. Posts DM to jleechan + thread reply under the original Slack message
 4. Sends MCP Agent Mail notification to OpenClaw
 
-**You do not need to poll.** The supervisor handles completion notification.
+**You do not need to poll.** The supervisor handles completion notification, but it will only classify the task as finished if the review surface exists on remote.
 
 ## Notes
 
 - `SLACK_TRIGGER_TS` is the Slack `ts` field from jleechan's message (e.g. `1772857900.668299`)
+- `SLACK_TRIGGER_CHANNEL` is the Slack channel ID for that same message (e.g. `C0AH3RY3DK6`)
 - Always use `--async --worktree` flags so each task gets an isolated git worktree
+- Finished means remote-reviewable, not merely committed locally inside the worktree
 - The registry is at `.tracking/bead_session_registry.jsonl` in the mctrl repo
 - If dispatch_task fails, check that `ai_orch` is on PATH and the mctrl repo is at `~/project_jleechanclaw/mctrl`

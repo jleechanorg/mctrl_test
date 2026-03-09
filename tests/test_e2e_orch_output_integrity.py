@@ -33,13 +33,13 @@ import pytest
 
 
 # ---------------------------------------------------------------------------
-# Helpers — job log parsing (mirrors the format written by claudem_dispatch_fn)
+# Helpers — job log parsing (mirrors the historical dispatch log format)
 # ---------------------------------------------------------------------------
 
 def _parse_job_log(log_path: Path) -> dict:
     """Parse a job log written by build_claudem_dispatch().
 
-    Expected format (from task_poller.py lines 287-293):
+    Expected format:
         # Task ID: <uuid>
         # Title: <title>
         # Timestamp: <int>

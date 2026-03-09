@@ -1,132 +1,11 @@
-"""Webhook bridge — fire-and-forget Mission Control notifier.
-
-Design principle: NEVER block orchestration for dashboard.
-If Mission Control is down, this is a silent no-op.
-"""
+"""GitHub lifecycle ingress helpers for mctrl."""
 
 from __future__ import annotations
 
-import json
 import os
 from enum import StrEnum
-from urllib.request import Request, urlopen
 
-
-class WebhookEvent(StrEnum):
-    """Events emitted to Mission Control."""
-    AGENT_STARTED = "agent_started"
-    AGENT_FAILED = "agent_failed"
-    TASK_COMPLETE = "task_complete"
-    AGENT_KILLED = "agent_killed"
-
-    # Hook event used by PostToolUse integration
-    TOOL_USE = "tool_use"
-
-
-def _parse_tool_use_command(payload: dict) -> str:
-    """Extract a shell command from Claude PostToolUse payload."""
-    tool_name = (payload.get("tool_name") or payload.get("toolName") or "").lower()
-    if tool_name not in {"bash", "shell", "terminal"}:
-        return ""
-
-    tool_input = payload.get("tool_input") or {}
-    if not isinstance(tool_input, dict):
-        tool_input = {}
-
-    command = (
-        payload.get("command")
-        or tool_input.get("command")
-        or tool_input.get("cmd")
-        or ""
-    )
-    return str(command).strip()
-
-
-def _is_shell_command_of_interest(command: str) -> bool:
-    """Return true when command should be sent to Mission Control."""
-    lowered = command.strip().lower()
-    if not lowered:
-        return False
-    return lowered.startswith("git ") or lowered.startswith("gh ")
-
-
-def notify_tool_use(
-    payload: str | dict,
-    webhook_url: str | None = None,
-    repo: str | None = None,
-) -> bool:
-    """Post a PostToolUse payload to webhook when command is git/gh.
-
-    Returns True when an event is sent, False when filtered out.
-    """
-    if isinstance(payload, str):
-        try:
-            payload_obj = json.loads(payload)
-        except json.JSONDecodeError:
-            return False
-    else:
-        payload_obj = payload
-
-    if not isinstance(payload_obj, dict):
-        return False
-
-    command = _parse_tool_use_command(payload_obj)
-    if not _is_shell_command_of_interest(command):
-        return False
-
-    notify_mission_control(
-        WebhookEvent.TOOL_USE,
-        {
-            "agent_name": payload_obj.get("agent_name", "claude-hook"),
-            "tool_name": payload_obj.get("tool_name") or payload_obj.get("tool"),
-            "command": command,
-            "raw": payload_obj,
-        },
-        webhook_url=webhook_url,
-        repo=repo,
-    )
-    return True
-
-
-def notify_mission_control(
-    event: WebhookEvent | str,
-    payload: dict,
-    webhook_url: str | None = None,
-    repo: str | None = None,
-) -> None:
-    """POST an event to Mission Control webhook. Best-effort, never blocks.
-
-    Args:
-        event: The event type string.
-        payload: Dict of event-specific data (agent_name, task, etc.)
-        webhook_url: Optional explicit URL. Falls back to env var.
-        repo: Optional repo field to include on payload.
-    """
-    webhook_url = webhook_url or os.environ.get("MISSION_CONTROL_WEBHOOK_URL")
-    if not webhook_url:
-        return
-
-    try:
-        body_payload = {"event": str(event), **payload}
-        if repo is not None:
-            body_payload["repo"] = repo
-        body = json.dumps(body_payload).encode("utf-8")
-        req = Request(
-            webhook_url,
-            data=body,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urlopen(req, timeout=5) as resp:
-            resp.read()  # Drain response to fully close connection
-    except Exception:
-        pass  # Never block orchestration for dashboard
-
-
-# ---------------------------------------------------------------------------
-# GitHub event bridge (webhook-first with polling fallback)
-# ---------------------------------------------------------------------------
-
+from orchestration.pr_lifecycle import route_event
 
 TRUSTED_AUTHOR_ASSOCIATIONS: frozenset[str] = frozenset({
     "OWNER",
@@ -142,16 +21,54 @@ class GitHubEventMode(StrEnum):
     POLLING = "polling"
 
 
+def _extract_head_sha(payload: dict) -> str:
+    pull_request = payload.get("pull_request")
+    if isinstance(pull_request, dict):
+        head = pull_request.get("head")
+        if isinstance(head, dict):
+            sha = head.get("sha")
+            if isinstance(sha, str):
+                return sha
+
+    check_suite = payload.get("check_suite")
+    if isinstance(check_suite, dict):
+        sha = check_suite.get("head_sha")
+        if isinstance(sha, str):
+            return sha
+
+    return ""
+
+
+def _normalize_trigger_type(event_type: str, payload: dict) -> str | None:
+    action = payload.get("action")
+    if event_type == "pull_request" and isinstance(action, str):
+        return f"pull_request.{action}"
+    if event_type == "pull_request_review" and isinstance(action, str):
+        return f"pull_request_review.{action}"
+    if event_type == "pull_request_review_comment" and isinstance(action, str):
+        return f"pull_request_review_comment.{action}"
+    if event_type == "check_suite":
+        check_suite = payload.get("check_suite")
+        if (
+            isinstance(check_suite, dict)
+            and action == "completed"
+            and isinstance(check_suite.get("conclusion"), str)
+        ):
+            return f"check_suite.completed.{check_suite['conclusion']}"
+    return None
+
+
 def receive_github_event(
     payload: dict,
     event_type: str,
     *,
     trusted_associations: frozenset[str] | None = None,
+    previous_runs: list[dict] | None = None,
     webhook_secret: str | None = None,
     signature_header: str | None = None,
     raw_body: bytes | None = None,
 ) -> dict | None:
-    """Normalize an incoming GitHub webhook payload into a pipeline event."""
+    """Normalize an incoming GitHub webhook payload into an mctrl-ready event."""
     import hashlib
     import hmac
 
@@ -176,7 +93,13 @@ def receive_github_event(
         except Exception:
             return None
 
-    supported_events = {"issue_comment", "pull_request_review", "pull_request"}
+    supported_events = {
+        "issue_comment",
+        "pull_request",
+        "pull_request_review",
+        "pull_request_review_comment",
+        "check_suite",
+    }
     if event_type not in supported_events:
         return None
 
@@ -196,14 +119,35 @@ def receive_github_event(
         if author_association not in allowed:
             return None
 
-    return {
+    result = {
         "event_type": event_type,
+        "action": payload.get("action", ""),
         "pr_number": pr_number,
         "repo": repo,
         "actor": actor,
         "author_association": author_association,
         "raw": payload,
     }
+    trigger_type = _normalize_trigger_type(event_type, payload)
+    head_sha = _extract_head_sha(payload)
+    if not trigger_type or not head_sha:
+        return result
+
+    lifecycle_decision = route_event(
+        {
+            "trigger_source": "event",
+            "trigger_type": trigger_type,
+            "repository": repo,
+            "pr_number": pr_number,
+            "head_sha": head_sha,
+            "draft": bool(
+                isinstance(payload.get("pull_request"), dict)
+                and payload["pull_request"].get("draft")
+            ),
+        },
+        previous_runs=previous_runs or [],
+    )
+    return {**result, **lifecycle_decision}
 
 
 def current_github_event_mode() -> GitHubEventMode:

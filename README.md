@@ -69,7 +69,6 @@ Context windows are zero-sum. Fill it with code and there's no room for business
 
 | Tool | Purpose |
 |------|---------|
-| [OpenClaw Mission Control](https://github.com/abhi1693/openclaw-mission-control) | Web dashboard for agent ops, approvals, and visibility |
 | [MCP Agent Mail](https://github.com/jleechanorg/mcp_mail) | Cross-agent messaging ("Gmail for coding agents") |
 | [Beads](https://github.com/nickarls/beads) | Memory/context management for coding sessions |
 
@@ -97,9 +96,6 @@ Tracked baseline for `~/.openclaw/`. Changes here should be synced to `~/.opencl
 | `openclaw.json` | Runtime config (gateway port, auth, memory, compaction) |
 | `cron/jobs.json` | Slack check-ins, backup, memory curation jobs (synced to `~/.openclaw/cron/`). **Note:** PR automation jobs are NOT here — they live only in `~/.openclaw/cron/jobs.json`. |
 | `ai.openclaw.gateway.plist` | launchd plist for the gateway service |
-| `ai.openclaw.mission-control.plist` | launchd plist for Mission Control backend |
-| `ai.openclaw.mission-control-frontend.plist` | launchd plist for Mission Control frontend |
-| `ai.openclaw.task-poller.plist` | launchd plist for the task poller |
 | `AUTO_START_GUIDE.md` | How to set up all launchd services from scratch |
 | `BACKUP_AND_RESTORE.md` | Backup and restore runbook |
 | `SLACK_SETUP_GUIDE.md` | Slack app and token setup |
@@ -117,12 +113,9 @@ Tracked baseline for `~/.openclaw/`. Changes here should be synced to `~/.opencl
 | `src/genesis/cron.py` | Cron job spec generation |
 | `src/genesis/memory.py` | Memory entry generation |
 | `src/genesis/writer.py` | File writer for generated config |
-| `src/orchestration/agent_registry.py` | Agent registration and selection |
 | `src/orchestration/backup_redaction.py` | Secret redaction for backups |
 | `src/orchestration/evidence.py` | Evidence collection for CI/review |
 | `src/orchestration/gh_integration.py` | GitHub API integration |
-| `src/orchestration/gh_triage.py` | PR triage and classification |
-| `src/integration/run_e2e.py` | End-to-end integration test runner |
 | `src/tests/` | pytest suite for the above |
 
 ### `scripts/` — Shell utilities
@@ -136,9 +129,6 @@ Tracked baseline for `~/.openclaw/`. Changes here should be synced to `~/.opencl
 | `check-openclaw-cron-guardrail.sh` | CI guardrail: fail if system crontab has OpenClaw jobs |
 | `setup-openclaw-full.sh` | Full first-time OpenClaw setup |
 | `install-launchagents.sh` | Install all openclaw launchd plists from `openclaw-config/` |
-| `install-mc-task-poller.sh` | Install Mission Control task poller launchd job |
-| `run_task_poller.sh` | Run task poller manually |
-| `mc-health-check.sh` | Mission Control health check |
 | `claude_start.sh` | Start Claude Code agent session |
 | `push.sh` | Safe push with branch verification |
 | `sync_branch.sh` | Sync branch with upstream |
@@ -168,11 +158,9 @@ Tracked baseline for `~/.openclaw/`. Changes here should be synced to `~/.opencl
 | File | Purpose |
 |------|---------|
 | `GENESIS_DESIGN.md` | Original design doc (historical) |
-| `mcp-mail-openclaw-mission-control-design.md` | Autonomous task-to-PR lifecycle (Mission Control + MCP Mail + ai_orch) |
 | `openclaw-backup-jobs.md` | Backup job documentation |
 | `orchestration-system-justification.md` | Why the Python orchestration layer exists |
 | `user_preferences_learnings.md` | Learned user preferences log |
-| `cmux-mission-control-integration-design.md` | cmux + Mission Control integration design |
 
 ### `roadmap/` — Planning docs
 
@@ -187,13 +175,6 @@ Tracked baseline for `~/.openclaw/`. Changes here should be synced to `~/.opencl
 | `PEEKABOO_ANTIGRAVITY_UI_AUTOMATION.md` | UI automation design |
 | `TDD_EXECUTION_ROADMAP.md` | TDD execution plan |
 | `BACKUP_REDUNDANCY_DESIGN.md` | Backup redundancy design |
-
-### `.github/workflows/`
-
-| Workflow | Purpose |
-|----------|---------|
-| `agent-pr-trigger.yml` | Trigger agent on new PRs |
-| `agent-pr-fix-trigger.yml` | Trigger agent to fix PR review comments |
 
 ### `discord-eng-bot/`
 

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 from orchestration.session_registry import (
     BeadSessionMapping,
     TaskLifecycleStatus,
+    archive_terminal_mappings,
     get_mapping,
     list_mappings,
     update_mapping_status,
@@ -108,3 +110,81 @@ def test_update_mapping_status_cas_guard_blocks_second_writer(tmp_path: Path) ->
         "ORCH-4", "done", from_status="in_progress", registry_path=str(registry)
     )
     assert changed is False
+
+
+def test_slack_trigger_ts_none_is_normalized_on_create(tmp_path: Path) -> None:
+    registry = tmp_path / "registry.jsonl"
+    mapping = BeadSessionMapping.create(
+        bead_id="ORCH-5",
+        session_name="session-ORCH-5",
+        worktree_path="/tmp/wt-ORCH-5",
+        branch="feat/ORCH-5",
+        agent_cli="codex",
+        status="queued",
+        slack_trigger_ts="None",
+    )
+    upsert_mapping(mapping, registry_path=str(registry))
+
+    found = get_mapping("ORCH-5", registry_path=str(registry))
+    assert found is not None
+    assert found.slack_trigger_ts == ""
+
+
+def test_archive_terminal_mappings_moves_old_dead_entries(tmp_path: Path) -> None:
+    registry = tmp_path / "registry.jsonl"
+    dead_worktree = tmp_path / "missing-worktree"
+    mapping = BeadSessionMapping(
+        bead_id="ORCH-old",
+        session_name="session-ORCH-old",
+        worktree_path=str(dead_worktree),
+        branch="feat/ORCH-old",
+        agent_cli="codex",
+        status="finished",
+        updated_at="2026-03-01T00:00:00+00:00",
+        start_sha="abc123",
+        slack_trigger_ts="",
+    )
+    upsert_mapping(mapping, registry_path=str(registry))
+
+    archived = archive_terminal_mappings(
+        registry_path=str(registry),
+        archive_after_days=7,
+        now=datetime(2026, 3, 10, tzinfo=timezone.utc),
+    )
+
+    assert archived == 1
+    assert list_mappings(registry_path=str(registry)) == []
+
+    archive_path = registry.with_name("registry.archive.jsonl")
+    archived_items = list_mappings(registry_path=str(archive_path))
+    assert len(archived_items) == 1
+    assert archived_items[0].bead_id == "ORCH-old"
+
+
+def test_archive_terminal_mappings_keeps_live_or_recent_entries(tmp_path: Path) -> None:
+    registry = tmp_path / "registry.jsonl"
+    live_worktree = tmp_path / "wt-live"
+    live_worktree.mkdir()
+    mapping = BeadSessionMapping(
+        bead_id="ORCH-keep",
+        session_name="session-ORCH-keep",
+        worktree_path=str(live_worktree),
+        branch="feat/ORCH-keep",
+        agent_cli="codex",
+        status="needs_human",
+        updated_at="2026-03-09T00:00:00+00:00",
+        start_sha="abc123",
+        slack_trigger_ts="",
+    )
+    upsert_mapping(mapping, registry_path=str(registry))
+
+    archived = archive_terminal_mappings(
+        registry_path=str(registry),
+        archive_after_days=7,
+        now=datetime(2026, 3, 10, tzinfo=timezone.utc),
+    )
+
+    assert archived == 0
+    kept = list_mappings(registry_path=str(registry))
+    assert len(kept) == 1
+    assert kept[0].bead_id == "ORCH-keep"

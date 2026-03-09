@@ -286,7 +286,7 @@ Before deleting any file:
 
 ### CodeRabbit Review Protocol
 After pushing fixes that address review comments authored by `coderabbitai`:
-1. Post a PR comment: `@coderabbitai all good`
+1. Post a PR comment: `@coderabbitai all good?`
 2. This triggers CodeRabbit to re-review and verify the fixes are resolved.
 
 Do NOT ping CodeRabbit on a timer or without a preceding push. Only trigger after a fresh commit lands on the PR branch.

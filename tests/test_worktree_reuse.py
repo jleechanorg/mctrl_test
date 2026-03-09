@@ -188,6 +188,7 @@ def test_dispatch_fires_slack_started_after_spawn(tmp_path: Path):
             bead_id="ORCH-start-test",
             task="do the thing",
             slack_trigger_ts="1234567890.000",
+            slack_trigger_channel="C123TRIGGER",
             agent_cli="minimax",
             registry_path=str(tmp_path / "registry.jsonl"),
         )
@@ -195,10 +196,40 @@ def test_dispatch_fires_slack_started_after_spawn(tmp_path: Path):
     mock_started.assert_called_once()
     payload = started_calls[0]
     assert payload["bead_id"] == "ORCH-start-test"
-    assert payload["session"] == "ai-minimax-start1"
+    assert payload["session"].startswith("orch-start-test-")
+    assert payload["session"].endswith("-ai-minimax-start1")
     assert payload["event"] == "task_started"
     assert payload["slack_trigger_ts"] == "1234567890.000"
+    assert payload["slack_trigger_channel"] == "C123TRIGGER"
     assert payload["agent_cli"] == "minimax"
+
+
+def test_dispatch_requires_trigger_channel_when_thread_ts_is_set(tmp_path: Path):
+    fake_output = (
+        "🚀 Async session: ai-minimax-start1\n"
+        f"🧩 Worktree: {tmp_path / 'wt'} (branch: feat/test)\n"
+    )
+
+    def fake_run(cmd, **kw):
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = fake_output
+        m.stderr = ""
+        return m
+
+    with patch("subprocess.run", side_effect=fake_run), \
+         patch("orchestration.dispatch_task.upsert_mapping"), \
+         patch("orchestration.dispatch_task.notify_slack_started"):
+        from orchestration.dispatch_task import dispatch
+
+        with pytest.raises(ValueError, match="slack_trigger_channel is required"):
+            dispatch(
+                bead_id="ORCH-missing-channel",
+                task="do the thing",
+                slack_trigger_ts="1234567890.000",
+                agent_cli="minimax",
+                registry_path=str(tmp_path / "registry.jsonl"),
+            )
 
 
 def test_dispatch_with_branch_reuses_existing_worktree(tmp_path: Path):
@@ -233,7 +264,8 @@ def test_dispatch_with_branch_reuses_existing_worktree(tmp_path: Path):
     mock_resolve.assert_called_once_with(
         "feat/mvp-loopback-supervisor", str(tmp_path), ANY
     )
-    assert mapping.session_name == "ai-minimax-abc123"
+    assert mapping.session_name.startswith("orch-test-")
+    assert mapping.session_name.endswith("-ai-minimax-abc123")
     assert mapping.branch == "feat/mvp-loopback-supervisor"
 
 
@@ -244,9 +276,11 @@ def test_dispatch_without_branch_still_uses_worktree_flag(tmp_path: Path):
         f"🧩 Worktree: /tmp/wt-new (branch: feat/new-thing)\n"
     )
     cmd_log = []
+    cwd_log = []
 
     def fake_run(cmd, **kw):
         cmd_log.append(list(cmd))
+        cwd_log.append(kw.get("cwd"))
         m = MagicMock()
         m.returncode = 0
         m.stdout = fake_output
@@ -259,12 +293,193 @@ def test_dispatch_without_branch_still_uses_worktree_flag(tmp_path: Path):
         dispatch(
             bead_id="ORCH-test2",
             task="new task",
+            repo_root=str(tmp_path),
             registry_path=str(tmp_path / "registry.jsonl"),
         )
 
     orch_cmd = next((c for c in cmd_log if "ai_orch" in c), None)
     assert orch_cmd is not None
     assert "--worktree" in orch_cmd
+    assert any("git push origin <your-branch>" in part for part in orch_cmd)
+    assert str(tmp_path) in cwd_log
+
+
+def test_dispatch_passes_clean_user_site_packages_to_ai_orch(tmp_path: Path):
+    """dispatch() should force ai_orch to import from its installed package, not mctrl's PYTHONPATH."""
+    fake_output = (
+        "🚀 Async session: ai-minimax-site123\n"
+        "🧩 Worktree: /tmp/wt-site (branch: feat/site)\n"
+    )
+    env_log = []
+
+    def fake_run(cmd, **kw):
+        env_log.append(kw.get("env"))
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = fake_output
+        m.stderr = ""
+        return m
+
+    with patch.dict("os.environ", {"PYTHONPATH": "/existing/pythonpath"}, clear=False), \
+         patch("orchestration.dispatch_task.site.getusersitepackages",
+               return_value="/Users/jleechan/Library/Python/3.13/lib/python/site-packages"), \
+         patch("subprocess.run", side_effect=fake_run), \
+         patch("orchestration.dispatch_task.upsert_mapping"):
+        from orchestration.dispatch_task import dispatch
+        dispatch(
+            bead_id="ORCH-site-env",
+            task="new task",
+            registry_path=str(tmp_path / "registry.jsonl"),
+        )
+
+    ai_orch_env = next(env for env in env_log if env is not None)
+    assert ai_orch_env is not None
+    assert ai_orch_env["PYTHONPATH"] == (
+        "/Users/jleechan/Library/Python/3.13/lib/python/site-packages"
+    )
+
+
+def test_dispatch_with_branch_includes_push_instruction(tmp_path: Path):
+    """dispatch(branch=...) appends a remote push requirement to the agent task."""
+    existing_wt = str(tmp_path / "existing-wt")
+    fake_output = (
+        "🚀 Async session: ai-minimax-push123\n"
+        f"🧩 Worktree: {existing_wt} (branch: feat/push-check)\n"
+    )
+    cmd_log = []
+
+    def fake_run(cmd, **kw):
+        cmd_log.append(list(cmd))
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = fake_output
+        m.stderr = ""
+        return m
+
+    with patch("orchestration.dispatch_task.resolve_worktree_for_branch",
+               return_value=(existing_wt, False)), \
+         patch("subprocess.run", side_effect=fake_run), \
+         patch("orchestration.dispatch_task.upsert_mapping"):
+        from orchestration.dispatch_task import dispatch
+        dispatch(
+            bead_id="ORCH-push-check",
+            task="fix the bug and commit it",
+            branch="feat/push-check",
+            repo_root=str(tmp_path),
+            registry_path=str(tmp_path / "registry.jsonl"),
+        )
+
+    orch_cmd = next((c for c in cmd_log if "ai_orch" in c), None)
+    assert orch_cmd is not None
+    assert any("git push origin feat/push-check" in part for part in orch_cmd)
+
+
+def test_dispatch_renames_tmux_session_to_include_bead_id(tmp_path: Path):
+    """dispatch() renames the spawned tmux session so it is bead-traceable."""
+    fake_output = (
+        "🚀 Async session: ai-minimax-old123\n"
+        f"🧩 Worktree: /tmp/wt-rename (branch: feat/rename)\n"
+    )
+    cmd_log = []
+
+    def fake_run(cmd, **kw):
+        cmd_log.append(list(cmd))
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = fake_output if cmd[:2] == ["ai_orch", "run"] else ""
+        m.stderr = ""
+        return m
+
+    with patch("subprocess.run", side_effect=fake_run), \
+         patch("orchestration.dispatch_task.upsert_mapping"):
+        from orchestration.dispatch_task import dispatch
+        mapping = dispatch(
+            bead_id="ORCH-rename",
+            task="new task",
+            registry_path=str(tmp_path / "registry.jsonl"),
+        )
+
+    rename_cmd = next((c for c in cmd_log if c[:3] == ["tmux", "rename-session", "-t"]), None)
+    assert rename_cmd is not None
+    assert rename_cmd[3] == "ai-minimax-old123"
+    assert rename_cmd[4].startswith("orch-rename-")
+    assert rename_cmd[4].endswith("-ai-minimax-old123")
+    assert mapping.session_name == rename_cmd[4]
+
+
+def test_dispatch_keeps_original_session_name_if_session_already_exited(tmp_path: Path):
+    """A vanished session should not fail dispatch after ai_orch already returned."""
+    fake_output = (
+        "🚀 Async session: ai-minimax-gone123\n"
+        f"🧩 Worktree: /tmp/wt-gone (branch: feat/gone)\n"
+    )
+
+    def fake_run(cmd, **kw):
+        m = MagicMock()
+        if cmd[:2] == ["ai_orch", "run"]:
+            m.returncode = 0
+            m.stdout = fake_output
+            m.stderr = ""
+            return m
+        if cmd[:3] == ["tmux", "rename-session", "-t"]:
+            m.returncode = 1
+            m.stdout = ""
+            m.stderr = "can't find session: ai-minimax-gone123"
+            return m
+        m.returncode = 0
+        m.stdout = fake_output
+        m.stderr = ""
+        return m
+
+    with patch("subprocess.run", side_effect=fake_run), \
+         patch("orchestration.dispatch_task.upsert_mapping"):
+        from orchestration.dispatch_task import dispatch
+        mapping = dispatch(
+            bead_id="ORCH-gone",
+            task="new task",
+            registry_path=str(tmp_path / "registry.jsonl"),
+        )
+
+    assert mapping.session_name == "ai-minimax-gone123"
+
+
+def test_dispatch_keeps_original_session_name_on_unexpected_rename_failure(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
+    """A rename failure should not orphan a running session after successful spawn."""
+    fake_output = (
+        "🚀 Async session: ai-minimax-locked123\n"
+        "🧩 Worktree: /tmp/wt-locked (branch: feat/locked)\n"
+    )
+
+    def fake_run(cmd, **kw):
+        m = MagicMock()
+        if cmd[:2] == ["ai_orch", "run"]:
+            m.returncode = 0
+            m.stdout = fake_output
+            m.stderr = ""
+            return m
+        if cmd[:3] == ["tmux", "rename-session", "-t"]:
+            m.returncode = 1
+            m.stdout = ""
+            m.stderr = "duplicate session name"
+            return m
+        m.returncode = 0
+        m.stdout = fake_output
+        m.stderr = ""
+        return m
+
+    with patch("subprocess.run", side_effect=fake_run), \
+         patch("orchestration.dispatch_task.upsert_mapping"):
+        from orchestration.dispatch_task import dispatch
+        mapping = dispatch(
+            bead_id="ORCH-locked",
+            task="new task",
+            registry_path=str(tmp_path / "registry.jsonl"),
+        )
+
+    assert mapping.session_name == "ai-minimax-locked123"
+    assert "Could not rename tmux session" in caplog.text
 
 
 def test_worktree_add_path_falls_back_when_branch_in_primary(tmp_path: Path):
@@ -311,3 +526,70 @@ def test_worktree_add_path_cleans_up_tempdir_on_failure(tmp_path: Path):
             _worktree_add_path("feat/missing", "/repo", str(tmp_path))
 
     assert list(tmp_path.iterdir()) == []
+
+
+def test_dispatch_cursor_uses_headless_trusted_tmux_command(tmp_path: Path):
+    """Cursor dispatch must bypass ai_orch's interactive fallback."""
+    cmd_log = []
+
+    def fake_run(cmd, **kw):
+        cmd_log.append(list(cmd))
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = ""
+        m.stderr = ""
+        return m
+
+    with patch("orchestration.dispatch_task._create_new_worktree", return_value=("/tmp/wt-cursor", "feat/cursor")), \
+         patch("subprocess.run", side_effect=fake_run), \
+         patch("orchestration.dispatch_task.upsert_mapping"):
+        from orchestration.dispatch_task import dispatch
+        mapping = dispatch(
+            bead_id="ORCH-cursor",
+            task="prove the cursor path",
+            agent_cli="cursor",
+            registry_path=str(tmp_path / "registry.jsonl"),
+        )
+
+    assert mapping.worktree_path == "/tmp/wt-cursor"
+    tmux_cmd = next((c for c in cmd_log if c[:3] == ["tmux", "new-session", "-d"]), None)
+    assert tmux_cmd is not None
+    assert not any(part == "ai_orch" for part in tmux_cmd)
+    shell_cmd = tmux_cmd[-1]
+    assert "cursor-agent" in shell_cmd
+    assert "--print" in shell_cmd
+    assert "--trust" in shell_cmd
+    assert "--approve-mcps" in shell_cmd
+    assert "--yolo" in shell_cmd
+    assert "--model auto" in shell_cmd
+
+
+def test_dispatch_cursor_with_branch_reuses_worktree_and_skips_ai_orch(tmp_path: Path):
+    """Existing-branch cursor dispatch should run directly in the resolved worktree."""
+    existing_wt = str(tmp_path / "existing-cursor")
+    cmd_log = []
+
+    def fake_run(cmd, **kw):
+        cmd_log.append(list(cmd))
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = ""
+        m.stderr = ""
+        return m
+
+    with patch("orchestration.dispatch_task.resolve_worktree_for_branch", return_value=(existing_wt, False)), \
+         patch("subprocess.run", side_effect=fake_run), \
+         patch("orchestration.dispatch_task.upsert_mapping"):
+        from orchestration.dispatch_task import dispatch
+        mapping = dispatch(
+            bead_id="ORCH-cursor-branch",
+            task="fix cursor branch path",
+            branch="feat/cursor-branch",
+            repo_root=str(tmp_path),
+            agent_cli="cursor",
+            registry_path=str(tmp_path / "registry.jsonl"),
+        )
+
+    assert mapping.branch == "feat/cursor-branch"
+    assert mapping.worktree_path == existing_wt
+    assert not any(c[:2] == ["ai_orch", "run"] for c in cmd_log)
