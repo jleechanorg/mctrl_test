@@ -183,6 +183,7 @@ Cron job that analyzes recent activity and updates SOUL.md's "Learned Patterns" 
 ### 3. Forward Capture — Install ghost
 
 ```bash
+# Pin to a specific commit/tag before running in production (tracking #main is a supply-chain risk)
 bun install -g github:notkurt/ghost#main
 cd ~/projects/worldarchitect.ai && ghost enable
 cd ~/project_jleechanclaw/jleechanclaw && ghost enable
