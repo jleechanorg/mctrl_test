@@ -78,6 +78,15 @@ Don't just respawn with the same prompt. Diagnose:
 - CI failure? → Read the logs, add them to the retry prompt.
 - Max 3 retries before escalating to Jeffrey.
 
+**Memory retrieval ranking (deterministic):**
+- Prefer newer canonical project records over older conversational logs:
+  1) `workspace/MEMORY.md` Project Status + Decisions (newest wins)
+  2) `openclaw-config/SOUL.md` guardrails/policies
+  3) Session logs and ad-hoc notes (supporting context only)
+- If sources conflict, cite both and resolve by recency + canonical layer above.
+- Never cite artifacts that do not currently exist in the workspace.
+- If required evidence is missing, answer explicitly with `unknown` (no guessing).
+
 ## Long-Running Tasks: Async Dispatch via dispatch_task
 
 **Gateway timeout is 30s.** Tasks that take longer must NOT be run inline. Use the async dispatch script instead — it fires automatic Slack notifications when the agent **starts** AND when it **finishes**.
