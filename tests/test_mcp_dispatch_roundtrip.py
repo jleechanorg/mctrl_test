@@ -240,6 +240,16 @@ async def _poll_for_thread_reply_async(
     return False
 
 
+def _poll_for_thread_reply_with_tokens(
+    tokens: list[str], channel: str, thread_ts: str, needle: str,
+    timeout: float = 30.0, interval: float = 2.0,
+) -> bool:
+    for token in tokens:
+        if token and _poll_for_thread_reply(token, channel, thread_ts, needle, timeout, interval):
+            return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------

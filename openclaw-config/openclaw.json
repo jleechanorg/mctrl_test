@@ -112,7 +112,9 @@
           "/Users/jleechan/projects_other/bp-telemetry-core/CLAUDE.md",
           "/Users/jleechan/projects/git-hooks-security/README.md",
           "/Users/jleechan/projects_other/mcp_mail/CLAUDE.md",
-          "/Users/jleechan/project_worldaiclaw/worldai_claw/CLAUDE.md"
+          "/Users/jleechan/project_worldaiclaw/worldai_claw/CLAUDE.md",
+          "/Users/jleechan/.openclaw/memory/2026-03-03.md",
+          "/Users/jleechan/.openclaw/memory/2026-03-04.md"
         ],
         "experimental": {
           "sessionMemory": true
@@ -351,8 +353,8 @@
       "mode": "socket",
       "webhookPath": "/slack/events",
       "enabled": true,
-      "botToken": "PLACEHOLDER-botToken",
-      "appToken": "PLACEHOLDER-appToken",
+      "botToken": "xoxb-9541820692839-10509415881058-L1ZGmeXYa5B9OxbmRj7pgi9K",
+      "appToken": "xapp-1-A0AESRKA7L3-10565244160849-0f9dfa43f0d3bbed96adcc8a2d27c9cac9d265190da027285d495810d3dda9d1",
       "userTokenReadOnly": true,
       "allowBots": true,
       "groupPolicy": "allowlist",
