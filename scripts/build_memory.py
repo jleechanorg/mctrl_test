@@ -40,6 +40,7 @@ MEMORY_MD_PATH = Path("~/.openclaw/workspace/MEMORY.md").expanduser()
 COLLECT_OUTPUT = Path("/tmp/build_memory_collect.json")
 SYNTHESIZE_OUTPUT = Path("/tmp/build_memory_synthesize.json")
 
+# Note: SOUL.md may have suffixes like "(auto-updated weekly)", so we use startswith for flexible matching
 LEARNED_PATTERNS_ANCHOR = "## Learned Patterns"
 PROJECT_STATUS_ANCHOR = "## Project Status"
 
@@ -342,18 +343,40 @@ def stage_synthesize(data: dict, dry_run: bool = False) -> dict:
 # ── Stage 3: Write ────────────────────────────────────────────────────────────
 
 def upsert_section(text: str, anchor: str, new_content: str) -> str:
-    """Replace or append a section identified by anchor header."""
-    idx = text.find(anchor)
-    if idx < 0:
+    """Replace or append a section identified by anchor header.
+
+    Uses startswith matching to handle anchors with suffixes like
+    '## Learned Patterns (auto-updated weekly)'.
+    """
+    lines = text.split('\n')
+    found_idx = -1
+    found_line = ""
+
+    # Find line starting with anchor (handles suffixes like "(auto-updated weekly)")
+    for i, line in enumerate(lines):
+        if line.strip().startswith(anchor):
+            found_idx = i
+            found_line = line
+            break
+
+    if found_idx < 0:
         return text.rstrip() + f"\n\n{anchor}\n\n{new_content}\n"
-    # Find end of section (next ## header or EOF)
-    rest = text[idx + len(anchor):]
-    next_section = rest.find("\n## ")
-    if next_section >= 0:
-        end = idx + len(anchor) + next_section
-    else:
-        end = len(text)
-    return text[:idx] + f"{anchor}\n\n{new_content}\n" + text[end:].lstrip()
+
+    # Reconstruct: keep the original header line (with its suffix), replace content
+    result_lines = lines[:found_idx]
+    result_lines.append(found_line)  # Keep original header like "## Learned Patterns (auto-updated weekly)"
+    result_lines.append("")  # Empty line after header
+    result_lines.extend(new_content.split('\n'))
+
+    # Add content from after the original section until next ## header
+    in_section = True
+    for line in lines[found_idx + 1:]:
+        if line.strip().startswith('## '):
+            in_section = False
+        if not in_section:
+            result_lines.append(line)
+
+    return '\n'.join(result_lines) + '\n'
 
 
 def write_weekly_files(weeks: dict[str, dict], memory_dir: Path, dry_run: bool) -> None:
