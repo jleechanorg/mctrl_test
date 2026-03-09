@@ -14,3 +14,7 @@ def test_hello_custom_name():
 def test_hello_returns_string():
     result = hello("test")
     assert isinstance(result, str)
+
+
+def test_hello_preserves_punctuation():
+    assert hello("mctrl-test!") == "Hello, mctrl-test!!"
