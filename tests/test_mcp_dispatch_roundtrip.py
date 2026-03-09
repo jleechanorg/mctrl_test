@@ -130,18 +130,6 @@ def _slack_history(token: str, channel: str, oldest: str, limit: int = 20) -> li
         return json.loads(resp.read()).get("messages") or []
 
 
-def _slack_post(token: str, channel: str, text: str) -> dict[str, Any]:
-    body = json.dumps({"channel": channel, "text": text}).encode()
-    req = Request(
-        "https://slack.com/api/chat.postMessage",
-        data=body,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
-        method="POST",
-    )
-    with urlopen(req, timeout=10) as resp:
-        return json.loads(resp.read())
-
-
 def _poll_for_text(
     token: str, channel: str, needle: str, oldest: str,
     timeout: float = 30.0, interval: float = 2.0,
