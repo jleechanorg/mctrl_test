@@ -176,15 +176,17 @@ Cron job that analyzes recent activity and updates SOUL.md's "Learned Patterns" 
 - Updates "Learned Patterns" section of SOUL.md (preserving Core Identity)
 - Updates project status in MEMORY.md
 
-**Schedule:** OpenClaw gateway cron, weekly (Sunday midnight)
+**Schedule:** OpenClaw gateway cron, weekly Sunday 00:00, cron: `0 0 * * 0`, timezone: `America/Los_Angeles`
 
 - **Implementation status:** Added in `scripts/extract_patterns.py`; wired a weekly cron job in `openclaw-config/cron/jobs.json` for one-pass pattern extraction.
 
 ### 3. Forward Capture — Install ghost
 
 ```bash
-# Pin to a specific commit/tag before running in production (tracking #main is a supply-chain risk)
-bun install -g github:notkurt/ghost#main
+# Install ghost CLI (check https://github.com/notkrt/ghost/releases for latest stable tag)
+# Using a pinned version tag is strongly recommended to avoid supply-chain risk from mutable refs
+GHOST_VERSION="v0.1.0"  # Replace with latest verified release tag
+bun install -g github:notkrt/ghost#$GHOST_VERSION
 cd ~/projects/worldarchitect.ai && ghost enable
 cd ~/project_jleechanclaw/jleechanclaw && ghost enable
 cd ~/project_worldaiclaw/worldai_claw && ghost enable
