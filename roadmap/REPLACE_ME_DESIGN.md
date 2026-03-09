@@ -63,11 +63,11 @@ Data Sources → Extraction Scripts → Memory Files → RAG Index
                                   → Pattern database
 
 Historical:
-  git log (1yr) ──→ seed_memory.py ──→ ~/.openclaw/memory/YYYY-WNN.md
+  git log (1yr) ──→ build_memory.py ──→ ~/.openclaw/memory/YYYY-WNN.md
   gh pr list    ──→                 ──→ (included in weekly summaries)
 
 Periodic:
-  git log (week) ─→ extract_patterns.py ─→ SOUL.md "Learned Patterns" section
+  git log (week) ─→ build_memory.py ─→ SOUL.md "Learned Patterns" section
   beads list     ─→                      ─→ MEMORY.md project status
 
 Forward:
@@ -110,7 +110,7 @@ Weekly memory files (`~/.openclaw/memory/YYYY-WNN.md`):
 ## Core Identity (human-curated, immutable by scripts)
 [Existing SOUL.md content — who you are, how you think]
 
-## Learned Patterns (auto-updated weekly by extract_patterns.py)
+## Learned Patterns (auto-updated weekly by build_memory.py)
 ### Decision-Making
 - When CI fails: investigate root cause, don't retry blindly
 - When tests are missing: write real E2E tests, never mocks for integration
@@ -136,7 +136,7 @@ Weekly memory files (`~/.openclaw/memory/YYYY-WNN.md`):
 
 Three components, no new infrastructure:
 
-### 1. `scripts/seed_memory.py` — Historical Backfill
+### 1. `scripts/build_memory.py` — Historical Backfill
 
 One-time script that processes a year of git history into weekly memory files.
 
@@ -156,9 +156,9 @@ One-time script that processes a year of git history into weekly memory files.
 
 **Estimated cost:** ~52 API calls × haiku pricing ≈ negligible
 
-- **Implementation status:** Added in `scripts/seed_memory.py` for weekly git/PR backfill plus optional SOUL audit metadata write.
+- **Implementation status:** Added in `scripts/build_memory.py` for weekly git/PR backfill plus optional SOUL audit metadata write.
 
-### 2. `scripts/extract_patterns.py` — Weekly Pattern Extraction
+### 2. `scripts/build_memory.py` — Weekly Pattern Extraction
 
 Cron job that analyzes recent activity and updates SOUL.md's "Learned Patterns" section.
 
@@ -178,7 +178,7 @@ Cron job that analyzes recent activity and updates SOUL.md's "Learned Patterns" 
 
 **Schedule:** OpenClaw gateway cron, weekly Sunday 00:00, cron: `0 0 * * 0`, timezone: `America/Los_Angeles`
 
-- **Implementation status:** Added in `scripts/extract_patterns.py`; wired a weekly cron job in `openclaw-config/cron/jobs.json` for one-pass pattern extraction.
+- **Implementation status:** Added in `scripts/build_memory.py`; wired a weekly cron job in `openclaw-config/cron/jobs.json` for one-pass pattern extraction.
 
 ### 3. Forward Capture — Install ghost
 
@@ -245,9 +245,9 @@ Ghost provides:
 
 | Step | What | Deliverable | Effort | Status |
 |------|------|------------|--------|--------|
-| 1 | Write `seed_memory.py` | Script + 52 weekly memory files | Small | ✅ Implemented |
+| 1 | Write `build_memory.py` (historical backfill) | Script + 52 weekly memory files | Small | ✅ Implemented |
 | 2 | Add `~/.openclaw/memory/` dir to extraPaths | Config change + reindex | Tiny | ✅ Implemented |
-| 3 | Write `extract_patterns.py` | Script + gateway cron job | Small | ✅ Implemented |
+| 3 | Write `build_memory.py` (pattern extraction) | Script + gateway cron job | Small | ✅ Implemented |
 | 4 | Evolve SOUL.md structure | Add "Learned Patterns" section separator | Tiny | ✅ Implemented (`openclaw-config/SOUL.md`) |
 | 5 | Install ghost on 3 repos | Forward session capture | Tiny | ⚪ Added runbook (`scripts/setup-genesis-ghost.sh`) |
 | 6 | Validate: ask OpenClaw historical questions | E2E test of memory retrieval | Small | ⚪ Added validation runbook (`scripts/validate-genesis-memory-l0.sh`) |

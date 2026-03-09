@@ -14,7 +14,9 @@ fi
 
 if ! command -v ghost >/dev/null 2>&1; then
   echo "Installing ghost..."
-  bun install -g github:notkurt/ghost#main
+  # Pin to a release tag to avoid supply-chain risk from mutable refs
+  GHOST_VERSION="${GHOST_VERSION:-v0.1.0}"  # Set GHOST_VERSION env var to override
+  bun install -g "github:notkrt/ghost#$GHOST_VERSION"
 fi
 
 FAILED=()
