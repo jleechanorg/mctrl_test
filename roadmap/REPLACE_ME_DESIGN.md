@@ -2,7 +2,7 @@
 
 **Goal:** OpenClaw should be able to operate as Jeffrey's autonomous replacement — not just execute tasks on request, but make decisions, maintain context, communicate, and operate proactively with the full depth of Jeffrey's working knowledge.
 
-**Status:** Design
+**Status:** In Progress (implementation in PR-72)
 **Date:** 2026-03-08
 **Related:** SOUL.md, TOOLS.md, MEMORY.md, MVP_OPENCLAW_AIORCH_MULTI_AGENT.md
 
@@ -156,6 +156,8 @@ One-time script that processes a year of git history into weekly memory files.
 
 **Estimated cost:** ~52 API calls × haiku pricing ≈ negligible
 
+- **Implementation status:** Added in `scripts/seed_memory.py` for weekly git/PR backfill plus optional SOUL audit metadata write.
+
 ### 2. `scripts/extract_patterns.py` — Weekly Pattern Extraction
 
 Cron job that analyzes recent activity and updates SOUL.md's "Learned Patterns" section.
@@ -175,6 +177,8 @@ Cron job that analyzes recent activity and updates SOUL.md's "Learned Patterns" 
 - Updates project status in MEMORY.md
 
 **Schedule:** OpenClaw gateway cron, weekly (Sunday midnight)
+
+- **Implementation status:** Added in `scripts/extract_patterns.py`; wired a weekly cron job in `openclaw-config/cron/jobs.json` for one-pass pattern extraction.
 
 ### 3. Forward Capture — Install ghost
 
@@ -236,17 +240,17 @@ Ghost provides:
 
 ## Implementation Plan
 
-| Step | What | Deliverable | Effort |
-|------|------|------------|--------|
-| 1 | Write `seed_memory.py` | Script + 52 weekly memory files | Small |
-| 2 | Add `~/.openclaw/memory/` dir to extraPaths | Config change + reindex | Tiny |
-| 3 | Write `extract_patterns.py` | Script + gateway cron job | Small |
-| 4 | Evolve SOUL.md structure | Add "Learned Patterns" section separator | Tiny |
-| 5 | Install ghost on 3 repos | Forward session capture | Tiny |
-| 6 | Validate: ask OpenClaw historical questions | E2E test of memory retrieval | Small |
+| Step | What | Deliverable | Effort | Status |
+|------|------|------------|--------|--------|
+| 1 | Write `seed_memory.py` | Script + 52 weekly memory files | Small | ✅ Implemented |
+| 2 | Add `~/.openclaw/memory/` dir to extraPaths | Config change + reindex | Tiny | ✅ Implemented |
+| 3 | Write `extract_patterns.py` | Script + gateway cron job | Small | ✅ Implemented |
+| 4 | Evolve SOUL.md structure | Add "Learned Patterns" section separator | Tiny | ✅ Implemented (`openclaw-config/SOUL.md`) |
+| 5 | Install ghost on 3 repos | Forward session capture | Tiny | ⚪ Added runbook (`scripts/setup-genesis-ghost.sh`) |
+| 6 | Validate: ask OpenClaw historical questions | E2E test of memory retrieval | Small | ⚪ Added validation runbook (`scripts/validate-genesis-memory-l0.sh`) |
 | 7 | Run for 2 weeks, assess pattern quality | Iteration on extraction prompts | Ongoing |
 
-Steps 1-5 are the MVP. Steps 6-7 validate it works before Phase 2.
+Steps 1-5 are the MVP. Step 6 requires runbook execution to gather live E2E evidence; steps 1-5 are implemented in code/config.
 
 ---
 

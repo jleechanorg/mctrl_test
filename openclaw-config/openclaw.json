@@ -116,6 +116,9 @@
       "memorySearch": {
         "enabled": true,
         "extraPaths": [
+          "/Users/jleechan/.openclaw/USER.md",
+          "/Users/jleechan/.openclaw/PROJECTS_BEADS.md",
+          "/Users/jleechan/.openclaw/GITHUB_REPOS.md",
           "/Users/jleechan/.openclaw/workspace/MEMORY.md",
           "/Users/jleechan/.openclaw/memory",
           "/Users/jleechan/.openclaw/workspace/TOOLS.md",
@@ -124,19 +127,14 @@
           "/Users/jleechan/project_jleechanclaw/jleechanclaw/roadmap",
           "/Users/jleechan/projects/claude-commands/CLAUDE.md",
           "/Users/jleechan/projects/ai_universe/CLAUDE.md",
-          "/Users/jleechan/projects/ai_universe_frontend/CLAUDE.md",
           "/Users/jleechan/projects/ai_dev_recs/README.md",
           "/Users/jleechan/projects_other/ai-usage-tracker/README.md",
-          "/Users/jleechan/projects_other/codex_fork/CLAUDE.md",
           "/Users/jleechan/projects_other/beads/CLAUDE.md",
-          "/Users/jleechan/projects/ai_universe_convo_mcp/CLAUDE.md",
           "/Users/jleechan/projects_other/bp-telemetry-core-fork/CLAUDE.md",
           "/Users/jleechan/projects_other/bp-telemetry-core/CLAUDE.md",
           "/Users/jleechan/projects/git-hooks-security/README.md",
           "/Users/jleechan/projects_other/mcp_mail/CLAUDE.md",
-          "/Users/jleechan/project_worldaiclaw/worldai_claw/CLAUDE.md",
-          "/Users/jleechan/.openclaw/memory/2026-03-03.md",
-          "/Users/jleechan/.openclaw/memory/2026-03-04.md"
+          "/Users/jleechan/project_worldaiclaw/worldai_claw/CLAUDE.md"
         ],
         "experimental": {
           "sessionMemory": true

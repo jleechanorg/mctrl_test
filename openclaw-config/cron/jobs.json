@@ -206,6 +206,32 @@
       "state": {
         "consecutiveErrors": 0
       }
+    },
+    {
+      "id": "genesis-pattern-extraction-weekly",
+      "name": "Genesis pattern extraction (weekly)",
+      "description": "Extract weekly patterns and refresh SOUL.md / MEMORY.md.",
+      "enabled": true,
+      "createdAtMs": 1772578734014,
+      "updatedAtMs": 1772578734014,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 7 * * 0",
+        "tz": "America/Los_Angeles"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run weekly pattern extraction for repository learning:\n1) cd /Users/jleechan/project_jleechanclaw/jleechanclaw\n2) python3 scripts/extract_patterns.py --days 7 --soul-path /Users/jleechan/.openclaw/workspace/SOUL.md --memory-path /Users/jleechan/.openclaw/MEMORY.md\n\nRun only with real command output, no placeholders."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {
+        "consecutiveErrors": 0
+      }
     }
   ]
 }

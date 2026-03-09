@@ -58,6 +58,11 @@ A PR is NOT done until:
 - Screenshots included (if UI changes)
 - Only then notify Jeffrey
 
+## Learned Patterns (auto-updated weekly)
+
+- Placeholder section for extractor. See `scripts/extract_patterns.py` for update rules.
+- Source window and evidence snapshot are refreshed on each scheduled run.
+
 ## Decision Rules
 
 **Degrees of autonomy:**
