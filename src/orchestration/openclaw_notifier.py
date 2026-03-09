@@ -59,24 +59,6 @@ def _resolve_outbox_path(outbox_path: str | None) -> str:
     return outbox_path or default_outbox_path()
 
 
-def _normalize_trigger_ts(value: Any) -> str:
-    if value is None:
-        return ""
-    trigger_ts = str(value).strip()
-    if not trigger_ts or trigger_ts.lower() == "none":
-        return ""
-    return trigger_ts
-
-
-def _normalize_trigger_channel(value: Any) -> str:
-    if value is None:
-        return ""
-    trigger_channel = str(value).strip()
-    if not trigger_channel or trigger_channel.lower() == "none":
-        return ""
-    return trigger_channel
-
-
 def _coerce_delivery_attempt(result: bool | DeliveryAttempt) -> DeliveryAttempt:
     if isinstance(result, DeliveryAttempt):
         return result
