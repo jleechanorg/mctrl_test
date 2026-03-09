@@ -225,9 +225,6 @@ def _send_via_mcp_agent_mail(payload: dict[str, Any]) -> DeliveryAttempt:
         agent_attempt = DeliveryAttempt(delivered=False, transient=transient)
     if agent_attempt.delivered:
         return agent_attempt
-    message_attempt = _send_via_openclaw_message_channel(payload)
-    if message_attempt.delivered:
-        return message_attempt
 
     project_key = os.environ.get("OPENCLAW_PROJECT_KEY", "").strip()
     sender_name = os.environ.get("OPENCLAW_SENDER_NAME", "").strip()
