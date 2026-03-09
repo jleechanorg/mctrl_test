@@ -11,5 +11,5 @@ python hello.py
 ## Testing
 
 ```bash
-pytest test_hello.py -v
+pytest -v
 ```
