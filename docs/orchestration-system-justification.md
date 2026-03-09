@@ -2,6 +2,8 @@
 
 > Why each file in the orchestration layer exists and why we didn't use an existing tool.
 
+Current architecture: `OpenClaw -> mctrl -> ai_orch`.
+
 ## Core Question: Why not just use `gh` CLI directly?
 
 **We do use `gh` CLI.** The `gh_integration.py` module is a thin Python wrapper around `gh` — every GitHub API call shells out to `gh` (see `gh()` function at line 85). The wrapper exists because:

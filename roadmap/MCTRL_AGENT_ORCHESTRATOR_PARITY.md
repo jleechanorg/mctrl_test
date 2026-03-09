@@ -1,5 +1,60 @@
 # Mctrl Agent-Orchestrator Parity Design
 
+## Architecture Decision (2026-03-08): Keep mctrl Primary
+
+**Decision:** Option 1 — keep `mctrl` as primary orchestration layer. Use `agent-orchestrator` as reference only.
+
+### Rationale
+
+| Factor | mctrl (keep) | agent-orchestrator (adopt) |
+|---|---|---|
+| Language match | Python — matches OpenClaw, beads, ai_orch, tests | TypeScript — requires new runtime + dual-system |
+| Existing coverage | 3.6k LOC, clean layering, no circular deps | 31k LOC production, 63k total — most is irrelevant |
+| Integration surface | Native OpenClaw, beads, Slack evidence, dispatch | Would need adapters for all of the above |
+| Missing work | ~230 LOC of reaction wiring | Full adoption = weeks of replumbing |
+| Test suite | 5.6k LOC real E2E + unit tests in Python | Would become dead code or need rewrite |
+| Dashboard/mobile | Not needed (CLI + Slack sufficient) | Available but not a requirement |
+| Maintenance | Single-maintainer, small surface | Community-maintained but upstream churn risk |
+
+### What mctrl already owns (proven)
+
+- Dispatch → registry → supervisor → reconciliation → Slack/OpenClaw notification
+- Registry atomicity + CAS guard
+- Session liveness detection + commit-based task classification
+- PR lifecycle routing + duplicate suppression
+- GitHub webhook integration + CI/review parsing
+- Outbox fallback delivery
+
+### What's missing (~230 LOC to wire)
+
+| Missing piece | Est. LOC | AO reference file |
+|---|---|---|
+| CI failure → auto-dispatch fixpr | ~80 | `lifecycle-manager.ts:180-350` |
+| Review feedback → auto-dispatch fix-comment | ~60 | Same, different event type |
+| Catch-up polling for missed webhooks | ~40 | Already stubbed in `pr_lifecycle.py` |
+| Reaction fingerprinting + escalation | ~50 | Reaction tracking + fingerprinting |
+
+### Strongest counter-argument
+
+The reaction engine complexity (fingerprinting, retry caps, time-based escalation, stuck detection) is where most bugs hide. AO has 811 LOC of battle-tested lifecycle manager logic. Building this naively risks:
+- Duplicate fixpr dispatches for the same failure
+- Infinite retry storms on unfixable CI
+- No escalation path when agents get stuck
+
+**Mitigation:** Port AO's specific patterns (fingerprinting, escalation thresholds) as reference, not its framework.
+
+### AO patterns to port (reference lines)
+
+- `lifecycle-manager.ts:180-350` — reaction fingerprinting and escalation
+- `scm-github/src/index.ts:400-500` — CI check parsing patterns
+- `session-manager.ts:600-700` — stuck detection heuristics
+
+### Spike that would reverse this decision
+
+If AO's lifecycle manager could run as a **sidecar** polling mctrl's registry (observe externally-managed sessions without owning dispatch), then it becomes a pure "reaction engine as a service." Prediction: this fails because AO tightly couples session creation with lifecycle tracking.
+
+---
+
 ## Goal
 
 Bring `mctrl` up to near-feature parity with the parts of `agent-orchestrator` that matter operationally:
@@ -221,33 +276,69 @@ This can start as CLI/status output. It does not require a dashboard.
 | Session restore/replay | manual replay command using recorded lane context |
 | PR-open / CI / review reactions | `dispatch_task` lanes `comment-validation`, `fix-comment`, `fixpr` |
 
-## Phased Implementation
+## Phased Implementation (2-6 week plan, revised 2026-03-09)
 
-### Phase 1: SCM And Ledger
+### Phase 1: Reaction Executor + Lifecycle Ledger (Week 1-2)
 
-- finish GitHub snapshot helpers
-- define ledger schema and persistence helpers
-- wire idempotency and duplicate suppression to the ledger
+This is wiring work, not greenfield lifecycle design. The codebase already has
+`lifecycle_reactions.py`, `pr_lifecycle.py`, and `gh_integration.py`; the first
+phase is to connect them through a persistent reaction record.
 
-### Phase 2: Reaction Engine
+- Add `ReactionFingerprint` — hash of CI check names+statuses, or review comment IDs
+- Add `ReactionRecord` — fingerprint, attempt_count, first_seen, last_attempt
+- Persist reaction state in a lifecycle ledger (JSONL first, explicit schema for future migration)
+- Wire `ci_failed` → dispatch `fixpr`
+- Wire `changes_requested` → dispatch `fix-comment`
+- Add `escalate_after` config (default 30m) → notify human instead of retrying
 
-- implement lifecycle state transitions
-- compile SCM snapshots into lifecycle states
-- dispatch `fixpr` and `fix-comment`
-- add retry and escalation policy
+### Phase 2: Catch-Up Poller (Week 3)
 
-### Phase 3: Catch-Up And Replay
+Catch-up depends on the reaction ledger from Phase 1. Without persisted
+fingerprints and attempt records, catch-up is where duplicate dispatches are
+most likely to appear.
 
-- periodic poller for missed work
-- manual replay command
-- operator-readable status summaries
+- Extend supervisor to call `gh_integration.py` on active sessions periodically
+- Use `pr_lifecycle.py`'s existing `route_catch_up` with freshness window
+- Reuse the same idempotency keys and reaction records as webhook-triggered runs
+- Emit operator-visible skip reasons when catch-up decides not to act
 
-### Phase 4: Real E2E Proof
+### Phase 3A: Stuck Detection + Manual Replay (Week 4)
 
-- `testing_mcp` path that opens a real PR in `mctrl_test`
-- induce or observe a real follow-up event
-- prove auto-fix dispatch after PR creation
-- persist PR, Slack, and lifecycle ledger evidence
+Stuck detection is lifecycle safety. It should be shipped before any merge
+policy automation.
+
+- Idle timeout: tmux session with no new output for N minutes → emit `agent_stuck`
+- Record stuck state in the lifecycle ledger
+- Add manual replay command using recorded lane context
+- Escalate stuck runs to Jeffrey instead of looping forever
+
+### Phase 3B: Auto-Merge Policy (Optional, config-gated)
+
+Auto-merge is a separate policy decision, not part of the minimum safe loop.
+
+- Require approved PR + CI green + no unresolved threads
+- Gate all merge automation behind config
+- Keep manual merge as the initial default
+
+### Phase 4A: Narrow Real Proof (after Phase 1)
+
+Before building the full chain, prove one real reaction path works:
+
+- real PR in `jleechanorg/mctrl_test`
+- one real lifecycle trigger
+- one real auto-dispatch (`fixpr` or `fix-comment`)
+- real Slack/OpenClaw-visible evidence
+
+### Phase 4B: Full E2E Proof (Week 5-6)
+
+- Full loop against `jleechanorg/mctrl_test`:
+  1. dispatch → agent works → PR created
+  2. CI fails → auto-fixpr dispatched
+  3. CI green → review → fix-comment dispatched
+  4. Approved → merge (manual or auto)
+- Prove with real Slack evidence artifacts
+- Persist PR, Slack, and lifecycle ledger evidence
+- Update and close beads
 
 ## Risks
 
@@ -264,12 +355,14 @@ This can start as CLI/status output. It does not require a dashboard.
 - retry exhaustion escalates to Jeffrey instead of looping forever
 - all lifecycle E2E proof uses real GitHub and real Slack/OpenClaw evidence
 
-## Proposed Bead Shape
+## Beads
 
-- epic: agent-orchestrator parity control plane
-- task: expand GitHub SCM inspection
-- task: add lifecycle ledger
-- task: implement lifecycle reaction engine
-- task: add catch-up poller and replay
-- task: wire reaction lanes through dispatch
-- task: prove the full loop with real `mctrl_test` PRs
+| Bead | Type | Phase | Title |
+|---|---|---|---|
+| ORCH-bl5 | epic | — | Implement post-PR lifecycle loop in mctrl |
+| ORCH-5lr | decision | — | DECIDED: Keep mctrl primary, use AO as reference only |
+| ORCH-olz | task | 1 (wk 1-2) | Wire reaction executor + lifecycle ledger |
+| ORCH-e0w | task | 2 (wk 3) | Add catch-up poller for missed webhooks |
+| ORCH-puc | task | 3A / policy split | Split stuck/replay safety from auto-merge policy |
+| ORCH-j8t | task | 3A-3B (wk 4) | Add stuck detection + merge automation |
+| ORCH-b3b | task | 4A-4B (wk 5-6) | E2E proof: full lifecycle loop against mctrl_test |

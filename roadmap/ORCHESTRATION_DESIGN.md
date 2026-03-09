@@ -2,24 +2,30 @@
 
 > How jleechanclaw talks to you, spawns agents, and manages work through a unified system.
 
-Note: Mission Control-heavy sections in this document are historical design
-context. The current architectural direction is in
-`roadmap/MCTRL_NO_OSS_MISSION_CONTROL.md`.
+Note: historical Mission Control and AO-first sections remain in this document
+for reference only. The current architecture is:
+`OpenClaw -> mctrl -> ai_orch`.
+See `roadmap/MCTRL_NO_OSS_MISSION_CONTROL.md` and
+`roadmap/MCTRL_AGENT_ORCHESTRATOR_PARITY.md`.
 
 ## Goal
 
-Jeffrey talks to **jleechanclaw** (the OpenClaw agent). jleechanclaw orchestrates coding agents (Claude Code, Codex, Gemini, Cursor) and manages their full lifecycle — task planning, agent spawning, monitoring, PR delivery — with a dashboard for visibility.
+Jeffrey talks to **jleechanclaw** (the OpenClaw agent). OpenClaw plans the work,
+`mctrl` owns orchestration and lifecycle state, and `ai_orch` executes the
+agent sessions.
 
 ## Locked Direction (2026-03-05)
 
-We are keeping `ai_orch` as a long-term execution component.
+We are keeping `ai_orch` as the execution substrate and `mctrl` as the
+durable orchestration layer.
 
 **Authoritative stack (current):**
-1. `openclaw` / jleechanclaw = outer-ralph planning brain (LLM orchestrator)
-2. `ai_orch` + `ralph-pair.sh` = deterministic execution building blocks
-3. AO patterns = selectively ported into an AO-lite kernel (plugin contracts, restore metadata, lifecycle primitives)
+1. `openclaw` / jleechanclaw = planning and policy layer
+2. `mctrl` = orchestration, lifecycle state, notifications, evidence, and GitHub/Slack integration
+3. `ai_orch` = deterministic execution substrate for agent CLIs
+4. `agent-orchestrator` = reference source for control-plane patterns we may port
 
-Mission Control is optional for visibility, never an execution lifecycle authority.
+OSS Mission Control is out of the target runtime architecture.
 
 ## Authoritative Architecture (Current)
 
@@ -27,19 +33,23 @@ Mission Control is optional for visibility, never an execution lifecycle authori
   Jeffrey (human)
          |
          v
-  jleechanclaw / OpenClaw (outer-ralph: intent + policy + convergence decisions)
+  jleechanclaw / OpenClaw (intent + policy)
          |
          v
-  deterministic tools: ai_orch + gh_integration + evidence + beads + /pair
+  mctrl (dispatch_task + supervisor + reconciliation + notifier + beads + evidence)
+         |
+         v
+  ai_orch
          |
          v
   Claude Code / Codex / Gemini / Cursor runtimes
 ```
 
 Single-writer rule:
-- Outer ralph is the only lifecycle decision writer.
-- Tooling plugins execute deterministic actions and report state.
-- Optional dashboards mirror state; they do not mutate canonical lifecycle.
+- OpenClaw decides intent and policy.
+- `mctrl` is the canonical writer for orchestration lifecycle state.
+- `ai_orch` executes and reports runtime outcomes.
+- Historical dashboards or mirrors are non-authoritative.
 
 MVP implementation reference: `roadmap/MVP_OPENCLAW_AIORCH_MULTI_AGENT.md`.
 
@@ -114,52 +124,54 @@ Verdict:
 
 ### What This Means for Stack Direction
 
-1. Keep AO as control plane authority (lifecycle + routing), not because Python stacks are weak, but because AO is the only codebase here that already has the full reusable control-plane envelope.
-2. Keep `ai_orch` as execution substrate because worldai is strongest at deterministic tmux/worktree/CLI execution mechanics.
-3. Keep `/copilot` patterns for deep review remediation logic and port only missing AO signal semantics where needed.
-4. Keep TaskPoller separation on its own track (`ORCH-xnf`) so architecture decisions here are not blocked by in-process coupling drift.
+1. Keep `mctrl` as the control plane authority for lifecycle + routing.
+2. Keep `ai_orch` as the execution substrate because worldai is strongest at deterministic tmux/worktree/CLI execution mechanics.
+3. Use `agent-orchestrator` as a reference for lifecycle patterns and SCM logic, not as the runtime authority.
+4. Keep `/copilot` patterns for deep review remediation logic and port only missing AO signal semantics where needed.
 
 ## Current Systems
 
-### System 1: jleechanorg-orchestration (PyPI, v0.1.78)
+### System 1: OpenClaw / jleechanclaw
 
 What it does well:
-- Battle-tested task dispatcher and agent spawning via tmux
-- CLI (`ai_orch`/`orch`) with `run`, `dispatcher`, `list`, `attach`, `kill`
-- Multi-CLI support: claude, codex, gemini, cursor
-- Git worktree isolation per agent
-- A2A protocol for agent-to-agent messaging
+- planning and policy decisions
+- user-facing Slack/OpenClaw interaction
+- task intake and orchestration intent
+- persistent operator rules via `openclaw-config/`
 
-Weaknesses (from Gemini's review):
-- File-based state in `/tmp` — ephemeral, race-prone, lost on reboot
-- tmux pane scraping for monitoring — brittle with ANSI codes
-- No persistent history of what agents did across sessions
-
-### System 2: openclaw-mission-control (dashboard)
+### System 2: mctrl
 
 What it does well:
-- Full web UI: boards, tasks, agents, approvals, activity timeline
-- FastAPI backend with proper REST API + SSE streaming
-- PostgreSQL for durable state, Redis for job queues
-- WebSocket RPC to OpenClaw gateway
-- Agent provisioning with heartbeat/lifecycle management
-- Webhook ingestion for external events
+- direct dispatch through `dispatch_task`
+- canonical session tracking, reconciliation, notifier, and evidence
+- GitHub/Slack integration for real delivery and follow-up context
+- beads-native orchestration and status handling
 
 Weaknesses:
-- Heavy stack (Postgres + Redis + Next.js) for a single-user setup
-- Designed for gateway-native agents, not tmux-based CLI agents
-- No awareness of `ai_orch` agent types or worktree isolation
+- the post-PR lifecycle loop is still incomplete
+- some roadmap/docs still contain older design history
 
-### System 3: agent-orchestrator (AO control plane patterns)
+### System 3: ai_orch
 
 What it does well:
-- Lifecycle state machine and reaction loop patterns
-- Plugin architecture for isolating execution adapters
+- battle-tested tmux/worktree/CLI execution
+- multi-CLI support: claude, codex, gemini, cursor, minimax
+- isolated session/worktree handling
+
+Weaknesses:
+- local runtime state is narrower than `mctrl` lifecycle state
+- does not own GitHub/Slack/beads orchestration semantics
+
+### System 4: agent-orchestrator (reference only)
+
+What it does well:
+- lifecycle state machine and reaction loop patterns
 - SCM/readiness primitives we can port and harden
+- reusable control-plane concepts
 
 Weaknesses for direct adoption:
 - TypeScript monorepo migration cost for existing Python runtime
-- Requires adaptation to our OpenClaw-driven planning workflow
+- would require re-plumbing OpenClaw, beads, Slack evidence, and `mctrl`
 
 ## The Problem
 
@@ -167,7 +179,7 @@ Split-brain appears whenever more than one system writes lifecycle state for the
 
 Historical example:
 - `ai_orch` inferred liveness from tmux and `/tmp` state
-- Mission Control inferred liveness from gateway connectivity
+- older Mission Control plans introduced a second state model
 
 Design rule going forward: one authoritative writer per state domain.
 
@@ -291,7 +303,7 @@ def sync_sessions_to_ao():
     reconcile_missing_sessions(running)
 ```
 
-### Phase 3: Optional Mission Control Mirror (ORCH-hab)
+### Phase 3: Optional Mission Control Mirror (Historical, superseded)
 
 **Goal**: Human visibility and approvals without adding a second lifecycle authority.
 
@@ -301,6 +313,7 @@ Flow:
 3. Any human action in Mission Control is translated to intent and routed back through AO
 
 Mission Control never directly invokes executors or writes canonical lifecycle state.
+This phase is no longer part of the target architecture.
 
 ### Phase 4: State Durability Unification (ORCH-7zk)
 
@@ -316,21 +329,25 @@ Mission Control can mirror this data for UI, but AO remains source of truth.
 
 ## Key Design Principles
 
-### 1. Never Block Orchestration for Dashboard
+### 1. Never Block Orchestration For Optional Mirrors
 
-Dashboard integration is fire-and-forget. If Mission Control is down, `ai_orch` keeps working. Agents keep spawning. PRs keep shipping. The dashboard is a visibility layer, not a dependency.
+Historical dashboard integration is fire-and-forget. If any optional mirror is
+down, `mctrl` and `ai_orch` still keep working. Visibility is not a dependency.
 
-### 2. AO Owns Lifecycle, ai_orch Owns Execution
+### 2. Current Ownership: OpenClaw Plans, mctrl Owns Lifecycle, ai_orch Executes
 
-- AO: lifecycle state machine, retry/escalation policy, orchestration routing
+- OpenClaw: planning, policy, intent
+- mctrl: lifecycle state machine, retry/escalation policy, orchestration routing
 - ai_orch: spawning, worktrees, cmux/tmux backend ops, CLI invocation, output capture
-- Mission Control (optional): boards, tasks, approvals, activity log, UI mirror
+- optional mirrors: read-only visibility only
 
-Don't duplicate lifecycle decisions across AO and Mission Control. Don't put execution logic in UI layers.
+Don't duplicate lifecycle decisions across systems. Don't put execution logic in UI layers.
 
-### 3. jleechanclaw Is the Brain, Not Either System
+### 3. jleechanclaw Is The Brain
 
-Neither ai_orch nor Mission Control decides what to build. jleechanclaw (the OpenClaw agent with business context) makes all planning decisions. The systems are its hands.
+Neither `mctrl` nor `ai_orch` decides what to build. jleechanclaw (the
+OpenClaw agent with business context) makes planning decisions. The systems are
+its hands.
 
 ### 4. Incremental, Not Big-Bang
 
