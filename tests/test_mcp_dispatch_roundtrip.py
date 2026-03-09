@@ -255,6 +255,35 @@ async def _poll_for_text_with_tokens_async(
     return False
 
 
+async def _poll_for_thread_reply_async(
+    token: str,
+    channel: str,
+    thread_ts: str,
+    needle: str,
+    timeout: float = 30.0,
+    interval: float = 2.0,
+) -> bool:
+    def _fetch_replies() -> list[dict[str, Any]]:
+        url = (
+            "https://slack.com/api/conversations.replies"
+            f"?channel={channel}&ts={thread_ts}&limit=20"
+        )
+        req = Request(url, headers={"Authorization": f"Bearer {token}"})
+        with urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read()).get("messages") or []
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            msgs = await asyncio.to_thread(_fetch_replies)
+            if any(needle in m.get("text", "") for m in msgs[1:]):
+                return True
+        except URLError:
+            pass
+        await _sleep(interval)
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
