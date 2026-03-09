@@ -1,4 +1,4 @@
-# MVP v1 Design: OpenClaw -> ai_orch (Multi-Agent, Multi-Worktree, Bead-Native)
+# MVP v1 Design: OpenClaw -> mctrl -> ai_orch (Multi-Agent, Multi-Worktree, Bead-Native)
 
 Date: 2026-03-05 (updated 2026-03-07)
 
@@ -7,18 +7,19 @@ Date: 2026-03-05 (updated 2026-03-07)
 First shipping MVP is:
 
 - `OpenClaw` as orchestrator
-- direct `ai_orch` execution (multiple concurrent agents)
+- `mctrl` as the dispatch/supervision/notifier layer
+- direct `ai_orch` execution underneath `mctrl` (multiple concurrent agents)
 - one isolated git worktree per task
 - beads as the canonical task system for all task lifecycle state
 - no TaskPoller in the start path
 
-Mission Control is optional and mirror-only.
+OSS Mission Control is out of the target architecture.
 
 ## Hard Rules
 
 1. Multi-agent + multi-worktree is default behavior.
 2. Every task MUST be a bead (`ORCH-*` or repo issue prefix); no untracked tasks.
-3. Start path is direct dispatch from OpenClaw to `ai_orch`; TaskPoller must not start tasks.
+3. Start path is `OpenClaw -> mctrl -> ai_orch`; TaskPoller must not start tasks.
 4. OpenClaw is notified for both terminal outcomes:
    - `task_finished`
    - `task_needs_human`
@@ -28,12 +29,8 @@ Mission Control is optional and mirror-only.
 ```text
 OpenClaw (planner/orchestrator)
   -> beads (task source of truth)
+  -> mctrl (dispatch + supervisor + reconciliation + notifier)
   -> ai_orch (spawn/send/kill/list)
-  -> supervisor loop (liveness + PR/CI/review checks)
-  -> notifier (MCP mail primary, Slack DM + thread reply)
-
-Optional side channel:
-  -> Mission Control mirror (read-only visibility)
 ```
 
 ## Full User-Visible Flow
@@ -41,7 +38,7 @@ Optional side channel:
 ```
 1. jleechan messages OpenClaw in Slack (#ai-slack-test or DM)
 2. OpenClaw acks in thread ("on it, spawning agent for ORCH-xxx")
-3. OpenClaw: bd create/claim → ai_orch spawn → write BeadSessionMapping (with slack_trigger_ts)
+3. OpenClaw: bd create/claim → `mctrl` dispatch → `ai_orch` spawn → write BeadSessionMapping (with slack_trigger_ts)
 4. Agent works in isolated worktree+session
 5. mctrl supervisor detects session end → commit check → task_finished or task_needs_human
 6. notify_slack_done: DM to jleechan + thread reply under original Slack message (step 1)
@@ -125,10 +122,12 @@ source ~/.openclaw/set-slack-env.sh  # SLACK_BOT_TOKEN = same bot token
 
 ## Mission Control Position
 
-Mission Control is optional and parallel:
+Mission Control is not part of the supported runtime path for this MVP:
 
-- yes: mirror status/events for visibility
-- no: no lifecycle authority, no task start authority, no canonical state writes
+- no lifecycle authority
+- no task start authority
+- no canonical state writes
+- no required mirror path
 
 ## TaskPoller Requirement
 
@@ -142,7 +141,7 @@ TaskPoller may remain as legacy code temporarily, but:
 
 Epic:
 
-- `ORCH-g8c` MVP v1: OpenClaw -> ai_orch multi-agent multi-worktree (bead-native)
+- `ORCH-g8c` MVP v1: OpenClaw -> mctrl -> ai_orch multi-agent multi-worktree (bead-native)
 
 Core tasks and status:
 
