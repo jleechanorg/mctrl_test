@@ -26,8 +26,9 @@ import subprocess
 import sys
 import tempfile
 import time
+from pathlib import Path
 
-from orchestration.openclaw_notifier import notify_slack_started
+from orchestration.openclaw_notifier import notify_openclaw
 from orchestration.session_registry import BeadSessionMapping, upsert_mapping
 
 logger = logging.getLogger(__name__)
@@ -227,6 +228,29 @@ def _task_with_push_instruction(task: str, branch: str = "") -> str:
         if branch
         else "`git commit -m \"Your message\"`"
     )
+    if "git push" in normalized:
+        # Task already includes a push instruction — leave as-is.
+        push_clause = task
+    elif "git commit" in normalized:
+        # Task mentions commit but not push — append push-only reminder.
+        push_clause = (
+            f"{task.rstrip()}\n\n"
+            f"After committing, push your branch to origin: {push_text}.\n"
+            "Your work is only visible after it is pushed to origin."
+        )
+    else:
+        commit_text = "`git commit -m \"Your message\"`"
+        push_clause = (
+            f"{task.rstrip()}\n\n"
+            f"IMPORTANT: Work in the worktree ROOT directory (NOT a subdirectory).\n"
+            f"After completing changes, run:\n"
+            f"1. `git add .` to stage all changes\n"
+            f"2. {commit_text} to commit\n"
+            f"3. {push_text} to push to remote.\n"
+            "Your work is only visible after it is pushed to origin."
+        )
+    if "do not switch to another local checkout" in normalized:
+        return push_clause
     return (
         f"{task.rstrip()}\n\n"
         f"IMPORTANT: Work in the worktree ROOT directory (not a subdirectory). "
@@ -236,6 +260,74 @@ def _task_with_push_instruction(task: str, branch: str = "") -> str:
         f"3. `git push origin {branch or '<your-branch>'}` to push to remote.\n"
         f"Your work is only visible after it is pushed to origin."
     )
+
+
+def _extract_repo_name_hint(task: str) -> str:
+    patterns = (
+        r"\bin\s+`?([A-Za-z0-9._-]+)`?\s+repo\b",
+        r"\bin\s+`?([A-Za-z0-9._-]+)`?\s+repository\b",
+        r"github\.com/[^/\s]+/([A-Za-z0-9._-]+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, task, flags=re.IGNORECASE)
+        if not match:
+            continue
+        candidate = match.group(1).strip().strip(".")
+        if candidate:
+            return candidate
+    return ""
+
+
+def _looks_like_git_repo(path: Path) -> bool:
+    return (path / ".git").exists()
+
+
+def _resolve_repo_root(repo_root: str, task: str) -> str:
+    """Resolve dispatch repo root, preferring explicit arg then task repo hints."""
+    explicit = os.path.realpath(os.path.expanduser(repo_root or "."))
+    if repo_root and repo_root != ".":
+        return explicit
+
+    repo_name = _extract_repo_name_hint(task)
+    if not repo_name:
+        return explicit
+
+    candidates: list[Path] = []
+
+    # Most common local clone locations in this environment.
+    for base in (
+        Path("/tmp"),
+        Path("/tmp/ai-orch-worktrees"),
+        Path(explicit),
+        Path(explicit).parent,
+        Path.home() / "projects",
+        Path.home() / "project_jleechanclaw",
+        Path.home() / ".openclaw" / "workspace",
+    ):
+        candidates.append(base / repo_name)
+
+    extra_bases = os.environ.get("MCTRL_REPO_HINT_PATHS", "").strip()
+    if extra_bases:
+        for raw in extra_bases.split(":"):
+            raw = raw.strip()
+            if not raw:
+                continue
+            candidates.append(Path(os.path.expanduser(raw)) / repo_name)
+
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        resolved = os.path.realpath(str(candidate))
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        deduped.append(Path(resolved))
+
+    for candidate in deduped:
+        if _looks_like_git_repo(candidate):
+            return str(candidate)
+
+    return explicit
 
 
 def _unique_session_name(bead_id: str, session_name: str) -> str:
@@ -297,6 +389,36 @@ def _build_ai_orch_env() -> dict[str, str]:
         env["PYTHONPATH"] = user_site
 
     return env
+
+
+def _run_ai_orch_with_fallback(cmd: list[str], *, cwd: str | None) -> tuple[subprocess.CompletedProcess[str], str]:
+    """Run ai_orch, retrying with orch when local wrappers are stale."""
+    env = _build_ai_orch_env()
+    result = subprocess.run(
+        cmd,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=env,
+    )
+    output = result.stdout + result.stderr
+    if (
+        result.returncode != 0
+        and "ModuleNotFoundError: No module named 'orchestration.runner'" in output
+        and shutil.which("orch")
+    ):
+        fallback_cmd = ["orch", *cmd[1:]]
+        result = subprocess.run(
+            fallback_cmd,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env,
+        )
+        output = result.stdout + result.stderr
+    return result, output
 
 
 def _dispatch_cursor_direct(
@@ -379,6 +501,7 @@ def dispatch(
     """
     if slack_trigger_ts and not slack_trigger_channel:
         raise ValueError("slack_trigger_channel is required when slack_trigger_ts is set")
+    repo_root = _resolve_repo_root(repo_root, task)
 
     if agent_cli == "cursor":
         session_name, worktree_path, parsed_branch = _dispatch_cursor_direct(
@@ -399,15 +522,7 @@ def dispatch(
             agent_task = _task_with_push_instruction(task)
             cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, agent_task]
 
-        result = subprocess.run(
-            cmd,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            env=_build_ai_orch_env(),
-        )
-        output = result.stdout + result.stderr
+        result, output = _run_ai_orch_with_fallback(cmd, cwd=cwd)
 
         if result.returncode != 0:
             raise RuntimeError(f"ai_orch failed (exit {result.returncode}):\n{output}")
@@ -433,7 +548,7 @@ def dispatch(
         slack_trigger_channel=slack_trigger_channel,
     )
     upsert_mapping(mapping, registry_path=registry_path)
-    notify_slack_started({
+    notify_openclaw({
         "event": "task_started",
         "bead_id": bead_id,
         "session": session_name,
@@ -454,6 +569,11 @@ def main() -> None:
     parser.add_argument("--slack-trigger-channel", default="", help="Slack channel ID of trigger message (for threading)")
     parser.add_argument("--agent-cli", default="claude", help="Agent CLI: claude, codex, gemini, minimax, cursor")
     parser.add_argument(
+        "--repo-root",
+        default=".",
+        help="Repo root to dispatch from (defaults to current directory; may be auto-inferred from task text)",
+    )
+    parser.add_argument(
         "--registry-path",
         default=".tracking/bead_session_registry.jsonl",
         help="Path to bead session registry JSONL",
@@ -467,6 +587,7 @@ def main() -> None:
             slack_trigger_ts=args.slack_trigger_ts,
             slack_trigger_channel=args.slack_trigger_channel,
             agent_cli=args.agent_cli,
+            repo_root=args.repo_root,
             registry_path=args.registry_path,
         )
         print(f"dispatched bead={mapping.bead_id} session={mapping.session_name} worktree={mapping.worktree_path}")

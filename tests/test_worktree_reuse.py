@@ -18,7 +18,13 @@ from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
-from orchestration.dispatch_task import find_existing_worktree, resolve_worktree_for_branch
+from orchestration.dispatch_task import (
+    _extract_repo_name_hint,
+    _resolve_repo_root,
+    _task_with_push_instruction,
+    find_existing_worktree,
+    resolve_worktree_for_branch,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +112,30 @@ def test_find_existing_worktree_flushes_last_block_without_trailing_blank():
     assert result == "/tmp/wt-feat-xyz"
 
 
+def test_extract_repo_name_hint_from_task_text():
+    assert _extract_repo_name_hint("implement feature in `mctrl_test` repo") == "mctrl_test"
+    assert _extract_repo_name_hint("open PR in worldarchitect repository") == "worldarchitect"
+    assert (
+        _extract_repo_name_hint("work in https://github.com/jleechanorg/mctrl_test")
+        == "mctrl_test"
+    )
+
+
+def test_resolve_repo_root_prefers_repo_hint_when_clone_exists(tmp_path: Path):
+    hinted_repo = tmp_path / "mctrl_test"
+    hinted_repo.mkdir(parents=True)
+    (hinted_repo / ".git").mkdir()
+
+    with patch.dict("os.environ", {"MCTRL_REPO_HINT_PATHS": str(tmp_path)}, clear=False), \
+         patch(
+             "orchestration.dispatch_task._looks_like_git_repo",
+             side_effect=lambda p: Path(p).resolve() == hinted_repo.resolve(),
+         ):
+        resolved = _resolve_repo_root(".", "Implement in mctrl_test repo and open PR")
+
+    assert resolved == str(hinted_repo.resolve())
+
+
 # ---------------------------------------------------------------------------
 # resolve_worktree_for_branch
 # ---------------------------------------------------------------------------
@@ -162,8 +192,8 @@ def test_resolve_raises_when_branch_missing_everywhere(tmp_path: Path):
 # dispatch() with branch= parameter (full round-trip wiring)
 # ---------------------------------------------------------------------------
 
-def test_dispatch_fires_slack_started_after_spawn(tmp_path: Path):
-    """dispatch() calls notify_slack_started with correct payload after spawning agent."""
+def test_dispatch_emits_openclaw_started_event_after_spawn(tmp_path: Path):
+    """dispatch() emits task_started via notify_openclaw after spawning agent."""
     existing_wt = str(tmp_path / "wt")
     fake_output = (
         "🚀 Async session: ai-minimax-start1\n"
@@ -181,7 +211,7 @@ def test_dispatch_fires_slack_started_after_spawn(tmp_path: Path):
 
     with patch("subprocess.run", side_effect=fake_run), \
          patch("orchestration.dispatch_task.upsert_mapping"), \
-         patch("orchestration.dispatch_task.notify_slack_started",
+         patch("orchestration.dispatch_task.notify_openclaw",
                side_effect=lambda p: started_calls.append(p) or True) as mock_started:
         from orchestration.dispatch_task import dispatch
         dispatch(
@@ -219,7 +249,7 @@ def test_dispatch_requires_trigger_channel_when_thread_ts_is_set(tmp_path: Path)
 
     with patch("subprocess.run", side_effect=fake_run), \
          patch("orchestration.dispatch_task.upsert_mapping"), \
-         patch("orchestration.dispatch_task.notify_slack_started"):
+         patch("orchestration.dispatch_task.notify_openclaw"):
         from orchestration.dispatch_task import dispatch
 
         with pytest.raises(ValueError, match="slack_trigger_channel is required"):
@@ -593,3 +623,74 @@ def test_dispatch_cursor_with_branch_reuses_worktree_and_skips_ai_orch(tmp_path:
     assert mapping.branch == "feat/cursor-branch"
     assert mapping.worktree_path == existing_wt
     assert not any(c[:2] == ["ai_orch", "run"] for c in cmd_log)
+
+
+def test_dispatch_retries_with_orch_when_ai_orch_wrapper_is_stale(tmp_path: Path):
+    """If ai_orch fails with stale wrapper import error, dispatch retries with orch."""
+    fake_output = (
+        "🚀 Async session: ai-minimax-retry123\n"
+        "🧩 Worktree: /tmp/wt-retry (branch: feat/retry)\n"
+    )
+    cmd_log: list[list[str]] = []
+
+    def fake_run(cmd, **kw):
+        cmd_log.append(list(cmd))
+        m = MagicMock()
+        if cmd[0] == "ai_orch":
+            m.returncode = 1
+            m.stdout = ""
+            m.stderr = "ModuleNotFoundError: No module named 'orchestration.runner'"
+            return m
+        m.returncode = 0
+        m.stdout = fake_output
+        m.stderr = ""
+        return m
+
+    with patch("orchestration.dispatch_task.shutil.which", return_value="/usr/local/bin/orch"), \
+         patch("subprocess.run", side_effect=fake_run), \
+         patch("orchestration.dispatch_task.upsert_mapping"):
+        from orchestration.dispatch_task import dispatch
+        mapping = dispatch(
+            bead_id="ORCH-retry",
+            task="new task",
+            registry_path=str(tmp_path / "registry.jsonl"),
+        )
+
+    assert mapping.session_name.startswith("orch-retry-")
+    assert any(c[0] == "ai_orch" for c in cmd_log)
+    assert any(c[0] == "orch" for c in cmd_log)
+
+# ---------------------------------------------------------------------------
+# _task_with_push_instruction
+# ---------------------------------------------------------------------------
+
+class TestTaskWithPushInstruction:
+    def test_task_already_has_push_is_unchanged(self) -> None:
+        task = "Do stuff. git push origin feat/x."
+        result = _task_with_push_instruction(task, "feat/x")
+        # No extra push reminder should be appended
+        assert result.count("git push") == 1
+
+    def test_task_with_commit_but_no_push_gets_push_appended(self) -> None:
+        task = "Create a file. git commit -m \'done\'. Then stop."
+        result = _task_with_push_instruction(task, "feat/branch")
+        assert "git push origin feat/branch" in result
+        assert "Your work is only visible after it is pushed to origin" in result
+
+    def test_task_with_no_commit_no_push_gets_full_instructions(self) -> None:
+        task = "Write some code."
+        result = _task_with_push_instruction(task, "feat/branch")
+        assert "git add" in result
+        assert "git commit" in result
+        assert "git push origin feat/branch" in result
+
+    def test_task_already_has_commit_and_push_is_unchanged(self) -> None:
+        task = "Write code. git commit -m \'done\'. git push origin feat/x. Done."
+        result = _task_with_push_instruction(task, "feat/x")
+        # push already present — no duplication
+        assert result.count("git push") == 1
+
+    def test_do_not_switch_suppresses_worktree_reminder(self) -> None:
+        task = "Do work. git commit -m \'done\'. Do not switch to another local checkout or clone."
+        result = _task_with_push_instruction(task, "feat/branch")
+        assert "Work only in the current ai_orch worktree" not in result

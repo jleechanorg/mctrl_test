@@ -21,6 +21,8 @@ import subprocess
 import sys
 import time
 
+from orchestration.openclaw_notifier import default_outbox_path
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -32,7 +34,7 @@ REGISTRY_PATH = os.environ.get(
     "MCTRL_REGISTRY_PATH", ".tracking/bead_session_registry.jsonl"
 )
 OUTBOX_PATH = os.environ.get(
-    "MCTRL_OUTBOX_PATH", ".messages/outbox.jsonl"
+    "MCTRL_OUTBOX_PATH", default_outbox_path()
 )
 
 

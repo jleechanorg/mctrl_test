@@ -5,7 +5,11 @@ import subprocess
 import threading
 from typing import Any
 
-from orchestration.openclaw_notifier import drain_outbox, notify_openclaw, notify_slack_done
+from orchestration.openclaw_notifier import (
+    drain_outbox,
+    notify_openclaw,
+    openclaw_notification_max_runtime_seconds,
+)
 from orchestration.session_registry import list_mappings, update_mapping_status
 
 logger = logging.getLogger(__name__)
@@ -70,11 +74,16 @@ def _remote_branch_exists(branch: str, worktree_path: str | None) -> bool | None
             timeout=10,
         )
         if fetch_result.returncode != 0:
+            stderr = (fetch_result.stderr or "").strip()
+            # "couldn't find remote ref" is a definitive answer: branch was never pushed.
+            # Only return None for genuine transient failures (network errors, timeouts).
+            if "couldn't find remote ref" in stderr or "not found" in stderr.lower():
+                return False
             logger.warning(
                 "Could not verify remote branch %s in %s: %s",
                 branch,
                 worktree_path,
-                (fetch_result.stderr or "").strip(),
+                stderr,
             )
             return None
 
@@ -180,25 +189,15 @@ def reconcile_registry_once(
             "slack_trigger_ts": mapping.slack_trigger_ts,
             "slack_trigger_channel": mapping.slack_trigger_channel,
         }
-        # Fire both notifications in parallel: openclaw agent + Slack
+        # Emit a single channel-agnostic notification to OpenClaw.
         t_openclaw = threading.Thread(
             target=notify_openclaw,
             args=(payload,),
             kwargs={"outbox_path": outbox_path},
             daemon=True,
         )
-        t_slack = threading.Thread(
-            target=notify_slack_done,
-            args=(payload,),
-            daemon=True,
-        )
         t_openclaw.start()
-        t_slack.start()
-        t_openclaw.join(timeout=35)
-        # Slack posts two requests (DM + public channel) each with 5s network
-        # timeout = 10s max, plus overhead. Use 30s so the join reliably waits
-        # for completion rather than leaving a daemon thread racing the caller.
-        t_slack.join(timeout=30)
+        t_openclaw.join(timeout=openclaw_notification_max_runtime_seconds())
         emitted.append(payload)
 
     # Attempt to drain any previously failed notifications now that we're in a live code path

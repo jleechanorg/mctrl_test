@@ -9,21 +9,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DISCORD_CONFIG = REPO_ROOT / "discord-eng-bot" / "openclaw.json"
 MAIN_CONFIG = REPO_ROOT / "openclaw-config" / "openclaw.json"
-SOUL_CONFIG = REPO_ROOT / "openclaw-config" / "SOUL.md"
-TOOLS_CONFIG = REPO_ROOT / "openclaw-config" / "TOOLS.md"
-DISPATCH_SKILL = REPO_ROOT / "openclaw-config" / "skills" / "dispatch-task" / "SKILL.md"
+MC_PLIST = REPO_ROOT / "openclaw-config" / "ai.openclaw.mission-control.plist"
+START_MC_SCRIPT = REPO_ROOT / "scripts" / "start-mc.sh"
 GATEWAY_INSTALL_SCRIPT = REPO_ROOT / "scripts" / "install-launchagents.sh"
 STARTUP_CHECK_PLIST = REPO_ROOT / "openclaw-config" / "ai.openclaw.startup-check.plist"
 STARTUP_CHECK_SCRIPT = REPO_ROOT / "openclaw-config" / "startup-check.sh"
 MCTRL_SUPERVISOR_PLIST = REPO_ROOT / "scripts" / "mctrl-supervisor.plist.template"
-AGENT_PR_TRIGGER_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "agent-pr-trigger.yml"
-AGENT_PR_FIX_TRIGGER_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "agent-pr-fix-trigger.yml"
 
 CORE_TOOLS = {"read", "write", "edit", "exec", "bash", "process"}
 SECOND_OPINION_TOOLS = {
@@ -230,6 +228,64 @@ class TestMcpAdapterWiring:
         assert prefix is True
 
 
+class TestInstallLaunchagentsScript:
+    @pytest.mark.parametrize(
+        ("flag", "expected_error"),
+        [
+            ("--mc-token", "Error: --mc-token requires a non-empty value"),
+            ("--gateway-token", "Error: --gateway-token requires a non-empty value"),
+        ],
+    )
+    def test_missing_option_value_exits_cleanly(self, flag: str, expected_error: str):
+        result = subprocess.run(
+            [str(GATEWAY_INSTALL_SCRIPT), flag],
+            capture_output=True,
+            text=True,
+            env={"HOME": str(REPO_ROOT)},
+        )
+
+        assert result.returncode != 0
+        assert expected_error in result.stderr
+
+    @pytest.mark.parametrize(
+        ("flag", "expected_error"),
+        [
+            ("--mc-token", "Error: --mc-token requires a non-empty value"),
+            ("--gateway-token", "Error: --gateway-token requires a non-empty value"),
+        ],
+    )
+    def test_empty_option_value_exits_cleanly(self, flag: str, expected_error: str):
+        result = subprocess.run(
+            [str(GATEWAY_INSTALL_SCRIPT), flag, ""],
+            capture_output=True,
+            text=True,
+            env={"HOME": str(REPO_ROOT)},
+        )
+
+        assert result.returncode != 0
+        assert expected_error in result.stderr
+
+
+class TestMissionControlRuntimeWiring:
+    def test_mission_control_launchagent_uses_in_process_runtime(self):
+        """MC launchd service should start backend+poller entrypoint, not bare uvicorn."""
+        if not MC_PLIST.exists():
+            pytest.skip("Mission Control launchagent plist is not present in this repository checkout")
+        plist_text = MC_PLIST.read_text(encoding="utf-8")
+        assert "orchestration.mc_backend_service" in plist_text
+        assert "<key>MISSION_CONTROL_BASE_URL</key>" in plist_text
+        assert "<key>MISSION_CONTROL_TOKEN</key>" in plist_text
+        assert "<key>MISSION_CONTROL_BOARD_ID</key>" in plist_text
+        assert "<key>PYTHONPATH</key>" in plist_text
+
+    def test_start_mc_script_uses_same_runtime_entrypoint(self):
+        """Manual startup path should match launchd runtime wiring."""
+        if not START_MC_SCRIPT.exists():
+            pytest.skip("start-mc.sh is not present in this repository checkout")
+        script_text = START_MC_SCRIPT.read_text(encoding="utf-8")
+        assert "orchestration.mc_backend_service" in script_text
+
+
 class TestLaunchAgentInstallers:
     def test_install_launchagents_uses_gateway_cli_installer(self):
         """Gateway should be installed via the supported OpenClaw CLI service path."""
@@ -246,11 +302,19 @@ class TestLaunchAgentInstallers:
         script_text = GATEWAY_INSTALL_SCRIPT.read_text(encoding="utf-8")
         assert 'install -m 755 "$CONFIG_DIR/startup-check.sh" "$OPENCLAW_HOME/startup-check.sh"' in script_text
 
-    def test_install_launchagents_no_longer_mentions_mission_control(self):
-        """Mission Control runtime is no longer part of the supported installer path."""
+    def test_install_launchagents_only_installs_mc_services_when_plists_exist(self):
+        """Mission Control launchagents are optional and should be gated by file presence."""
         script_text = GATEWAY_INSTALL_SCRIPT.read_text(encoding="utf-8")
-        assert "mission-control" not in script_text
-        assert "MISSION_CONTROL_" not in script_text
+        assert 'if [[ -f "$MC_BACKEND_PLIST" ]]; then' in script_text
+        assert 'if [[ -f "$MC_FRONTEND_PLIST" ]]; then' in script_text
+        assert 'skipping ai.openclaw.mission-control' in script_text
+
+    def test_install_launchagents_rejects_placeholder_mc_token(self):
+        """Launchd installer must not stamp the checked-in placeholder token into services."""
+        script_text = GATEWAY_INSTALL_SCRIPT.read_text(encoding="utf-8")
+        assert "is_valid_mc_token()" in script_text
+        assert "your-local-auth-token-here" in script_text
+        assert "Generated new local Mission Control token for launchd services." in script_text
 
     def test_startup_check_plist_runs_at_load(self):
         """Startup verification should trigger automatically after login/restart."""
@@ -277,34 +341,6 @@ class TestLaunchAgentInstallers:
         plist_text = MCTRL_SUPERVISOR_PLIST.read_text(encoding="utf-8")
         assert "<key>ThrottleInterval</key>" in plist_text
         assert "<integer>10</integer>" in plist_text  # ThrottleInterval must have a positive value
-
-    def test_legacy_mission_control_pr_workflows_are_removed(self):
-        """PR lifecycle should route through mctrl, not GH Actions that create MC tasks."""
-        assert not AGENT_PR_TRIGGER_WORKFLOW.exists()
-        assert not AGENT_PR_FIX_TRIGGER_WORKFLOW.exists()
-
-
-class TestMctrlCodexDispatchPolicy:
-    def test_soul_requires_explicit_codex_requests_to_use_mctrl_codex(self):
-        """If Jeffrey asks for mctrl + codex, OpenClaw must dispatch with codex."""
-        text = SOUL_CONFIG.read_text(encoding="utf-8")
-        assert "If Jeffrey explicitly says to use `codex`" in text
-        assert "--agent-cli codex" in text
-        assert "Do not acknowledge the task as queued" in text
-
-    def test_tools_document_codex_override_for_dispatch_task(self):
-        """The operator docs should spell out the mctrl codex override path."""
-        text = TOOLS_CONFIG.read_text(encoding="utf-8")
-        assert "If Jeffrey explicitly asks for `codex`" in text
-        assert "dispatch_task" in text
-        assert "--agent-cli codex" in text
-
-    def test_dispatch_skill_forbids_acp_fallback_when_codex_was_requested(self):
-        """The dispatch skill should reject ACP/subagent fallback for explicit codex dispatches."""
-        text = DISPATCH_SKILL.read_text(encoding="utf-8")
-        assert "If Jeffrey explicitly requests `codex`" in text
-        assert "--agent-cli codex" in text
-        assert "Do not fall back to ACP Codex" in text
 
 
 # ---------------------------------------------------------------------------

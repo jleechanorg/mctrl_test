@@ -111,6 +111,7 @@ RESUME.md
 .openclaw-backups/latest/*
 !.openclaw-backups/latest/agents/
 .beads/interactions.jsonl
+.messages
 
 # openclaw credentials — never commit tokens
 openclaw-config/credentials/
