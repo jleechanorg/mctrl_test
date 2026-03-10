@@ -240,10 +240,9 @@ When the task involves making a PR to a DIFFERENT REPO than your current worktre
 def _is_cross_repo_task(task: str) -> bool:
     """Detect if task is targeting a different repo."""
     task_lower = task.lower()
-    # Patterns indicating cross-repo work
+    # Patterns indicating cross-repo work — must be specific to avoid
+    # false positives on generic English phrases like "Add tests to the codebase".
     cross_repo_indicators = [
-        " against ",
-        " to ",
         " pr against ",
         " pr to ",
         " make a pr",
