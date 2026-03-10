@@ -54,20 +54,7 @@ OUTBOX_AGE_ALERT_SECONDS = _get_int_env("MCTRL_OUTBOX_AGE_ALERT_SECONDS", 3600)
 OUTBOX_ALERT_COOLDOWN_SECONDS = _get_int_env("MCTRL_OUTBOX_ALERT_COOLDOWN_SECONDS", 3600)
 
 
-def _get_archive_after_days(default: int = 7) -> int:
-    raw = os.environ.get("MCTRL_ARCHIVE_AFTER_DAYS", str(default))
-    try:
-        return int(raw)
-    except ValueError:
-        logger.warning(
-            "Invalid MCTRL_ARCHIVE_AFTER_DAYS value %r; falling back to %d",
-            raw,
-            default,
-        )
-        return default
-
-
-ARCHIVE_AFTER_DAYS = _get_archive_after_days()
+ARCHIVE_AFTER_DAYS = _get_int_env("MCTRL_ARCHIVE_AFTER_DAYS", 7)
 
 _running = True
 _last_outbox_alert_at = 0.0
@@ -112,6 +99,7 @@ def run_once() -> list[dict]:
     emitted = reconcile_registry_once(
         registry_path=REGISTRY_PATH,
         outbox_path=OUTBOX_PATH,
+        dead_letter_path=DEAD_LETTER_PATH,
     )
     snapshot = outbox_health_snapshot(
         outbox_path=OUTBOX_PATH,

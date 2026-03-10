@@ -89,6 +89,7 @@ class TestReconcileRegistryOnce:
         emitted = reconcile_registry_once(
             registry_path=str(registry),
             outbox_path=str(outbox),
+            dead_letter_path=str(tmp_path / "dead_letter.jsonl"),
         )
 
         assert len(emitted) == 1
@@ -124,6 +125,7 @@ class TestReconcileRegistryOnce:
         emitted = reconcile_registry_once(
             registry_path=str(registry),
             outbox_path=str(outbox),
+            dead_letter_path=str(tmp_path / "dead_letter.jsonl"),
         )
 
         assert emitted == []
@@ -167,6 +169,7 @@ class TestReconcileRegistryOnce:
         emitted = reconcile_registry_once(
             registry_path=str(registry),
             outbox_path=str(outbox),
+            dead_letter_path=str(tmp_path / "dead_letter.jsonl"),
         )
 
         assert len(emitted) == 1
@@ -214,6 +217,7 @@ class TestReconcileRegistryOnce:
         emitted = reconcile_registry_once(
             registry_path=str(registry),
             outbox_path=str(outbox),
+            dead_letter_path=str(tmp_path / "dead_letter.jsonl"),
         )
 
         assert len(emitted) == 1
@@ -323,6 +327,7 @@ def test_reconcile_leaves_in_progress_when_remote_check_is_transient_failure(
     emitted = reconcile_registry_once(
         registry_path=str(registry),
         outbox_path=str(outbox),
+        dead_letter_path=str(tmp_path / "dead_letter.jsonl"),
     )
 
     assert emitted == []
