@@ -12,7 +12,7 @@
     {
       "id": "522e23a7-c7c1-41f2-b117-a3af05661578",
       "name": "Daily Slack Check-in 9AM",
-      "enabled": true,
+      "enabled": false,
       "createdAtMs": 1771063632572,
       "updatedAtMs": 1771999885173,
       "schedule": {
@@ -24,7 +24,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Run a Slack check-in summary using only live command output.\n\nExecute these exact commands in order:\n1) gog gmail search --json --max 50 \"is:unread in:inbox is:important\"\n2) gog gmail search --json --max 50 \"is:unread in:inbox is:important newer_than:2d\"\n3) gog calendar events --all --from=now --to=tomorrow --json\n4) gog calendar events --all --days 1 --from=now --json\n\nReturn a Slack-ready plain-text summary in this section format:\nDaily Slack Check-in \u2013 <day>, <month> <date>, <year> at <time>\nWhat I need to do today\n- up to 3 bullets\n\nImportant unread emails I need to reply to\n- up to 3 bullets\n\nUpcoming calendar events\n- up to 3 bullets\n\nSuggested priorities\n- up to 3 bullets\n\nRules:\n- Use only data from command output. Do not invent items.\n- If a section has no real data, say exactly: \"No items found in this section.\"\n- If a command errors, include a short error note in the relevant section and continue.\n- No fallback/bot test language (for example \"Test confirmed\", \"No data\" etc) unless the relevant command output is truly empty.\n- Keep it short and actionable.\n\nAfter composing the summary, use the send_message tool to send it as a NEW top-level Slack DM to user:U09GH5BR3QU. IMPORTANT: Do NOT reply in any existing thread. Always send as a fresh top-level message."
+        "message": "Run a Slack check-in summary using only live command output.\n\nExecute these exact commands in order:\n1) gog gmail search --json --max 50 \"is:unread in:inbox is:important\"\n2) gog gmail search --json --max 50 \"is:unread in:inbox is:important newer_than:2d\"\n3) gog calendar events --all --from=now --to=tomorrow --json\n4) gog calendar events --all --days 1 --from=now --json\n\nReturn a Slack-ready plain-text summary in this section format:\nDaily Slack Check-in – <day>, <month> <date>, <year> at <time>\nWhat I need to do today\n- up to 3 bullets\n\nImportant unread emails I need to reply to\n- up to 3 bullets\n\nUpcoming calendar events\n- up to 3 bullets\n\nSuggested priorities\n- up to 3 bullets\n\nRules:\n- Use only data from command output. Do not invent items.\n- If a section has no real data, say exactly: \"No items found in this section.\"\n- If a command errors, include a short error note in the relevant section and continue.\n- No fallback/bot test language (for example \"Test confirmed\", \"No data\" etc) unless the relevant command output is truly empty.\n- Keep it short and actionable.\n\nAfter composing the summary, use the send_message tool to send it as a NEW top-level Slack DM to user:U09GH5BR3QU. IMPORTANT: Do NOT reply in any existing thread. Always send as a fresh top-level message."
       },
       "delivery": {
         "mode": "none",
@@ -43,7 +43,7 @@
     {
       "id": "7424ea0d-2c8a-4a59-b58e-09b242c6c58e",
       "name": "Daily Slack Check-in 12PM",
-      "enabled": true,
+      "enabled": false,
       "createdAtMs": 1771063634366,
       "updatedAtMs": 1771999887691,
       "schedule": {
@@ -55,7 +55,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Run a Slack check-in summary using only live command output.\n\nExecute these exact commands in order:\n1) gog gmail search --json --max 50 \"is:unread in:inbox is:important\"\n2) gog gmail search --json --max 50 \"is:unread in:inbox is:important newer_than:2d\"\n3) gog calendar events --all --from=now --to=tomorrow --json\n4) gog calendar events --all --days 1 --from=now --json\n\nReturn a Slack-ready plain-text summary in this section format:\nDaily Slack Check-in \u2013 <day>, <month> <date>, <year> at <time>\nWhat I need to do today\n- up to 3 bullets\n\nImportant unread emails I need to reply to\n- up to 3 bullets\n\nUpcoming calendar events\n- up to 3 bullets\n\nSuggested priorities\n- up to 3 bullets\n\nRules:\n- Use only data from command output. Do not invent items.\n- If a section has no real data, say exactly: \"No items found in this section.\"\n- If a command errors, include a short error note in the relevant section and continue.\n- No fallback/bot test language (for example \"Test confirmed\", \"No data\" etc) unless the relevant command output is truly empty.\n- Keep it short and actionable.\n\nAfter composing the summary, use the send_message tool to send it as a NEW top-level Slack DM to user:U09GH5BR3QU. IMPORTANT: Do NOT reply in any existing thread. Always send as a fresh top-level message."
+        "message": "Run a Slack check-in summary using only live command output.\n\nExecute these exact commands in order:\n1) gog gmail search --json --max 50 \"is:unread in:inbox is:important\"\n2) gog gmail search --json --max 50 \"is:unread in:inbox is:important newer_than:2d\"\n3) gog calendar events --all --from=now --to=tomorrow --json\n4) gog calendar events --all --days 1 --from=now --json\n\nReturn a Slack-ready plain-text summary in this section format:\nDaily Slack Check-in – <day>, <month> <date>, <year> at <time>\nWhat I need to do today\n- up to 3 bullets\n\nImportant unread emails I need to reply to\n- up to 3 bullets\n\nUpcoming calendar events\n- up to 3 bullets\n\nSuggested priorities\n- up to 3 bullets\n\nRules:\n- Use only data from command output. Do not invent items.\n- If a section has no real data, say exactly: \"No items found in this section.\"\n- If a command errors, include a short error note in the relevant section and continue.\n- No fallback/bot test language (for example \"Test confirmed\", \"No data\" etc) unless the relevant command output is truly empty.\n- Keep it short and actionable.\n\nAfter composing the summary, use the send_message tool to send it as a NEW top-level Slack DM to user:U09GH5BR3QU. IMPORTANT: Do NOT reply in any existing thread. Always send as a fresh top-level message."
       },
       "delivery": {
         "mode": "none",
@@ -74,7 +74,7 @@
     {
       "id": "5192e214-2754-49d5-b567-07c7b24cb116",
       "name": "Daily Slack Check-in 6PM",
-      "enabled": true,
+      "enabled": false,
       "createdAtMs": 1771063637710,
       "updatedAtMs": 1772000219442,
       "schedule": {
@@ -86,7 +86,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "Run a Slack check-in summary using only live command output.\n\nExecute these exact commands in order:\n1) gog gmail search --json --max 50 \"is:unread in:inbox is:important\"\n2) gog gmail search --json --max 50 \"is:unread in:inbox is:important newer_than:2d\"\n3) gog calendar events --all --from=now --to=tomorrow --json\n4) gog calendar events --all --days 1 --from=now --json\n\nReturn a Slack-ready plain-text summary in this section format:\nDaily Slack Check-in \u2013 <day>, <month> <date>, <year> at <time>\nWhat I need to do today\n- up to 3 bullets\n\nImportant unread emails I need to reply to\n- up to 3 bullets\n\nUpcoming calendar events\n- up to 3 bullets\n\nSuggested priorities\n- up to 3 bullets\n\nRules:\n- Use only data from command output. Do not invent items.\n- If a section has no real data, say exactly: \"No items found in this section.\"\n- If a command errors, include a short error note in the relevant section and continue.\n- No fallback/bot test language (for example \"Test confirmed\", \"No data\" etc) unless the relevant command output is truly empty.\n- Keep it short and actionable.\n\nAfter composing the summary, use the send_message tool to send it as a NEW top-level Slack DM to user:U09GH5BR3QU. IMPORTANT: Do NOT reply in any existing thread. Always send as a fresh top-level message."
+        "message": "Run a Slack check-in summary using only live command output.\n\nExecute these exact commands in order:\n1) gog gmail search --json --max 50 \"is:unread in:inbox is:important\"\n2) gog gmail search --json --max 50 \"is:unread in:inbox is:important newer_than:2d\"\n3) gog calendar events --all --from=now --to=tomorrow --json\n4) gog calendar events --all --days 1 --from=now --json\n\nReturn a Slack-ready plain-text summary in this section format:\nDaily Slack Check-in – <day>, <month> <date>, <year> at <time>\nWhat I need to do today\n- up to 3 bullets\n\nImportant unread emails I need to reply to\n- up to 3 bullets\n\nUpcoming calendar events\n- up to 3 bullets\n\nSuggested priorities\n- up to 3 bullets\n\nRules:\n- Use only data from command output. Do not invent items.\n- If a section has no real data, say exactly: \"No items found in this section.\"\n- If a command errors, include a short error note in the relevant section and continue.\n- No fallback/bot test language (for example \"Test confirmed\", \"No data\" etc) unless the relevant command output is truly empty.\n- Keep it short and actionable.\n\nAfter composing the summary, use the send_message tool to send it as a NEW top-level Slack DM to user:U09GH5BR3QU. IMPORTANT: Do NOT reply in any existing thread. Always send as a fresh top-level message."
       },
       "delivery": {
         "mode": "none",
@@ -117,7 +117,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "\ud83d\udd14 Reminder: Review P (every 10 min until ack)"
+        "message": "🔔 Reminder: Review P (every 10 min until ack)"
       },
       "delivery": {
         "mode": "none",
@@ -163,7 +163,7 @@
     {
       "id": "882c6964-1deb-4b4b-936d-9edcab83fbda",
       "name": "OpenClaw backup (in-app)",
-      "enabled": true,
+      "enabled": false,
       "createdAtMs": 1771747675767,
       "updatedAtMs": 1771992081572,
       "schedule": {
@@ -193,7 +193,7 @@
       "id": "genesis-memory-curation-weekly",
       "name": "Genesis memory curation (weekly)",
       "description": "Curate last 7 days of memory into durable MEMORY.md notes.",
-      "enabled": true,
+      "enabled": false,
       "createdAtMs": 1772578734014,
       "updatedAtMs": 1772578734014,
       "schedule": {
@@ -219,7 +219,7 @@
       "id": "genesis-pattern-extraction-weekly",
       "name": "Genesis pattern extraction (weekly)",
       "description": "Extract weekly patterns and refresh SOUL.md / MEMORY.md.",
-      "enabled": true,
+      "enabled": false,
       "createdAtMs": 1772578734014,
       "updatedAtMs": 1772578734014,
       "schedule": {

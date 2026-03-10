@@ -65,7 +65,6 @@ if ! command -v launchctl >/dev/null 2>&1; then
 fi
 
 # Sync repo openclaw-config to live before loading (ensures jobs.json and skills are current)
-SYNC_SCRIPT="$REPO_ROOT/scripts/sync-openclaw-config.sh"
 if [[ -x "$SYNC_SCRIPT" ]]; then
   "$SYNC_SCRIPT" --execute
 fi
@@ -102,15 +101,6 @@ render_and_load_plist() {
 printf 'Installing OpenClaw launchd scheduled jobs\n'
 printf 'Repo: %s\n\n' "$REPO_ROOT"
 
-if ! command -v jq >/dev/null 2>&1; then
-  echo "Missing required command: jq" >&2
-  exit 1
-fi
-if ! command -v launchctl >/dev/null 2>&1; then
-  echo "Missing required command: launchctl" >&2
-  exit 1
-fi
-
 if [[ ! -x "$RUNNER_SRC" ]]; then
   echo "Missing executable runner: $RUNNER_SRC" >&2
   exit 1
@@ -120,16 +110,27 @@ mkdir -p "$LAUNCHD_DIR" "$LIVE_DIR" "$LIVE_DIR/cron" "$SCHEDULED_LOG_DIR"
 install -m 755 "$RUNNER_SRC" "$RUNNER_DST"
 echo "  ✓ installed runner $RUNNER_DST"
 
+echo "Installing launchd scheduled job plists..."
+for plist in "$CONFIG_DIR"/ai.openclaw.schedule.*.plist; do
+  [[ -f "$plist" ]] || continue
+  render_and_load_plist "$plist"
+done
+
 if [[ -f "$LIVE_JOBS" ]]; then
   backup="$LIVE_JOBS.bak.$(date +%Y%m%d-%H%M%S)"
   cp "$LIVE_JOBS" "$backup"
   ROLLBACK_JOBS_BACKUP="$backup"
 
-  jq --argjson ids "$(printf '%s\n' "${MIGRATED_JOB_IDS[@]}" | jq -R . | jq -s .)" '
+  if jq --argjson ids "$(printf '%s\n' "${MIGRATED_JOB_IDS[@]}" | jq -R . | jq -s .)" '
     .jobs = ((.jobs // []) | map(if (.id as $id | ($ids | index($id)) != null) then .enabled = false else . end))
-  ' "$LIVE_JOBS" > "$LIVE_JOBS.tmp"
-
-  mv "$LIVE_JOBS.tmp" "$LIVE_JOBS"
+  ' "$LIVE_JOBS" >"$LIVE_JOBS.tmp"; then
+    mv "$LIVE_JOBS.tmp" "$LIVE_JOBS"
+  else
+    rm -f "$LIVE_JOBS.tmp"
+    cp "$backup" "$LIVE_JOBS"
+    echo "  ✗ failed to update $LIVE_JOBS with migrated job disable list; restored from $backup" >&2
+    exit 1
+  fi
   echo "  ✓ disabled migrated in-app cron jobs in $LIVE_JOBS"
   echo "  ✓ backup saved at $backup"
 
@@ -144,14 +145,8 @@ else
   echo "  ! live cron file missing: $LIVE_JOBS (skipped disable step)"
 fi
 
-echo "Installing launchd scheduled job plists..."
-for plist in "$CONFIG_DIR"/ai.openclaw.schedule.*.plist; do
-  [[ -f "$plist" ]] || continue
-  render_and_load_plist "$plist"
-done
 MIGRATION_COMMITTED=1
 trap - ERR
-
 printf '\nVerifying loaded labels...\n'
 for plist in "$CONFIG_DIR"/ai.openclaw.schedule.*.plist; do
   label="$(basename "$plist" .plist)"

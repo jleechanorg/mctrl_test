@@ -120,7 +120,7 @@ echo "MC token: ${MC_TOKEN:0:8}... (${#MC_TOKEN} chars)"
 
 LOCAL_TZ="$(detect_local_timezone)"
 if [[ "$LOCAL_TZ" != "America/Los_Angeles" && "${OPENCLAW_ALLOW_NON_PT_SCHEDULE:-0}" != "1" ]]; then
-  echo "Error: local timezone is '$LOCAL_TZ' but scheduled labels are defined for America/Los_Angeles." >&2
+  echo "Error: local timezone is '$LOCAL_TZ' but migrated schedules are defined for America/Los_Angeles." >&2
   echo "Set OPENCLAW_ALLOW_NON_PT_SCHEDULE=1 to override." >&2
   exit 1
 fi
