@@ -36,9 +36,19 @@ _RETRY_DELAYS_SECONDS = (1, 3)
 _OPENCLAW_AGENT_TIMEOUT_SECONDS = 60
 _OPENCLAW_MCP_TIMEOUT_SECONDS = 30
 _DEFAULT_NOTIFY_AGENT = "main"
-_DEFAULT_NOTIFY_CHANNEL = "slack"
-# jleechan direct-message channel (documented in openclaw-config/SOUL.md).
-_DEFAULT_NOTIFY_TARGET = "D0AFTLEJGJU"
+_DEFAULT_NOTIFY_CHANNEL_FALLBACK = "slack"
+# Placeholder defaults — override via OPENCLAW_NOTIFY_TARGET / OPENCLAW_NOTIFY_CHANNEL env vars.
+_DEFAULT_NOTIFY_TARGET_FALLBACK = "PLACEHOLDER_DM_CHANNEL"
+
+
+def _default_notify_target() -> str:
+    """Return the notification target (Slack channel/DM ID), preferring env var."""
+    return os.environ.get("OPENCLAW_NOTIFY_TARGET", _DEFAULT_NOTIFY_TARGET_FALLBACK).strip()
+
+
+def _default_notify_channel() -> str:
+    """Return the notification channel type, preferring env var."""
+    return os.environ.get("OPENCLAW_NOTIFY_CHANNEL", _DEFAULT_NOTIFY_CHANNEL_FALLBACK).strip()
 
 
 def openclaw_notification_max_runtime_seconds() -> int:
@@ -73,6 +83,10 @@ def _is_transient_error_text(text: str) -> bool:
 def _is_transient_exception(exc: Exception) -> bool:
     if isinstance(exc, (subprocess.TimeoutExpired, TimeoutError, ConnectionError)):
         return True
+    # FileNotFoundError and PermissionError are OSError subclasses but indicate
+    # permanent issues (missing binary, wrong permissions) — do not retry.
+    if isinstance(exc, (FileNotFoundError, PermissionError)):
+        return False
     if isinstance(exc, OSError):
         return exc.errno in {
             EAGAIN,
@@ -220,9 +234,9 @@ def _send_via_mcp_agent_mail(payload: dict[str, Any]) -> DeliveryAttempt:
     try:
         agent_attempt = _send_via_openclaw_agent(payload)
     except Exception as exc:
-        transient = isinstance(exc, (subprocess.TimeoutExpired, TimeoutError))
-        transient = transient or _is_transient_error_text(str(exc))
-        agent_attempt = DeliveryAttempt(delivered=False, transient=transient)
+        agent_attempt = DeliveryAttempt(
+            delivered=False, transient=_is_transient_exception(exc)
+        )
     if agent_attempt.delivered:
         return agent_attempt
 
@@ -396,8 +410,8 @@ def _send_openclaw_message(
 
 def _send_via_openclaw_message_channel(payload: dict[str, Any]) -> DeliveryAttempt:
     """Fallback channel delivery through OpenClaw CLI message send."""
-    channel = os.environ.get("OPENCLAW_NOTIFY_CHANNEL", _DEFAULT_NOTIFY_CHANNEL).strip().lower()
-    target = os.environ.get("OPENCLAW_NOTIFY_TARGET", _DEFAULT_NOTIFY_TARGET).strip()
+    channel = _default_notify_channel().lower()
+    target = _default_notify_target()
     if not target:
         return DeliveryAttempt(delivered=False)
 
