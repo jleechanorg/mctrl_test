@@ -9,6 +9,8 @@ LIVE_JOBS="$LIVE_DIR/cron/jobs.json"
 RUNNER_SRC="$CONFIG_DIR/run-scheduled-job.sh"
 RUNNER_DST="$LIVE_DIR/run-scheduled-job.sh"
 SCHEDULED_LOG_DIR="$LIVE_DIR/logs/scheduled-jobs"
+ROLLBACK_JOBS_BACKUP=""
+MIGRATION_COMMITTED=0
 SYNC_SCRIPT="$REPO_ROOT/scripts/sync-openclaw-config.sh"
 
 default_migrated_job_ids() {
@@ -45,6 +47,13 @@ detect_local_timezone() {
   echo "${TZ:-unknown}"
 }
 
+rollback_on_error() {
+  if [[ "$MIGRATION_COMMITTED" -eq 0 && -n "$ROLLBACK_JOBS_BACKUP" && -f "$ROLLBACK_JOBS_BACKUP" ]]; then
+    cp "$ROLLBACK_JOBS_BACKUP" "$LIVE_JOBS"
+    echo "  ! restored in-app cron config from backup due to migration failure: $ROLLBACK_JOBS_BACKUP" >&2
+  fi
+}
+
 # Validate required tools before mutating anything (avoids half-migrated state)
 if ! command -v jq >/dev/null 2>&1; then
   echo "Error: jq is required but not installed. Install with: brew install jq" >&2
@@ -69,6 +78,7 @@ if [[ "$LOCAL_TZ" != "America/Los_Angeles" && "${OPENCLAW_ALLOW_NON_PT_SCHEDULE:
   echo "Set OPENCLAW_ALLOW_NON_PT_SCHEDULE=1 to override." >&2
   exit 1
 fi
+trap rollback_on_error ERR
 
 render_and_load_plist() {
   local src="$1"
@@ -113,6 +123,7 @@ echo "  ✓ installed runner $RUNNER_DST"
 if [[ -f "$LIVE_JOBS" ]]; then
   backup="$LIVE_JOBS.bak.$(date +%Y%m%d-%H%M%S)"
   cp "$LIVE_JOBS" "$backup"
+  ROLLBACK_JOBS_BACKUP="$backup"
 
   jq --argjson ids "$(printf '%s\n' "${MIGRATED_JOB_IDS[@]}" | jq -R . | jq -s .)" '
     .jobs = ((.jobs // []) | map(if (.id as $id | ($ids | index($id)) != null) then .enabled = false else . end))
@@ -138,6 +149,8 @@ for plist in "$CONFIG_DIR"/ai.openclaw.schedule.*.plist; do
   [[ -f "$plist" ]] || continue
   render_and_load_plist "$plist"
 done
+MIGRATION_COMMITTED=1
+trap - ERR
 
 printf '\nVerifying loaded labels...\n'
 for plist in "$CONFIG_DIR"/ai.openclaw.schedule.*.plist; do

@@ -278,10 +278,12 @@ if [[ -f "$LIVE_OPENCLAW/cron/jobs.json" ]] && json_valid "$LIVE_OPENCLAW/cron/j
 
   if [[ -n "$missing_ids" ]]; then
     fail "migrated cron job IDs are missing from ~/.openclaw/cron/jobs.json: $missing_ids"
-  elif [[ -z "$still_enabled" ]]; then
-    pass 'migrated OpenClaw cron jobs are disabled in ~/.openclaw/cron/jobs.json'
-  else
+  fi
+  if [[ -n "$still_enabled" ]]; then
     fail "migrated cron job IDs are still enabled in ~/.openclaw/cron/jobs.json: $still_enabled"
+  fi
+  if [[ -z "$missing_ids" && -z "$still_enabled" ]]; then
+    pass 'migrated OpenClaw cron jobs are disabled in ~/.openclaw/cron/jobs.json'
   fi
 else
   fail 'could not validate live cron jobs JSON'
