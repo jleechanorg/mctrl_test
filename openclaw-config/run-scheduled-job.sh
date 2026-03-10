@@ -73,8 +73,10 @@ timeout_seconds="${OPENCLAW_SCHEDULED_TIMEOUT_SECONDS:-1200}"
 {
   printf '\n[%s] start %s (%s)\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$JOB_ID" "$job_name"
   printf '[%s] command: openclaw agent --thinking %s --timeout-seconds %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$thinking_level" "$timeout_seconds"
+  set +e
   openclaw agent --thinking "$thinking_level" --timeout-seconds "$timeout_seconds" --message "$job_message" --json
   rc=$?
+  set -e
   printf '[%s] finish rc=%s %s (%s)\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$rc" "$JOB_ID" "$job_name"
   exit "$rc"
 } >>"$LOG_FILE" 2>&1
