@@ -65,7 +65,7 @@ def drain_outbox(
     *,
     send_fn: EventSender | None = None,
     outbox_path: str = DEFAULT_OUTBOX_PATH,
-    dead_letter_path: str = DEFAULT_DEAD_LETTER_PATH,
+    dead_letter_path: str | None = None,
     retry_limit: int = DEFAULT_RETRY_LIMIT,
 ) -> int:
     """Attempt to deliver queued outbox events, returning count delivered.
@@ -75,6 +75,10 @@ def drain_outbox(
     """
     sender = send_fn or _send_via_mcp_agent_mail
     path = Path(outbox_path)
+    resolved_dead_letter_path = _resolve_dead_letter_path(
+        outbox_path=outbox_path,
+        dead_letter_path=dead_letter_path,
+    )
 
     # Atomically take a snapshot: rename the live file so new enqueue_outbox
     # calls write to a fresh file, while we drain from the snapshot only.
@@ -86,7 +90,6 @@ def drain_outbox(
 
     delivered = 0
     remaining: list[dict[str, Any]] = []
-    dead_lettered = 0
     for payload in _parse_jsonl_lines(drain_path.read_text(encoding="utf-8")):
         retries = _coerce_retry_count(payload.get("_retry_count"))
         try:
@@ -99,10 +102,9 @@ def drain_outbox(
             payload["_retry_count"] = retries + 1
             payload["_last_attempt_at"] = _utcnow_iso()
             if "_first_queued_at" not in payload:
-                payload["_first_queued_at"] = _utcnow_iso()
+                payload["_first_queued_at"] = _fallback_first_queued_at(path)
             if payload["_retry_count"] > max(0, retry_limit):
-                dead_lettered += 1
-                enqueue_dead_letter(payload, dead_letter_path=dead_letter_path)
+                enqueue_dead_letter(payload, dead_letter_path=resolved_dead_letter_path)
             else:
                 remaining.append(payload)
 
@@ -114,16 +116,6 @@ def drain_outbox(
         drain_path.unlink()
     except OSError:
         pass
-
-    # Keep dead-lettering observable for operators in supervisor logs.
-    if dead_lettered:
-        payload = {
-            "event": "outbox_dead_lettered",
-            "dead_lettered": dead_lettered,
-            "outbox_path": outbox_path,
-            "dead_letter_path": dead_letter_path,
-        }
-        notify_slack_outbox_alert(payload)
 
     return delivered
 
@@ -152,6 +144,10 @@ def enqueue_outbox(payload: dict[str, Any], *, outbox_path: str = DEFAULT_OUTBOX
         normalized_payload["slack_trigger_channel"] = _normalize_trigger_channel(
             normalized_payload.get("slack_trigger_channel")
         )
+    if "_first_queued_at" not in normalized_payload:
+        normalized_payload["_first_queued_at"] = _utcnow_iso()
+    if "_retry_count" not in normalized_payload:
+        normalized_payload["_retry_count"] = 0
     path = Path(outbox_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
@@ -209,6 +205,24 @@ def _age_seconds_from_iso(value: Any) -> int | None:
         return None
 
 
+def _fallback_first_queued_at(path: Path) -> str:
+    try:
+        mtime = path.stat().st_mtime
+        return datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+    except OSError:
+        return _utcnow_iso()
+
+
+def _resolve_dead_letter_path(*, outbox_path: str, dead_letter_path: str | None) -> str:
+    if dead_letter_path:
+        return dead_letter_path
+    env_path = os.environ.get("MCTRL_DEAD_LETTER_PATH", "").strip()
+    if env_path:
+        return env_path
+    outbox = Path(outbox_path)
+    return str(outbox.with_name("outbox_dead_letter.jsonl"))
+
+
 def outbox_health_snapshot(
     *,
     outbox_path: str = DEFAULT_OUTBOX_PATH,
@@ -219,22 +233,29 @@ def outbox_health_snapshot(
 
     retry_histogram: dict[str, int] = {}
     oldest_age_seconds: int | None = None
+    missing_age_metadata = False
     for item in outbox:
         retry = _coerce_retry_count(item.get("_retry_count"))
         key = str(retry)
         retry_histogram[key] = retry_histogram.get(key, 0) + 1
         age = _age_seconds_from_iso(item.get("_first_queued_at"))
         if age is None:
+            missing_age_metadata = True
             continue
         oldest_age_seconds = age if oldest_age_seconds is None else max(oldest_age_seconds, age)
 
-    # Legacy entries may not carry _first_queued_at; use file age as fallback.
-    if oldest_age_seconds is None and outbox:
+    # Legacy entries may not carry _first_queued_at; include file age fallback so
+    # mixed-format queues don't under-report backlog age.
+    if outbox and (oldest_age_seconds is None or missing_age_metadata):
         try:
             mtime = Path(outbox_path).stat().st_mtime
-            oldest_age_seconds = max(0, int(time.time() - mtime))
+            fallback_age = max(0, int(time.time() - mtime))
+            if oldest_age_seconds is None:
+                oldest_age_seconds = fallback_age
+            else:
+                oldest_age_seconds = max(oldest_age_seconds, fallback_age)
         except OSError:
-            oldest_age_seconds = None
+            pass
 
     return {
         "pending_count": len(outbox),

@@ -45,7 +45,12 @@ def test_notify_openclaw_failure_enqueues(tmp_path: Path) -> None:
     )
 
     assert delivered is False
-    assert read_outbox(outbox_path=str(outbox)) == [payload]
+    queued = read_outbox(outbox_path=str(outbox))
+    assert len(queued) == 1
+    assert queued[0]["event"] == payload["event"]
+    assert queued[0]["bead_id"] == payload["bead_id"]
+    assert queued[0]["_retry_count"] == 0
+    assert queued[0]["_first_queued_at"]
 
 
 def test_enqueue_outbox_normalizes_none_like_slack_thread_fields(tmp_path: Path) -> None:
@@ -61,14 +66,14 @@ def test_enqueue_outbox_normalizes_none_like_slack_thread_fields(tmp_path: Path)
         outbox_path=str(outbox),
     )
 
-    assert read_outbox(outbox_path=str(outbox)) == [
-        {
-            "event": "task_finished",
-            "bead_id": "ORCH-2b",
-            "slack_trigger_ts": "",
-            "slack_trigger_channel": "",
-        }
-    ]
+    queued = read_outbox(outbox_path=str(outbox))
+    assert len(queued) == 1
+    assert queued[0]["event"] == "task_finished"
+    assert queued[0]["bead_id"] == "ORCH-2b"
+    assert queued[0]["slack_trigger_ts"] == ""
+    assert queued[0]["slack_trigger_channel"] == ""
+    assert queued[0]["_retry_count"] == 0
+    assert queued[0]["_first_queued_at"]
 
 
 def test_drain_outbox_delivers_and_clears(tmp_path: Path) -> None:
@@ -132,6 +137,29 @@ def test_drain_outbox_routes_to_dead_letter_after_retry_limit(tmp_path: Path) ->
     assert len(dead) == 1
     assert dead[0]["bead_id"] == "ORCH-retry-max"
     assert dead[0]["_retry_count"] == 4
+
+
+def test_drain_outbox_derives_dead_letter_path_from_outbox_path(tmp_path: Path) -> None:
+    outbox = tmp_path / "custom_outbox.jsonl"
+    expected_dead_letter = tmp_path / "outbox_dead_letter.jsonl"
+    enqueue_outbox(
+        {
+            "event": "task_needs_human",
+            "bead_id": "ORCH-derived-dead",
+            "_retry_count": 3,
+        },
+        outbox_path=str(outbox),
+    )
+
+    drain_outbox(
+        send_fn=lambda _: False,
+        outbox_path=str(outbox),
+        retry_limit=3,
+    )
+
+    dead = read_dead_letter(dead_letter_path=str(expected_dead_letter))
+    assert len(dead) == 1
+    assert dead[0]["bead_id"] == "ORCH-derived-dead"
 
 
 def test_outbox_health_snapshot_reports_pending_dead_letter_and_histogram(tmp_path: Path) -> None:

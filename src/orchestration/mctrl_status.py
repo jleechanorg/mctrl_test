@@ -104,7 +104,11 @@ def print_status(
         dead_letter_path=dead_letter_path or os.environ.get("MCTRL_DEAD_LETTER_PATH", str(_DEAD_LETTER)),
     )
     histogram = ", ".join(
-        f"r{retry}:{count}" for retry, count in sorted(outbox["retry_histogram"].items())
+        f"r{retry}:{count}"
+        for retry, count in sorted(
+            outbox["retry_histogram"].items(),
+            key=lambda item: int(item[0]),
+        )
     ) or "none"
     oldest = outbox["oldest_age_seconds"]
     oldest_display = f"{oldest}s" if oldest is not None else "unknown"

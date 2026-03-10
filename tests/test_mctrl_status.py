@@ -13,7 +13,7 @@ def test_print_status_includes_outbox_health_summary(monkeypatch, capsys) -> Non
             "pending_count": 3,
             "dead_letter_count": 1,
             "oldest_age_seconds": 120,
-            "retry_histogram": {"0": 2, "2": 1},
+            "retry_histogram": {"0": 2, "2": 1, "10": 1},
         },
     )
 
@@ -24,3 +24,4 @@ def test_print_status_includes_outbox_health_summary(monkeypatch, capsys) -> Non
     assert "dead-letter 1" in output
     assert "r0:2" in output
     assert "r2:1" in output
+    assert output.index("r2:1") < output.index("r10:1")
