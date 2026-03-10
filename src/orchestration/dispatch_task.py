@@ -172,17 +172,22 @@ def resolve_worktree_for_branch(
     return path, True
 
 
-def _parse_ai_orch_output(output: str) -> tuple[str, str, str]:
-    """Extract (session_name, worktree_path, branch) from ai_orch run output."""
+def _parse_ai_orch_output(output: str, known_worktree: str = "") -> tuple[str, str, str]:
+    """Extract (session_name, worktree_path, branch) from ai_orch run output.
+
+    If known_worktree is provided (e.g., for cross-repo tasks we created ourselves),
+    use that as the worktree path instead of parsing from output.
+    """
     session = ""
-    worktree = ""
+    worktree = known_worktree
     branch = ""
 
     for line in output.splitlines():
         # 🧩 Worktree: /tmp/ai-orch-worktrees/ai-orch-12345 (branch: ai-orch-12345)
         m = re.search(r"Worktree:\s+(\S+)\s+\(branch:\s+(\S+)\)", line)
         if m:
-            worktree = m.group(1)
+            if not known_worktree:  # Only parse if we don't already know it
+                worktree = m.group(1)
             branch = m.group(2)
         # 🚀 Async session: ai-claude-dfa2c0
         m2 = re.search(r"Async session:\s+(\S+)", line)
@@ -349,7 +354,11 @@ def _task_with_push_instruction(task: str, branch: str = "", repo_root: str = ".
 
 
 def _extract_repo_name_hint(task: str) -> str:
+    """Extract repo name from task text."""
     patterns = (
+        r"\bagainst\s+`?([A-Za-z0-9._-]+)`?\s*$",
+        r"\bagainst\s+`?([A-Za-z0-9._-]+)`?\s+repo",
+        r"\bagainst\s+`?([A-Za-z0-9._-]+)`?\s+repository",
         r"\bin\s+`?([A-Za-z0-9._-]+)`?\s+repo\b",
         r"\bin\s+`?([A-Za-z0-9._-]+)`?\s+repository\b",
         r"github\.com/[^/\s]+/([A-Za-z0-9._-]+)",
@@ -597,6 +606,9 @@ def dispatch(
             repo_root=repo_root,
         )
     else:
+        # Track known worktree path for cross-repo tasks
+        known_worktree_path = ""
+
         if branch:
             worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
             os.makedirs(worktree_base, exist_ok=True)
@@ -610,6 +622,7 @@ def dispatch(
             if existing_worktree:
                 # Use existing worktree for target repo
                 cwd = existing_worktree
+                known_worktree_path = existing_worktree
                 agent_task = _task_with_push_instruction(task, "", cwd)
                 cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, agent_task]
             else:
@@ -627,8 +640,10 @@ def dispatch(
                     if _looks_like_git_repo(Path(target_repo_root)):
                         # Create worktree from the target repo
                         try:
+                            import uuid
+                            branch_name = f"ai-orch-{int(time.time()) % 100000}-{uuid.uuid4().hex[:4]}"
                             result = subprocess.run(
-                                ["git", "worktree", "add", "-b", f"ai-orch-{int(time.time()) % 100000}", target_worktree_path],
+                                ["git", "worktree", "add", "-b", branch_name, target_worktree_path],
                                 cwd=target_repo_root,
                                 capture_output=True,
                                 text=True,
@@ -641,6 +656,7 @@ def dispatch(
                                 cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, agent_task]
                             else:
                                 cwd = target_worktree_path
+                                known_worktree_path = target_worktree_path
                                 agent_task = _task_with_push_instruction(task, "", cwd)
                                 cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, agent_task]
                         except Exception:
@@ -664,7 +680,7 @@ def dispatch(
         if result.returncode != 0:
             raise RuntimeError(f"ai_orch failed (exit {result.returncode}):\n{output}")
 
-        session_name, worktree_path, parsed_branch = _parse_ai_orch_output(output)
+        session_name, worktree_path, parsed_branch = _parse_ai_orch_output(output, known_worktree_path)
         if not session_name or not worktree_path:
             raise RuntimeError(f"Could not parse ai_orch output:\n{output}")
 
