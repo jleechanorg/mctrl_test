@@ -218,8 +218,57 @@ def _get_start_sha(worktree_path: str) -> str:
 _DEFAULT_WORKTREE_BASE = os.path.expanduser("~/.mctrl/worktrees")
 
 
-def _task_with_push_instruction(task: str, branch: str = "") -> str:
-    """Append a durable push requirement if the task does not already include one."""
+# Cross-repo PR pattern - injected automatically for cross-repo tasks
+_CROSS_REPO_CONTEXT = """
+## CROSS-REPO PR PATTERN (IMPORTANT)
+When the task involves making a PR to a DIFFERENT REPO than your current worktree:
+- DO NOT clone the target repo into a subdirectory
+- DO NOT work in the current jleechanclaw worktree
+- Instead: create a NEW worktree FOR the target repo as a sibling directory
+- Work directly in that repo's worktree
+- Commit and push directly to that repo
+- Example: for "mctrl_test" repo, create worktree at ../mctrl_test or /tmp/ai-orch-worktrees/mctrl_test
+- Use: `gh pr create --repo owner/repo --base main --head <branch>` to PR cross-repo
+"""
+
+
+def _is_cross_repo_task(task: str) -> bool:
+    """Detect if task is targeting a different repo."""
+    task_lower = task.lower()
+    # Patterns indicating cross-repo work
+    cross_repo_indicators = [
+        " against ",
+        " to ",
+        " pr against ",
+        " pr to ",
+        " make a pr",
+        " create a pr",
+    ]
+    return any(indicator in task_lower for indicator in cross_repo_indicators)
+
+
+def _inject_cross_repo_context(task: str, repo_root: str) -> str:
+    """Inject cross-repo PR context if task appears to target a different repo."""
+    if not _is_cross_repo_task(task):
+        return task
+
+    # Check if we're already in the target repo (no cross-repo needed)
+    repo_name = _extract_repo_name_hint(task)
+    if repo_name:
+        # Check if the current worktree repo matches
+        current_repo = Path(repo_root).name
+        if current_repo.lower() == repo_name.lower():
+            return task
+
+    # Inject cross-repo context
+    return f"{task.rstrip()}\n{_CROSS_REPO_CONTEXT}"
+
+
+def _task_with_push_instruction(task: str, branch: str = "", repo_root: str = ".") -> str:
+    """Append a durable push requirement and cross-repo context if needed."""
+    # First inject cross-repo context
+    task = _inject_cross_repo_context(task, repo_root)
+
     normalized = task.lower()
     if "git commit" in normalized:
         return task
@@ -438,7 +487,7 @@ def _dispatch_cursor_direct(
 
     session_name = _make_async_session_name("cursor", repo_root)
     shell_cmd = _build_cursor_shell_cmd(
-        _task_with_push_instruction(task, effective_branch),
+        _task_with_push_instruction(task, effective_branch, repo_root),
         worktree_path,
     )
     result = subprocess.run(
@@ -515,11 +564,11 @@ def dispatch(
             worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
             os.makedirs(worktree_base, exist_ok=True)
             cwd, _ = resolve_worktree_for_branch(branch, repo_root, worktree_base)
-            agent_task = _task_with_push_instruction(task, branch)
+            agent_task = _task_with_push_instruction(task, branch, repo_root)
             cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, agent_task]
         else:
             cwd = repo_root
-            agent_task = _task_with_push_instruction(task)
+            agent_task = _task_with_push_instruction(task, "", repo_root)
             cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, agent_task]
 
         result, output = _run_ai_orch_with_fallback(cmd, cwd=cwd)
