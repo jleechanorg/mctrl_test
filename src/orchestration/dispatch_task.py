@@ -387,6 +387,35 @@ def _extract_repo_name_hint(task: str) -> str:
     return ""
 
 
+# Cross-repo PR pattern - injected automatically for cross-repo tasks
+_CROSS_REPO_CONTEXT = """
+## CROSS-REPO PR PATTERN (IMPORTANT)
+When the task involves making a PR to a DIFFERENT REPO than your current worktree:
+- DO NOT clone the target repo into a subdirectory
+- DO NOT work in the current jleechanclaw worktree
+- Instead: create a NEW worktree FOR the target repo as a sibling directory
+- Work directly in that repo's worktree
+- Commit and push directly to that repo
+- Example: for "mctrl_test" repo, create worktree at ../mctrl_test or /tmp/ai-orch-worktrees/mctrl_test
+- Use: `gh pr create --repo owner/repo --base main --head <branch>` to PR cross-repo
+"""
+
+
+def _is_cross_repo_task(task: str) -> bool:
+    """Detect if task is targeting a different repo."""
+    task_lower = task.lower()
+    # Patterns indicating cross-repo work
+    cross_repo_indicators = [
+        " against ",
+        " to ",
+        " pr against ",
+        " pr to ",
+        " make a pr",
+        " create a pr",
+    ]
+    return any(indicator in task_lower for indicator in cross_repo_indicators)
+
+
 def _looks_like_git_repo(path: Path) -> bool:
     return (path / ".git").exists()
 
