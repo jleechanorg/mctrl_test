@@ -4,6 +4,8 @@ import json
 import os
 import subprocess
 import tempfile
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 from urllib.request import Request, urlopen
@@ -15,6 +17,8 @@ SLACK_TRIGGER_CHANNEL = "C0AKALZ4CKW"  # #ai-slack-test
 EventSender = Callable[[dict[str, Any]], bool]
 
 DEFAULT_OUTBOX_PATH = ".messages/outbox.jsonl"
+DEFAULT_DEAD_LETTER_PATH = ".messages/outbox_dead_letter.jsonl"
+DEFAULT_RETRY_LIMIT = 3
 
 
 def _normalize_trigger_ts(value: Any) -> str:
@@ -61,6 +65,8 @@ def drain_outbox(
     *,
     send_fn: EventSender | None = None,
     outbox_path: str = DEFAULT_OUTBOX_PATH,
+    dead_letter_path: str = DEFAULT_DEAD_LETTER_PATH,
+    retry_limit: int = DEFAULT_RETRY_LIMIT,
 ) -> int:
     """Attempt to deliver queued outbox events, returning count delivered.
 
@@ -80,7 +86,9 @@ def drain_outbox(
 
     delivered = 0
     remaining: list[dict[str, Any]] = []
+    dead_lettered = 0
     for payload in _parse_jsonl_lines(drain_path.read_text(encoding="utf-8")):
+        retries = _coerce_retry_count(payload.get("_retry_count"))
         try:
             ok = sender(payload)
         except Exception:
@@ -88,7 +96,15 @@ def drain_outbox(
         if ok:
             delivered += 1
         else:
-            remaining.append(payload)
+            payload["_retry_count"] = retries + 1
+            payload["_last_attempt_at"] = _utcnow_iso()
+            if "_first_queued_at" not in payload:
+                payload["_first_queued_at"] = _utcnow_iso()
+            if payload["_retry_count"] > max(0, retry_limit):
+                dead_lettered += 1
+                enqueue_dead_letter(payload, dead_letter_path=dead_letter_path)
+            else:
+                remaining.append(payload)
 
     # Re-enqueue failed items via append so they merge with any new events.
     for item in remaining:
@@ -98,6 +114,16 @@ def drain_outbox(
         drain_path.unlink()
     except OSError:
         pass
+
+    # Keep dead-lettering observable for operators in supervisor logs.
+    if dead_lettered:
+        payload = {
+            "event": "outbox_dead_lettered",
+            "dead_lettered": dead_lettered,
+            "outbox_path": outbox_path,
+            "dead_letter_path": dead_letter_path,
+        }
+        notify_slack_outbox_alert(payload)
 
     return delivered
 
@@ -133,12 +159,133 @@ def enqueue_outbox(payload: dict[str, Any], *, outbox_path: str = DEFAULT_OUTBOX
         fh.write("\n")
 
 
+def enqueue_dead_letter(
+    payload: dict[str, Any], *, dead_letter_path: str = DEFAULT_DEAD_LETTER_PATH
+) -> None:
+    path = Path(dead_letter_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(payload, sort_keys=True))
+        fh.write("\n")
+
+
 def read_outbox(*, outbox_path: str = DEFAULT_OUTBOX_PATH) -> list[dict[str, Any]]:
     path = Path(outbox_path)
     try:
         return _parse_jsonl_lines(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return []
+
+
+def read_dead_letter(
+    *, dead_letter_path: str = DEFAULT_DEAD_LETTER_PATH
+) -> list[dict[str, Any]]:
+    path = Path(dead_letter_path)
+    try:
+        return _parse_jsonl_lines(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
+
+
+def _coerce_retry_count(value: Any) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _utcnow_iso() -> str:
+    return datetime.now(tz=timezone.utc).isoformat()
+
+
+def _age_seconds_from_iso(value: Any) -> int | None:
+    try:
+        text = str(value).strip()
+        if not text:
+            return None
+        ts = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return max(0, int(time.time() - ts.timestamp()))
+    except (TypeError, ValueError):
+        return None
+
+
+def outbox_health_snapshot(
+    *,
+    outbox_path: str = DEFAULT_OUTBOX_PATH,
+    dead_letter_path: str = DEFAULT_DEAD_LETTER_PATH,
+) -> dict[str, Any]:
+    outbox = read_outbox(outbox_path=outbox_path)
+    dead = read_dead_letter(dead_letter_path=dead_letter_path)
+
+    retry_histogram: dict[str, int] = {}
+    oldest_age_seconds: int | None = None
+    for item in outbox:
+        retry = _coerce_retry_count(item.get("_retry_count"))
+        key = str(retry)
+        retry_histogram[key] = retry_histogram.get(key, 0) + 1
+        age = _age_seconds_from_iso(item.get("_first_queued_at"))
+        if age is None:
+            continue
+        oldest_age_seconds = age if oldest_age_seconds is None else max(oldest_age_seconds, age)
+
+    # Legacy entries may not carry _first_queued_at; use file age as fallback.
+    if oldest_age_seconds is None and outbox:
+        try:
+            mtime = Path(outbox_path).stat().st_mtime
+            oldest_age_seconds = max(0, int(time.time() - mtime))
+        except OSError:
+            oldest_age_seconds = None
+
+    return {
+        "pending_count": len(outbox),
+        "dead_letter_count": len(dead),
+        "oldest_age_seconds": oldest_age_seconds,
+        "retry_histogram": retry_histogram,
+    }
+
+
+def notify_slack_outbox_alert(payload: dict[str, Any]) -> bool:
+    """Post outbox reliability alerts to Slack DM channel."""
+    token = os.environ.get("OPENCLAW_SLACK_BOT_TOKEN") or os.environ.get("SLACK_BOT_TOKEN")
+    if not token:
+        return False
+
+    pending_count = int(payload.get("pending_count", 0))
+    dead_letter_count = int(payload.get("dead_letter_count", 0))
+    oldest_age = payload.get("oldest_age_seconds")
+    dead_lettered = int(payload.get("dead_lettered", 0))
+
+    if dead_lettered:
+        text = (
+            ":warning: *mctrl outbox dead-lettered events*\n\n"
+            f"Moved `{dead_lettered}` event(s) to dead-letter queue.\n"
+            f"Outbox: `{payload.get('outbox_path', DEFAULT_OUTBOX_PATH)}`\n"
+            f"Dead-letter: `{payload.get('dead_letter_path', DEFAULT_DEAD_LETTER_PATH)}`"
+        )
+    else:
+        text = (
+            ":warning: *mctrl outbox backlog alert*\n\n"
+            f"Pending: `{pending_count}`\n"
+            f"Dead-letter: `{dead_letter_count}`\n"
+            f"Oldest age (s): `{oldest_age if oldest_age is not None else 'unknown'}`"
+        )
+
+    try:
+        body = json.dumps({"channel": SLACK_DM_CHANNEL, "text": text}).encode("utf-8")
+        req = Request(
+            "https://slack.com/api/chat.postMessage",
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
+            },
+            method="POST",
+        )
+        with urlopen(req, timeout=5) as resp:
+            result = json.loads(resp.read())
+            return bool(result.get("ok"))
+    except Exception:
+        return False
 
 
 def notify_slack_started(payload: dict[str, Any]) -> bool:

@@ -6,11 +6,14 @@ from subprocess import CompletedProcess
 from unittest.mock import MagicMock, patch
 
 from orchestration.openclaw_notifier import (
+    DEFAULT_DEAD_LETTER_PATH,
     SLACK_DM_CHANNEL,
     SLACK_TRIGGER_CHANNEL,
+    outbox_health_snapshot,
     enqueue_outbox,
     drain_outbox,
     notify_openclaw,
+    read_dead_letter,
     notify_slack_done,
     notify_slack_started,
     read_outbox,
@@ -81,6 +84,85 @@ def test_drain_outbox_delivers_and_clears(tmp_path: Path) -> None:
 
     assert delivered == 2
     assert read_outbox(outbox_path=str(outbox)) == []
+
+
+def test_drain_outbox_increments_retry_count_on_failure(tmp_path: Path) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    payload = {"event": "task_needs_human", "bead_id": "ORCH-retry-1"}
+    notify_openclaw(payload, send_fn=lambda _: False, outbox_path=str(outbox))
+
+    delivered = drain_outbox(
+        send_fn=lambda _: False,
+        outbox_path=str(outbox),
+        dead_letter_path=str(tmp_path / DEFAULT_DEAD_LETTER_PATH),
+        retry_limit=3,
+    )
+
+    assert delivered == 0
+    queued = read_outbox(outbox_path=str(outbox))
+    assert len(queued) == 1
+    assert queued[0]["_retry_count"] == 1
+    assert queued[0]["bead_id"] == "ORCH-retry-1"
+    assert read_dead_letter(dead_letter_path=str(tmp_path / DEFAULT_DEAD_LETTER_PATH)) == []
+
+
+def test_drain_outbox_routes_to_dead_letter_after_retry_limit(tmp_path: Path) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    dead_letter = tmp_path / DEFAULT_DEAD_LETTER_PATH
+    enqueue_outbox(
+        {
+            "event": "task_needs_human",
+            "bead_id": "ORCH-retry-max",
+            "_retry_count": 3,
+            "_first_queued_at": "2026-03-01T00:00:00+00:00",
+        },
+        outbox_path=str(outbox),
+    )
+
+    delivered = drain_outbox(
+        send_fn=lambda _: False,
+        outbox_path=str(outbox),
+        dead_letter_path=str(dead_letter),
+        retry_limit=3,
+    )
+
+    assert delivered == 0
+    assert read_outbox(outbox_path=str(outbox)) == []
+    dead = read_dead_letter(dead_letter_path=str(dead_letter))
+    assert len(dead) == 1
+    assert dead[0]["bead_id"] == "ORCH-retry-max"
+    assert dead[0]["_retry_count"] == 4
+
+
+def test_outbox_health_snapshot_reports_pending_dead_letter_and_histogram(tmp_path: Path) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    dead_letter = tmp_path / "outbox_dead_letter.jsonl"
+
+    enqueue_outbox({"event": "task_finished", "bead_id": "ORCH-h1"}, outbox_path=str(outbox))
+    enqueue_outbox(
+        {
+            "event": "task_finished",
+            "bead_id": "ORCH-h2",
+            "_retry_count": 2,
+            "_first_queued_at": "2026-03-01T00:00:00+00:00",
+        },
+        outbox_path=str(outbox),
+    )
+    enqueue_outbox(
+        {"event": "task_finished", "bead_id": "ORCH-dead"},
+        outbox_path=str(dead_letter),
+    )
+
+    snapshot = outbox_health_snapshot(
+        outbox_path=str(outbox),
+        dead_letter_path=str(dead_letter),
+    )
+
+    assert snapshot["pending_count"] == 2
+    assert snapshot["dead_letter_count"] == 1
+    assert snapshot["oldest_age_seconds"] is not None
+    assert snapshot["retry_histogram"]["0"] == 1
+    assert snapshot["retry_histogram"]["2"] == 1
 
 
 def _make_urlopen_mock(ok: bool = True):

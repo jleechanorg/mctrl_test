@@ -24,6 +24,7 @@ fi
 export PYTHONPATH="$REPO_DIR/src"
 export MCTRL_REGISTRY_PATH="$REPO_DIR/.tracking/bead_session_registry.jsonl"
 export MCTRL_OUTBOX_PATH="$REPO_DIR/.messages/outbox.jsonl"
+export MCTRL_DEAD_LETTER_PATH="$REPO_DIR/.messages/outbox_dead_letter.jsonl"
 
 cd "$REPO_DIR"
 exec python3 -m orchestration.supervisor --interval "${MCTRL_SUPERVISOR_INTERVAL:-30}"

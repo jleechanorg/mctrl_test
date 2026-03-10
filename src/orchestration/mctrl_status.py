@@ -6,7 +6,11 @@ import os
 import subprocess
 from pathlib import Path
 
+from orchestration.openclaw_notifier import outbox_health_snapshot
+
 _REGISTRY = Path(__file__).parent.parent.parent / ".tracking" / "bead_session_registry.jsonl"
+_OUTBOX = Path(__file__).parent.parent.parent / ".messages" / "outbox.jsonl"
+_DEAD_LETTER = Path(__file__).parent.parent.parent / ".messages" / "outbox_dead_letter.jsonl"
 _STATUS_EMOJI = {
     "in_progress": "🔄",
     "finished": "✅",
@@ -50,7 +54,12 @@ def _read_registry(path: Path) -> list[dict]:
         return []
 
 
-def print_status(registry_path: str | None = None, active_only: bool = False) -> None:
+def print_status(
+    registry_path: str | None = None,
+    active_only: bool = False,
+    outbox_path: str | None = None,
+    dead_letter_path: str | None = None,
+) -> None:
     path = Path(registry_path) if registry_path else _REGISTRY
     entries = _read_registry(path)
     tmux = _live_tmux_sessions()
@@ -90,6 +99,22 @@ def print_status(registry_path: str | None = None, active_only: bool = False) ->
     done = sum(1 for e in all_entries if e["status"] == "finished")
     suffix = "  (--all to show finished/dead)" if active_only else ""
     print(f"Total: {total} beads  |  🔄 {in_prog} running  |  ⚠️  {needs} needs_human  |  ✅ {done} finished  |  ⚫ {len(untracked)} untracked{suffix}")
+    outbox = outbox_health_snapshot(
+        outbox_path=outbox_path or os.environ.get("MCTRL_OUTBOX_PATH", str(_OUTBOX)),
+        dead_letter_path=dead_letter_path or os.environ.get("MCTRL_DEAD_LETTER_PATH", str(_DEAD_LETTER)),
+    )
+    histogram = ", ".join(
+        f"r{retry}:{count}" for retry, count in sorted(outbox["retry_histogram"].items())
+    ) or "none"
+    oldest = outbox["oldest_age_seconds"]
+    oldest_display = f"{oldest}s" if oldest is not None else "unknown"
+    print(
+        "Outbox: "
+        f"{outbox['pending_count']} pending  |  "
+        f"oldest {oldest_display}  |  "
+        f"dead-letter {outbox['dead_letter_count']}  |  "
+        f"retries [{histogram}]"
+    )
     print()
 
 
@@ -97,12 +122,19 @@ def main() -> None:
     import argparse
     p = argparse.ArgumentParser(description="mctrl status — bead/session tracker")
     p.add_argument("--registry-path", default=None)
+    p.add_argument("--outbox-path", default=None)
+    p.add_argument("--dead-letter-path", default=None)
     p.add_argument("--active", action="store_true", help="Show only live sessions and needs_human")
     p.add_argument("--all", dest="show_all", action="store_true", help="Show everything including dead/finished")
     args = p.parse_args()
     # Default: active-only view
     active_only = not args.show_all
-    print_status(args.registry_path, active_only=active_only)
+    print_status(
+        args.registry_path,
+        active_only=active_only,
+        outbox_path=args.outbox_path,
+        dead_letter_path=args.dead_letter_path,
+    )
 
 
 if __name__ == "__main__":
