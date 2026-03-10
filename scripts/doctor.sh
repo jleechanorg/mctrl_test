@@ -9,6 +9,22 @@ LIVE_OPENCLAW="$HOME/.openclaw"
 LAUNCHD_DIR="$HOME/Library/LaunchAgents"
 GATEWAY_LABEL="ai.openclaw.gateway"
 GATEWAY_PLIST="$LAUNCHD_DIR/$GATEWAY_LABEL.plist"
+SCHEDULED_LABELS=(
+  "ai.openclaw.schedule.daily-checkin-9am"
+  "ai.openclaw.schedule.daily-checkin-12pm"
+  "ai.openclaw.schedule.daily-checkin-6pm"
+  "ai.openclaw.schedule.backup-4h20"
+  "ai.openclaw.schedule.genesis-memory-curation-weekly"
+  "ai.openclaw.schedule.genesis-pattern-extraction-weekly"
+)
+MIGRATED_JOB_IDS=(
+  "522e23a7-c7c1-41f2-b117-a3af05661578"
+  "7424ea0d-2c8a-4a59-b58e-09b242c6c58e"
+  "5192e214-2754-49d5-b567-07c7b24cb116"
+  "882c6964-1deb-4b4b-936d-9edcab83fbda"
+  "genesis-memory-curation-weekly"
+  "genesis-pattern-extraction-weekly"
+)
 
 PASS_COUNT=0
 WARN_COUNT=0
@@ -91,6 +107,10 @@ require_file "$REPO_CONFIG/openclaw.json" 'repo openclaw config'
 require_file "$REPO_CONFIG/cron/jobs.json" 'repo cron jobs'
 require_file "$REPO_CONFIG/ai.openclaw.gateway.plist" 'repo gateway plist'
 require_file "$REPO_CONFIG/startup-check.sh" 'repo startup check script'
+require_file "$REPO_CONFIG/run-scheduled-job.sh" 'repo scheduled job runner'
+for label in "${SCHEDULED_LABELS[@]}"; do
+  require_file "$REPO_CONFIG/$label.plist" "repo launchd schedule plist ($label)"
+done
 require_file "$REPO_ROOT/scripts/sync-openclaw-config.sh" 'sync script'
 printf '\n'
 
@@ -98,7 +118,11 @@ require_dir "$LIVE_OPENCLAW" 'live ~/.openclaw'
 require_file "$LIVE_OPENCLAW/openclaw.json" 'live openclaw config'
 require_file "$LIVE_OPENCLAW/cron/jobs.json" 'live cron jobs'
 require_dir "$LIVE_OPENCLAW/logs" 'live logs dir'
+require_file "$LIVE_OPENCLAW/run-scheduled-job.sh" 'live scheduled job runner'
 require_file "$GATEWAY_PLIST" 'live launchd gateway plist'
+for label in "${SCHEDULED_LABELS[@]}"; do
+  require_file "$LAUNCHD_DIR/$label.plist" "live launchd schedule plist ($label)"
+done
 printf '\n'
 
 if [[ -f "$REPO_CONFIG/openclaw.json" ]] && json_valid "$REPO_CONFIG/openclaw.json"; then
@@ -133,22 +157,21 @@ if [[ -f "$REPO_CONFIG/openclaw.json" && -f "$LIVE_OPENCLAW/openclaw.json" ]]; t
 fi
 
 printf '\n'
-if [[ -f "$REPO_CONFIG/cron/jobs.json" ]] && [[ -f "$LIVE_OPENCLAW/cron/jobs.json" ]] && json_valid "$REPO_CONFIG/cron/jobs.json" && json_valid "$LIVE_OPENCLAW/cron/jobs.json"; then
-  missing_ids=()
-  while IFS= read -r job_id; do
-    [[ -z "$job_id" ]] && continue
-    if ! jq -e --arg id "$job_id" 'any(.jobs[]?; .id == $id)' "$LIVE_OPENCLAW/cron/jobs.json" >/dev/null 2>&1; then
-      missing_ids+=("$job_id")
+if [[ -f "$LIVE_OPENCLAW/cron/jobs.json" ]] && json_valid "$LIVE_OPENCLAW/cron/jobs.json"; then
+  still_enabled=()
+  for job_id in "${MIGRATED_JOB_IDS[@]}"; do
+    if jq -e --arg id "$job_id" 'any(.jobs[]?; .id == $id and (.enabled == true))' "$LIVE_OPENCLAW/cron/jobs.json" >/dev/null 2>&1; then
+      still_enabled+=("$job_id")
     fi
-  done < <(jq -r '.jobs[]?.id // empty' "$REPO_CONFIG/cron/jobs.json")
+  done
 
-  if [[ ${#missing_ids[@]} -eq 0 ]]; then
-    pass 'all repo cron job IDs exist in ~/.openclaw/cron/jobs.json'
+  if [[ ${#still_enabled[@]} -eq 0 ]]; then
+    pass 'migrated OpenClaw cron jobs are disabled in ~/.openclaw/cron/jobs.json'
   else
-    fail "missing repo cron job IDs in live cron config: ${missing_ids[*]}"
+    fail "migrated cron job IDs are still enabled in ~/.openclaw/cron/jobs.json: ${still_enabled[*]}"
   fi
 else
-  fail 'could not validate repo/live cron jobs JSON'
+  fail 'could not validate live cron jobs JSON'
 fi
 
 printf '\n'
@@ -167,8 +190,11 @@ if [[ -f "$GATEWAY_PLIST" ]]; then
     fail "gateway port mismatch (plist=$plist_port, live=$live_port)"
   fi
 
-  plist_token=$(plutil -extract EnvironmentVariables.OPENCLAW_GATEWAY_TOKEN raw -o - "$GATEWAY_PLIST" 2>/dev/null || true)
-  if [[ -n "$plist_token" ]]; then
+  plist_token=''
+  if plist_token=$(plutil -extract EnvironmentVariables.OPENCLAW_GATEWAY_TOKEN raw -o - "$GATEWAY_PLIST" 2>/dev/null); then
+    :
+  fi
+  if [[ -n "$plist_token" ]] && [[ "$plist_token" != *'Could not extract value'* ]]; then
     pass 'gateway token present in launchd EnvironmentVariables'
   else
     warn 'gateway token missing in launchd EnvironmentVariables (may still work via openclaw.json token)'
@@ -198,6 +224,14 @@ if launchctl print "gui/$(id -u)/$GATEWAY_LABEL" >/tmp/mctrl-doctor-launchctl.tx
 else
   fail 'launchctl print failed for ai.openclaw.gateway'
 fi
+
+for label in "${SCHEDULED_LABELS[@]}"; do
+  if launchctl print "gui/$(id -u)/$label" >/tmp/mctrl-doctor-launchctl-"$label".txt 2>&1; then
+    pass "launchd schedule is registered: $label"
+  else
+    fail "launchd schedule is not registered: $label"
+  fi
+done
 
 runtime_port=$(jq -r '.gateway.port // 18789' "$LIVE_OPENCLAW/openclaw.json" 2>/dev/null)
 if lsof -nP -iTCP:"$runtime_port" -sTCP:LISTEN >/tmp/mctrl-doctor-lsof.txt 2>&1; then
@@ -238,6 +272,9 @@ fi
 health_cli_output="$(openclaw gateway health 2>&1 || true)"
 if grep -q '^Error:' <<<"$health_cli_output"; then
   fail 'openclaw gateway health reported an error'
+  if grep -q 'gateway token mismatch' <<<"$health_cli_output"; then
+    fail 'gateway token mismatch detected (gateway.remote.token should match gateway.auth.token)'
+  fi
 else
   pass 'openclaw gateway health completed without leading Error line'
 fi

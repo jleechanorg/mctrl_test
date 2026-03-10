@@ -41,7 +41,7 @@ Context windows are zero-sum. Fill it with code and there's no room for business
 1. **Receives work** — from Jeffrey via Slack, from GitHub notifications, from scanning failing CI
 2. **Plans tasks** — breaks work into focused pieces, selects the right agent for each
 3. **Spawns agents** — via `ai_orch run` with precise prompts containing full business context
-4. **Monitors progress** — CI status, PR reviews, agent health, openclaw gateway cron
+4. **Monitors progress** — CI status, PR reviews, agent health, launchd schedulers
 5. **Handles failures** — diagnoses why an agent failed, writes a better prompt, retries (max 3)
 6. **Delivers results** — notifies Jeffrey when PRs are ready to merge
 7. **Learns** — logs what worked, what didn't, refines future prompts
@@ -52,7 +52,7 @@ Context windows are zero-sum. Fill it with code and there's no room for business
 
 | Dependency | What It Does | Install |
 |-----------|--------------|---------|
-| [OpenClaw](https://github.com/openclaw/openclaw) | Agent runtime — persistent memory, channels, gateway, cron | `pnpm install` in openclaw repo |
+| [OpenClaw](https://github.com/openclaw/openclaw) | Agent runtime — persistent memory, channels, gateway | `pnpm install` in openclaw repo |
 | [jleechanorg-orchestration](https://pypi.org/project/jleechanorg-orchestration/) | Task dispatch, agent spawning, tmux management | `pip install jleechanorg-orchestration` |
 | [jleechanorg-automation](https://pypi.org/project/jleechanorg-automation/) | PR monitor, comment-validation, codex-update, fixpr | `pip install jleechanorg-automation` |
 
@@ -94,7 +94,7 @@ Tracked baseline for `~/.openclaw/`. Changes here should be synced to `~/.opencl
 | `USER.md` | User context (Jeffrey's preferences, communication style) |
 | `IDENTITY.md` | Agent identity definition |
 | `openclaw.json` | Runtime config (gateway port, auth, memory, compaction) |
-| `cron/jobs.json` | Slack check-ins, backup, memory curation jobs (synced to `~/.openclaw/cron/`). **Note:** PR automation jobs are NOT here — they live only in `~/.openclaw/cron/jobs.json`. |
+| `cron/jobs.json` | Payload catalog for scheduled jobs. Launchd labels under `ai.openclaw.schedule.*` execute these payloads via `~/.openclaw/run-scheduled-job.sh`. |
 | `ai.openclaw.gateway.plist` | launchd plist for the gateway service |
 | `AUTO_START_GUIDE.md` | How to set up all launchd services from scratch |
 | `BACKUP_AND_RESTORE.md` | Backup and restore runbook |
@@ -126,7 +126,7 @@ Tracked baseline for `~/.openclaw/`. Changes here should be synced to `~/.opencl
 | `run-openclaw-backup.sh` | Backup runner with locking and failure alerts |
 | `dropbox-openclaw-backup.sh` | Dropbox-targeted backup |
 | `install-openclaw-backup-jobs.sh` | Install launchd plist for scheduled backups |
-| `check-openclaw-cron-guardrail.sh` | CI guardrail: fail if system crontab has OpenClaw jobs |
+| `check-openclaw-cron-guardrail.sh` | CI guardrail: launchd-only scheduling for repo-managed OpenClaw jobs |
 | `setup-openclaw-full.sh` | Full first-time OpenClaw setup |
 | `install-launchagents.sh` | Install all openclaw launchd plists from `openclaw-config/` |
 | `claude_start.sh` | Start Claude Code agent session |
@@ -184,7 +184,7 @@ Standalone OpenClaw agent config for a Discord engineering bot — separate `ope
 
 Automated PR jobs (comment-validation, fixpr, fix-comment, codex-update) are driven by `jleechanorg-pr-monitor`.
 
-These jobs run through the **openclaw gateway's built-in cron scheduler**. On macOS (post-2026-03-04 migration) they do not appear in `crontab -l`. On Linux environments set up with `scripts/claude_start.sh`, a fallback crontab entry may still exist — check both when debugging.
+These jobs currently run through the **openclaw gateway's built-in cron scheduler**. Repo-managed schedules in this repository use launchd; PR automation remains an external live configuration under `~/.openclaw/cron/jobs.json`.
 
 | What | Where |
 |------|-------|
@@ -212,16 +212,17 @@ cat ~/.openclaw/cron/jobs.json | python3 -m json.tool
 # Add/change a PR automation job: edit ~/.openclaw/cron/jobs.json directly
 ```
 
-## OpenClaw Gateway Cron (all scheduled jobs)
+## Launchd Scheduled Jobs (repo-managed)
 
-The gateway also runs these non-PR jobs (tracked in `openclaw-config/cron/jobs.json`):
+Repo-managed recurring jobs run via launchd labels `ai.openclaw.schedule.*`.
+Payload text remains tracked in `openclaw-config/cron/jobs.json` and is executed by `~/.openclaw/run-scheduled-job.sh`.
 
 | Job | Schedule | Purpose |
 |-----|----------|---------|
 | `Daily Slack Check-in 9AM` | `0 9 * * *` PT | Morning summary to Slack |
 | `Daily Slack Check-in 12PM` | `0 12 * * *` PT | Midday summary |
 | `Daily Slack Check-in 6PM` | `0 18 * * *` PT | Evening summary |
-| `OpenClaw backup (in-app)` | `20 */4 * * *` | Backup `~/.openclaw/` every 4h |
+| `OpenClaw backup` | `20 */4 * * *` | Backup `~/.openclaw/` every 4h |
 | `Genesis memory curation` | `0 22 * * 0` PT | Weekly memory curation |
 
 ## Quick Start
@@ -255,6 +256,7 @@ ai_orch run --agent-cli codex "Refactor auth middleware"
 
 ```bash
 ./scripts/install-launchagents.sh  # installs all plists from openclaw-config/
+./scripts/install-openclaw-scheduled-jobs.sh  # installs and migrates scheduled jobs
 ```
 
 ## Agent Selection Guide

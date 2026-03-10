@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>ai.openclaw.schedule.backup-4h20</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/bash</string>
+      <string>@HOME@/.openclaw/run-scheduled-job.sh</string>
+      <string>882c6964-1deb-4b4b-936d-9edcab83fbda</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <array>
+      <dict><key>Hour</key><integer>0</integer><key>Minute</key><integer>20</integer></dict>
+      <dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>20</integer></dict>
+      <dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>20</integer></dict>
+      <dict><key>Hour</key><integer>12</integer><key>Minute</key><integer>20</integer></dict>
+      <dict><key>Hour</key><integer>16</integer><key>Minute</key><integer>20</integer></dict>
+      <dict><key>Hour</key><integer>20</integer><key>Minute</key><integer>20</integer></dict>
+    </array>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>@HOME@/.openclaw/logs/scheduled-jobs/backup-4h20.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>@HOME@/.openclaw/logs/scheduled-jobs/backup-4h20.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>@/.bun/bin:@/.local/bin:@/bin:@/Library/pnpm:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <key>HOME</key>
+      <string>@HOME@</string>
+    </dict>
+  </dict>
+</plist>

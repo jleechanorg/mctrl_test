@@ -119,7 +119,10 @@ install_startup_check_script() {
   install -d "$OPENCLAW_HOME"
   mkdir -p "$OPENCLAW_HOME/logs"
   install -m 755 "$CONFIG_DIR/startup-check.sh" "$OPENCLAW_HOME/startup-check.sh"
+  install -m 755 "$CONFIG_DIR/run-scheduled-job.sh" "$OPENCLAW_HOME/run-scheduled-job.sh"
+  mkdir -p "$OPENCLAW_HOME/logs/scheduled-jobs"
   echo "  ✓ startup-check.sh installed"
+  echo "  ✓ run-scheduled-job.sh installed"
 }
 
 _esc_sed() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/&/\\&/g; s/|/\\|/g'; }
@@ -167,6 +170,10 @@ else
 fi
 install_startup_check_script
 install_plist "$CONFIG_DIR/ai.openclaw.startup-check.plist"
+for schedule_plist in "$CONFIG_DIR"/ai.openclaw.schedule.*.plist; do
+  [[ -f "$schedule_plist" ]] || continue
+  install_plist "$schedule_plist"
+done
 MC_BACKEND_PLIST="$CONFIG_DIR/ai.openclaw.mission-control.plist"
 MC_FRONTEND_PLIST="$CONFIG_DIR/ai.openclaw.mission-control-frontend.plist"
 if [[ -f "$MC_BACKEND_PLIST" ]]; then
