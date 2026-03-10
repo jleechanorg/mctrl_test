@@ -172,17 +172,22 @@ def resolve_worktree_for_branch(
     return path, True
 
 
-def _parse_ai_orch_output(output: str) -> tuple[str, str, str]:
-    """Extract (session_name, worktree_path, branch) from ai_orch run output."""
+def _parse_ai_orch_output(output: str, known_worktree: str = "") -> tuple[str, str, str]:
+    """Extract (session_name, worktree_path, branch) from ai_orch run output.
+
+    If known_worktree is provided (e.g., for cross-repo tasks we created ourselves),
+    use that as the worktree path instead of parsing from output.
+    """
     session = ""
-    worktree = ""
+    worktree = known_worktree
     branch = ""
 
     for line in output.splitlines():
         # 🧩 Worktree: /tmp/ai-orch-worktrees/ai-orch-12345 (branch: ai-orch-12345)
         m = re.search(r"Worktree:\s+(\S+)\s+\(branch:\s+(\S+)\)", line)
         if m:
-            worktree = m.group(1)
+            if not known_worktree:  # Only parse if we don't already know it
+                worktree = m.group(1)
             branch = m.group(2)
         # 🚀 Async session: ai-claude-dfa2c0
         m2 = re.search(r"Async session:\s+(\S+)", line)
@@ -218,8 +223,108 @@ def _get_start_sha(worktree_path: str) -> str:
 _DEFAULT_WORKTREE_BASE = os.path.expanduser("~/.mctrl/worktrees")
 
 
-def _task_with_push_instruction(task: str, branch: str = "") -> str:
-    """Append a durable push requirement if the task does not already include one."""
+# Cross-repo PR pattern - injected automatically for cross-repo tasks
+_CROSS_REPO_CONTEXT = """
+## CROSS-REPO PR PATTERN (IMPORTANT)
+When the task involves making a PR to a DIFFERENT REPO than your current worktree:
+- DO NOT clone the target repo into a subdirectory
+- DO NOT work in the current jleechanclaw worktree
+- Instead: create a NEW worktree FOR the target repo as a sibling directory
+- Work directly in that repo's worktree
+- Commit and push directly to that repo
+- Example: for "mctrl_test" repo, create worktree at ../mctrl_test or /tmp/ai-orch-worktrees/mctrl_test
+- Use: `gh pr create --repo owner/repo --base main --head <branch>` to PR cross-repo
+"""
+
+
+def _is_cross_repo_task(task: str) -> bool:
+    """Detect if task is targeting a different repo."""
+    task_lower = task.lower()
+    # Patterns indicating cross-repo work — must be specific to avoid
+    # false positives on generic English phrases like "Add tests to the codebase".
+    cross_repo_indicators = [
+        " pr against ",
+        " pr to ",
+        " make a pr",
+        " create a pr",
+    ]
+    return any(indicator in task_lower for indicator in cross_repo_indicators)
+
+
+def _inject_cross_repo_context(task: str, repo_root: str) -> str:
+    """Inject cross-repo PR context if task appears to target a different repo."""
+    if not _is_cross_repo_task(task):
+        return task
+
+    # Check if we're already in the target repo (no cross-repo needed)
+    repo_name = _extract_repo_name_hint(task)
+    if repo_name:
+        # Check if the current worktree repo matches
+        current_repo = Path(repo_root).name
+        if current_repo.lower() == repo_name.lower():
+            return task
+
+    # Inject cross-repo context
+    return f"{task.rstrip()}\n{_CROSS_REPO_CONTEXT}"
+
+
+def _resolve_target_repo(task: str, default_repo_root: str) -> tuple[str, str]:
+    """Resolve the target repo for cross-repo tasks.
+
+    Returns (repo_root, worktree_path) for the target repo.
+    If no cross-repo hint found, returns default - LLM will use memory to infer.
+    """
+    if not _is_cross_repo_task(task):
+        # Not a cross-repo task - LLM will use memory to determine target
+        return default_repo_root, ""
+
+    repo_name = _extract_repo_name_hint(task)
+    if not repo_name:
+        # LLM will use memory to find target repo
+        return default_repo_root, ""
+
+    # Check if we're already in the target repo
+    current_repo = Path(default_repo_root).name
+    if current_repo.lower() == repo_name.lower():
+        return default_repo_root, ""
+
+    # Try to find the target repo locally
+    worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
+
+    # Common locations to look for the target repo
+    search_paths = [
+        Path(worktree_base) / repo_name,
+        Path.home() / "projects" / repo_name,
+        Path.home() / "project_jleechanclaw" / repo_name,
+        Path("/tmp") / repo_name,
+    ]
+
+    for search_path in search_paths:
+        if _looks_like_git_repo(search_path):
+            return str(search_path), str(search_path)
+
+    # Repo not found locally - LLM will use memory to find it
+    return default_repo_root, ""
+
+
+def _task_with_push_instruction(task: str, branch: str = "", repo_root: str = ".") -> str:
+    """Append instructions and context to help the LLM determine the target repo."""
+    # If no explicit target repo in task, remind LLM to use memory
+    if not _extract_repo_name_hint(task) and not _is_cross_repo_task(task):
+        memory_reminder = """
+## TARGET REPO REMINDER
+This task does not specify a target repo. Before starting:
+1. Search memories for similar past tasks and their target repos
+2. Search ~/projects for relevant repos
+3. If unsure, ask the user which repo to target
+
+Do NOT assume a default repo - always verify with memory or user.
+"""
+        task = f"{task.rstrip()}\n{memory_reminder}"
+
+    # First inject cross-repo context
+    task = _inject_cross_repo_context(task, repo_root)
+
     normalized = task.lower()
     if "git commit" in normalized:
         return task
@@ -263,7 +368,11 @@ def _task_with_push_instruction(task: str, branch: str = "") -> str:
 
 
 def _extract_repo_name_hint(task: str) -> str:
+    """Extract repo name from task text."""
     patterns = (
+        r"\bagainst\s+`?([A-Za-z0-9._-]+)`?\s*$",
+        r"\bagainst\s+`?([A-Za-z0-9._-]+)`?\s+repo",
+        r"\bagainst\s+`?([A-Za-z0-9._-]+)`?\s+repository",
         r"\bin\s+`?([A-Za-z0-9._-]+)`?\s+repo\b",
         r"\bin\s+`?([A-Za-z0-9._-]+)`?\s+repository\b",
         r"github\.com/[^/\s]+/([A-Za-z0-9._-]+)",
@@ -283,13 +392,18 @@ def _looks_like_git_repo(path: Path) -> bool:
 
 
 def _resolve_repo_root(repo_root: str, task: str) -> str:
-    """Resolve dispatch repo root, preferring explicit arg then task repo hints."""
+    """Resolve dispatch repo root from explicit arg or task repo hints.
+
+    If no target repo found, returns explicit path - the LLM will
+    use memory to infer the target repo.
+    """
     explicit = os.path.realpath(os.path.expanduser(repo_root or "."))
     if repo_root and repo_root != ".":
         return explicit
 
     repo_name = _extract_repo_name_hint(task)
     if not repo_name:
+        # No explicit target - LLM will use memory to infer
         return explicit
 
     candidates: list[Path] = []
@@ -438,7 +552,7 @@ def _dispatch_cursor_direct(
 
     session_name = _make_async_session_name("cursor", repo_root)
     shell_cmd = _build_cursor_shell_cmd(
-        _task_with_push_instruction(task, effective_branch),
+        _task_with_push_instruction(task, effective_branch, repo_root),
         worktree_path,
     )
     result = subprocess.run(
@@ -511,23 +625,75 @@ def dispatch(
             repo_root=repo_root,
         )
     else:
+        # Track known worktree path for cross-repo tasks
+        known_worktree_path = ""
+
         if branch:
             worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
             os.makedirs(worktree_base, exist_ok=True)
             cwd, _ = resolve_worktree_for_branch(branch, repo_root, worktree_base)
-            agent_task = _task_with_push_instruction(task, branch)
+            agent_task = _task_with_push_instruction(task, branch, repo_root)
             cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, agent_task]
         else:
-            cwd = repo_root
-            agent_task = _task_with_push_instruction(task)
-            cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, agent_task]
+            # For cross-repo tasks, resolve the target repo first
+            # NO FALLBACK - if target repo mentioned, must use it
+            target_repo, existing_worktree = _resolve_target_repo(task, repo_root)
+
+            if existing_worktree:
+                # Use existing worktree for target repo
+                cwd = existing_worktree
+                known_worktree_path = existing_worktree
+                agent_task = _task_with_push_instruction(task, "", cwd)
+                cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, agent_task]
+            else:
+                # Target repo mentioned but not found locally - extract and create worktree
+                repo_name = _extract_repo_name_hint(task)
+                if not repo_name:
+                    # No target repo in task - let LLM use memory to determine target
+                    cwd = repo_root
+                    agent_task = _task_with_push_instruction(task, "", repo_root)
+                    cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, agent_task]
+                else:
+                    # Target repo specified - must create worktree for it
+                    worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
+                    os.makedirs(worktree_base, exist_ok=True)
+
+                    # Try to find the target repo root
+                    target_repo_root = _resolve_repo_root(repo_root, f"in {repo_name} repo")
+
+                    if not _looks_like_git_repo(Path(target_repo_root)):
+                        raise ValueError(
+                            f"Target repo '{repo_name}' not found locally. "
+                            f"Expected at: {target_repo_root}. "
+                            f"Please clone the target repo first."
+                        )
+
+                    # Create worktree from the target repo - use unique path
+                    import uuid
+                    unique_id = uuid.uuid4().hex[:6]
+                    branch_name = f"ai-orch-{int(time.time()) % 100000}-{unique_id}"
+                    target_worktree_path = os.path.join(worktree_base, f"{repo_name}-{unique_id}")
+                    result = subprocess.run(
+                        ["git", "worktree", "add", "-b", branch_name, target_worktree_path],
+                        cwd=target_repo_root,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    if result.returncode != 0:
+                        raise RuntimeError(f"Failed to create worktree for {repo_name}: {result.stderr}")
+
+                    cwd = target_worktree_path
+                    known_worktree_path = target_worktree_path
+                    agent_task = _task_with_push_instruction(task, "", cwd)
+                    cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, agent_task]
 
         result, output = _run_ai_orch_with_fallback(cmd, cwd=cwd)
 
         if result.returncode != 0:
             raise RuntimeError(f"ai_orch failed (exit {result.returncode}):\n{output}")
 
-        session_name, worktree_path, parsed_branch = _parse_ai_orch_output(output)
+        session_name, worktree_path, parsed_branch = _parse_ai_orch_output(output, known_worktree_path)
         if not session_name or not worktree_path:
             raise RuntimeError(f"Could not parse ai_orch output:\n{output}")
 
