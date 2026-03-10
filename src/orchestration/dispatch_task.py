@@ -26,6 +26,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
 from orchestration.openclaw_notifier import notify_openclaw
@@ -245,8 +246,9 @@ def _is_cross_repo_task(task: str) -> bool:
     cross_repo_indicators = [
         " pr against ",
         " pr to ",
-        " make a pr",
-        " create a pr",
+        "github.com/",
+        " repo ",
+        " repository ",
     ]
     return any(indicator in task_lower for indicator in cross_repo_indicators)
 
@@ -272,16 +274,15 @@ def _resolve_target_repo(task: str, default_repo_root: str) -> tuple[str, str]:
     """Resolve the target repo for cross-repo tasks.
 
     Returns (repo_root, worktree_path) for the target repo.
-    If no cross-repo hint found, returns default - LLM will use memory to infer.
+    worktree_path is only set when a pre-existing worktree is intentionally reused.
+    If no resolvable cross-repo target exists, returns ("", "").
     """
     if not _is_cross_repo_task(task):
-        # Not a cross-repo task - LLM will use memory to determine target
-        return default_repo_root, ""
+        return "", ""
 
     repo_name = _extract_repo_name_hint(task)
     if not repo_name:
-        # LLM will use memory to find target repo
-        return default_repo_root, ""
+        return "", ""
 
     # Check if we're already in the target repo
     current_repo = Path(default_repo_root).name
@@ -301,16 +302,17 @@ def _resolve_target_repo(task: str, default_repo_root: str) -> tuple[str, str]:
 
     for search_path in search_paths:
         if _looks_like_git_repo(search_path):
-            return str(search_path), str(search_path)
+            return str(search_path), ""
 
-    # Repo not found locally - LLM will use memory to find it
-    return default_repo_root, ""
+    return "", ""
 
 
 def _task_with_push_instruction(task: str, branch: str = "", repo_root: str = ".") -> str:
     """Append instructions and context to help the LLM determine the target repo."""
-    # If no explicit target repo in task, remind LLM to use memory
-    if not _extract_repo_name_hint(task) and not _is_cross_repo_task(task):
+    # Only add target-repo reminders when the task hints at repo routing.
+    task_lower = task.lower()
+    routing_hint = ("repo" in task_lower) or ("pr" in task_lower)
+    if routing_hint and not _extract_repo_name_hint(task) and not _is_cross_repo_task(task):
         memory_reminder = """
 ## TARGET REPO REMINDER
 This task does not specify a target repo. Before starting:
@@ -603,7 +605,7 @@ def dispatch(
     registry_path: str,
     branch: str = "",
     repo_root: str = ".",
-) -> BeadSessionMapping:
+    ) -> BeadSessionMapping:
     """Spawn ai_orch session and register the mapping. Returns the created mapping.
 
     When branch is provided, resolve_worktree_for_branch is called first:
@@ -611,7 +613,8 @@ def dispatch(
     - Remote-only branch → checkout fresh worktree, ai_orch runs there
     - Branch missing everywhere → raises ValueError before spawning
 
-    Without branch, ai_orch creates a new worktree via --worktree (new task).
+    Without branch, ai_orch creates a new worktree via --worktree for same-repo
+    tasks and creates target-repo worktrees for explicit cross-repo tasks.
     """
     if slack_trigger_ts and not slack_trigger_channel:
         raise ValueError("slack_trigger_channel is required when slack_trigger_ts is set")
@@ -627,6 +630,8 @@ def dispatch(
     else:
         # Track known worktree path for cross-repo tasks
         known_worktree_path = ""
+        created_worktree_path = ""
+        created_worktree_repo_root = ""
 
         if branch:
             worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
@@ -637,7 +642,7 @@ def dispatch(
         else:
             # For cross-repo tasks, resolve the target repo first
             # NO FALLBACK - if target repo mentioned, must use it
-            target_repo, existing_worktree = _resolve_target_repo(task, repo_root)
+            target_repo_root, existing_worktree = _resolve_target_repo(task, repo_root)
 
             if existing_worktree:
                 # Use existing worktree for target repo
@@ -654,12 +659,15 @@ def dispatch(
                     agent_task = _task_with_push_instruction(task, "", repo_root)
                     cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, agent_task]
                 else:
-                    # Target repo specified - must create worktree for it
+                    if not target_repo_root:
+                        raise ValueError(
+                            f"Target repo '{repo_name}' not found locally. "
+                            "Please clone the target repo first."
+                        )
+
+                    # Target repo specified - create a dedicated worktree
                     worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
                     os.makedirs(worktree_base, exist_ok=True)
-
-                    # Try to find the target repo root
-                    target_repo_root = _resolve_repo_root(repo_root, f"in {repo_name} repo")
 
                     if not _looks_like_git_repo(Path(target_repo_root)):
                         raise ValueError(
@@ -669,7 +677,6 @@ def dispatch(
                         )
 
                     # Create worktree from the target repo - use unique path
-                    import uuid
                     unique_id = uuid.uuid4().hex[:6]
                     branch_name = f"ai-orch-{int(time.time()) % 100000}-{unique_id}"
                     target_worktree_path = os.path.join(worktree_base, f"{repo_name}-{unique_id}")
@@ -685,12 +692,23 @@ def dispatch(
 
                     cwd = target_worktree_path
                     known_worktree_path = target_worktree_path
+                    created_worktree_path = target_worktree_path
+                    created_worktree_repo_root = target_repo_root
                     agent_task = _task_with_push_instruction(task, "", cwd)
                     cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, agent_task]
 
         result, output = _run_ai_orch_with_fallback(cmd, cwd=cwd)
 
         if result.returncode != 0:
+            if created_worktree_path:
+                subprocess.run(
+                    ["git", "worktree", "remove", "--force", created_worktree_path],
+                    cwd=created_worktree_repo_root or repo_root,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False,
+                )
             raise RuntimeError(f"ai_orch failed (exit {result.returncode}):\n{output}")
 
         session_name, worktree_path, parsed_branch = _parse_ai_orch_output(output, known_worktree_path)

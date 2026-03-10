@@ -1,7 +1,7 @@
 {
   "meta": {
-    "lastTouchedVersion": "2026.2.12",
-    "lastTouchedAt": "2026-03-02T10:53:02Z"
+    "lastTouchedVersion": "2026.3.10",
+    "lastTouchedAt": "2026-03-10T20:30:00Z"
   },
   "env": {
     "GOOGLE_CLOUD_PROJECT": "infinite-zephyr-487405-d0",
@@ -64,8 +64,7 @@
       "model": {
         "primary": "minimax-portal/MiniMax-M2.5",
         "fallbacks": [
-          "openai-codex/gpt-5.3-codex-spark",
-          "minimax-portal/MiniMax-M2.5"
+          "openai-codex/gpt-5.3-codex-spark"
         ]
       },
       "models": {
@@ -287,7 +286,7 @@
       "dmPolicy": "allowlist",
       "selfChatMode": true,
       "allowFrom": [
-        "+6502965127"
+        "+15555550123"
       ],
       "groupPolicy": "allowlist",
       "mediaMaxMb": 50,
@@ -433,7 +432,7 @@
               "transport": "http",
               "url": "${SECOND_OPINION_MCP_URL}",
               "headers": {
-                "Authorization": "Bearer PLACEHOLDER-mcp-agent-mail"
+                "Authorization": "Bearer ${SECOND_OPINION_MCP_TOKEN}"
               }
             },
             {

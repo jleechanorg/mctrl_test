@@ -12,7 +12,6 @@ import http.server
 import json
 import os
 import threading
-import time
 from typing import Any
 from urllib.request import Request, urlopen
 
@@ -98,8 +97,11 @@ def mcp_server():
         handler=lambda args: [{"role": "user", "content": {"type": "text", "text": f"Hello {args['name']}"}}],
     ))
 
-    McpHttpHandler.router = router
-    server = http.server.HTTPServer(("127.0.0.1", 0), McpHttpHandler)
+    class BoundMcpHttpHandler(McpHttpHandler):
+        pass
+
+    BoundMcpHttpHandler.router = router
+    server = http.server.HTTPServer(("127.0.0.1", 0), BoundMcpHttpHandler)
     port = server.server_address[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
