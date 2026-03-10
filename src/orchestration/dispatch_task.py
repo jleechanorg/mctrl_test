@@ -273,19 +273,16 @@ def _resolve_target_repo(task: str, default_repo_root: str) -> tuple[str, str]:
     """Resolve the target repo for cross-repo tasks.
 
     Returns (repo_root, worktree_path) for the target repo.
-    NO DEFAULT - fails if no target repo specified in task.
+    If no cross-repo hint found, returns default - LLM will use memory to infer.
     """
     if not _is_cross_repo_task(task):
-        raise ValueError(
-            f"No target repo specified. Task must include target repo "
-            f"(e.g., 'pr against <repo>', 'in <repo> repo')."
-        )
+        # Not a cross-repo task - LLM will use memory to determine target
+        return default_repo_root, ""
 
     repo_name = _extract_repo_name_hint(task)
     if not repo_name:
-        raise ValueError(
-            f"No target repo found in task. Could not extract repo name from: {task[:100]}..."
-        )
+        # LLM will use memory to find target repo
+        return default_repo_root, ""
 
     # Check if we're already in the target repo
     current_repo = Path(default_repo_root).name
@@ -307,12 +304,25 @@ def _resolve_target_repo(task: str, default_repo_root: str) -> tuple[str, str]:
         if _looks_like_git_repo(search_path):
             return str(search_path), str(search_path)
 
-    # Repo not found locally - this will be handled later with a clear error
-    return "", ""
+    # Repo not found locally - LLM will use memory to find it
+    return default_repo_root, ""
 
 
 def _task_with_push_instruction(task: str, branch: str = "", repo_root: str = ".") -> str:
-    """Append a durable push requirement and cross-repo context if needed."""
+    """Append instructions and context to help the LLM determine the target repo."""
+    # If no explicit target repo in task, remind LLM to use memory
+    if not _extract_repo_name_hint(task) and not _is_cross_repo_task(task):
+        memory_reminder = """
+## TARGET REPO REMINDER
+This task does not specify a target repo. Before starting:
+1. Search memories for similar past tasks and their target repos
+2. Search ~/projects for relevant repos
+3. If unsure, ask the user which repo to target
+
+Do NOT assume a default repo - always verify with memory or user.
+"""
+        task = f"{task.rstrip()}\n{memory_reminder}"
+
     # First inject cross-repo context
     task = _inject_cross_repo_context(task, repo_root)
 
@@ -385,7 +395,8 @@ def _looks_like_git_repo(path: Path) -> bool:
 def _resolve_repo_root(repo_root: str, task: str) -> str:
     """Resolve dispatch repo root from explicit arg or task repo hints.
 
-    NO DEFAULT - if no target repo found, raise error.
+    If no target repo found, returns explicit path - the LLM will
+    use memory to infer the target repo.
     """
     explicit = os.path.realpath(os.path.expanduser(repo_root or "."))
     if repo_root and repo_root != ".":
@@ -393,10 +404,8 @@ def _resolve_repo_root(repo_root: str, task: str) -> str:
 
     repo_name = _extract_repo_name_hint(task)
     if not repo_name:
-        raise ValueError(
-            f"No target repo specified in task or args. "
-            f"Task must include target repo (e.g., 'pr against <repo>' or 'in <repo> repo')."
-        )
+        # No explicit target - LLM will use memory to infer
+        return explicit
 
     candidates: list[Path] = []
 
@@ -641,11 +650,10 @@ def dispatch(
                 # Target repo mentioned but not found locally - extract and create worktree
                 repo_name = _extract_repo_name_hint(task)
                 if not repo_name:
-                    # No target repo in task - FAIL (no default repo)
-                    raise ValueError(
-                        f"Task must specify a target repo (e.g., 'pr against <repo>'). "
-                        f"Could not extract target repo from: {task[:100]}..."
-                    )
+                    # No target repo in task - let LLM use memory to determine target
+                    cwd = repo_root
+                    agent_task = _task_with_push_instruction(task, "", repo_root)
+                    cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, agent_task]
                 else:
                     # Target repo specified - must create worktree for it
                     worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
