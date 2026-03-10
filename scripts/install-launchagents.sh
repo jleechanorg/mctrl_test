@@ -21,6 +21,16 @@ LAUNCHD_DIR="$HOME/Library/LaunchAgents"
 OPENCLAW_HOME="$HOME/.openclaw"
 ENV_FILE="$REPO_DIR/.env"
 
+detect_local_timezone() {
+  local target
+  target="$(readlink /etc/localtime 2>/dev/null || true)"
+  if [[ "$target" == *"/zoneinfo/"* ]]; then
+    echo "${target##*/zoneinfo/}"
+    return 0
+  fi
+  echo "${TZ:-unknown}"
+}
+
 is_valid_mc_token() {
   local token="${1:-}"
   [[ -n "$token" ]] && [[ ${#token} -ge 50 ]] && [[ "$token" != "your-local-auth-token-here" ]]
@@ -107,6 +117,13 @@ PY
 fi
 
 echo "MC token: ${MC_TOKEN:0:8}... (${#MC_TOKEN} chars)"
+
+LOCAL_TZ="$(detect_local_timezone)"
+if [[ "$LOCAL_TZ" != "America/Los_Angeles" && "${OPENCLAW_ALLOW_NON_PT_SCHEDULE:-0}" != "1" ]]; then
+  echo "Error: local timezone is '$LOCAL_TZ' but scheduled labels are defined for America/Los_Angeles." >&2
+  echo "Set OPENCLAW_ALLOW_NON_PT_SCHEDULE=1 to override." >&2
+  exit 1
+fi
 
 # --- preserve existing gateway token if available ---
 if [[ -z "$GATEWAY_TOKEN" && -f "$LAUNCHD_DIR/ai.openclaw.gateway.plist" ]]; then

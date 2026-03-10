@@ -17,14 +17,7 @@ SCHEDULED_LABELS=(
   "ai.openclaw.schedule.genesis-memory-curation-weekly"
   "ai.openclaw.schedule.genesis-pattern-extraction-weekly"
 )
-MIGRATED_JOB_IDS=(
-  "522e23a7-c7c1-41f2-b117-a3af05661578"
-  "7424ea0d-2c8a-4a59-b58e-09b242c6c58e"
-  "5192e214-2754-49d5-b567-07c7b24cb116"
-  "882c6964-1deb-4b4b-936d-9edcab83fbda"
-  "genesis-memory-curation-weekly"
-  "genesis-pattern-extraction-weekly"
-)
+MIGRATED_JOB_IDS=()
 
 PASS_COUNT=0
 WARN_COUNT=0
@@ -82,6 +75,38 @@ require_cmd() {
   fi
 }
 
+default_migrated_job_ids() {
+  cat <<'EOF'
+522e23a7-c7c1-41f2-b117-a3af05661578
+7424ea0d-2c8a-4a59-b58e-09b242c6c58e
+5192e214-2754-49d5-b567-07c7b24cb116
+882c6964-1deb-4b4b-936d-9edcab83fbda
+genesis-memory-curation-weekly
+genesis-pattern-extraction-weekly
+EOF
+}
+
+load_migrated_job_ids() {
+  while IFS= read -r id; do
+    [[ -n "$id" ]] && MIGRATED_JOB_IDS+=("$id")
+  done < <(jq -r '.migratedLaunchdJobIds[]?' "$REPO_CONFIG/cron/jobs.json" 2>/dev/null || true)
+  if [[ ${#MIGRATED_JOB_IDS[@]} -eq 0 ]]; then
+    while IFS= read -r id; do
+      [[ -n "$id" ]] && MIGRATED_JOB_IDS+=("$id")
+    done < <(default_migrated_job_ids)
+  fi
+}
+
+detect_local_timezone() {
+  local target
+  target="$(readlink /etc/localtime 2>/dev/null || true)"
+  if [[ "$target" == *"/zoneinfo/"* ]]; then
+    echo "${target##*/zoneinfo/}"
+    return 0
+  fi
+  echo "${TZ:-unknown}"
+}
+
 json_valid() {
   local file="$1"
   jq empty "$file" >/dev/null 2>&1
@@ -115,6 +140,15 @@ else
   warn 'non-macOS host; launchd checks are skipped'
 fi
 
+LOCAL_TZ="$(detect_local_timezone)"
+if [[ "$LOCAL_TZ" == "America/Los_Angeles" ]]; then
+  pass 'local timezone is America/Los_Angeles (matches migrated schedule semantics)'
+elif [[ "${OPENCLAW_ALLOW_NON_PT_SCHEDULE:-0}" == "1" ]]; then
+  warn "local timezone is '$LOCAL_TZ' (override OPENCLAW_ALLOW_NON_PT_SCHEDULE=1 active)"
+else
+  fail "local timezone is '$LOCAL_TZ' but migrated schedules are authored for America/Los_Angeles (set OPENCLAW_ALLOW_NON_PT_SCHEDULE=1 to override)"
+fi
+
 require_cmd jq
 require_cmd curl
 require_cmd openclaw
@@ -135,6 +169,7 @@ for label in "${SCHEDULED_LABELS[@]}"; do
   require_file "$REPO_CONFIG/$label.plist" "repo launchd schedule plist ($label)"
 done
 require_file "$REPO_ROOT/scripts/sync-openclaw-config.sh" 'sync script'
+load_migrated_job_ids
 printf '\n'
 
 require_dir "$LIVE_OPENCLAW" 'live ~/.openclaw'
@@ -191,9 +226,18 @@ else
 fi
 
 if [[ "$repo_json_ok" -eq 1 && "$live_json_ok" -eq 1 ]]; then
-  repo_norm=$(jq -c '{gateway:{port:.gateway.port,mode:.gateway.mode,bind:.gateway.bind,auth_mode:.gateway.auth.mode,tailscale_mode:.gateway.tailscale.mode,tailscale_reset:.gateway.tailscale.resetOnExit,chat_completions:.gateway.http.endpoints.chatCompletions.enabled},env:{OPENCLAW_RAW_STREAM:.env.OPENCLAW_RAW_STREAM,OPENCLAW_RAW_STREAM_PATH:.env.OPENCLAW_RAW_STREAM_PATH,GOOGLE_CLOUD_PROJECT:.env.GOOGLE_CLOUD_PROJECT}}' "$REPO_CONFIG/openclaw.json" 2>/dev/null || true)
-  live_norm=$(jq -c '{gateway:{port:.gateway.port,mode:.gateway.mode,bind:.gateway.bind,auth_mode:.gateway.auth.mode,tailscale_mode:.gateway.tailscale.mode,tailscale_reset:.gateway.tailscale.resetOnExit,chat_completions:.gateway.http.endpoints.chatCompletions.enabled},env:{OPENCLAW_RAW_STREAM:.env.OPENCLAW_RAW_STREAM,OPENCLAW_RAW_STREAM_PATH:.env.OPENCLAW_RAW_STREAM_PATH,GOOGLE_CLOUD_PROJECT:.env.GOOGLE_CLOUD_PROJECT}}' "$LIVE_OPENCLAW/openclaw.json" 2>/dev/null || true)
-  if [[ -z "$repo_norm" || -z "$live_norm" ]]; then
+  repo_norm=''
+  live_norm=''
+  repo_proj_ok=0
+  live_proj_ok=0
+  if repo_norm=$(jq -c '{gateway:{port:.gateway.port,mode:.gateway.mode,bind:.gateway.bind,auth_mode:.gateway.auth.mode,tailscale_mode:.gateway.tailscale.mode,tailscale_reset:.gateway.tailscale.resetOnExit,chat_completions:.gateway.http.endpoints.chatCompletions.enabled},env:{OPENCLAW_RAW_STREAM:.env.OPENCLAW_RAW_STREAM,OPENCLAW_RAW_STREAM_PATH:.env.OPENCLAW_RAW_STREAM_PATH,GOOGLE_CLOUD_PROJECT:.env.GOOGLE_CLOUD_PROJECT}}' "$REPO_CONFIG/openclaw.json" 2>/dev/null); then
+    repo_proj_ok=1
+  fi
+  if live_norm=$(jq -c '{gateway:{port:.gateway.port,mode:.gateway.mode,bind:.gateway.bind,auth_mode:.gateway.auth.mode,tailscale_mode:.gateway.tailscale.mode,tailscale_reset:.gateway.tailscale.resetOnExit,chat_completions:.gateway.http.endpoints.chatCompletions.enabled},env:{OPENCLAW_RAW_STREAM:.env.OPENCLAW_RAW_STREAM,OPENCLAW_RAW_STREAM_PATH:.env.OPENCLAW_RAW_STREAM_PATH,GOOGLE_CLOUD_PROJECT:.env.GOOGLE_CLOUD_PROJECT}}' "$LIVE_OPENCLAW/openclaw.json" 2>/dev/null); then
+    live_proj_ok=1
+  fi
+
+  if [[ "$repo_proj_ok" -ne 1 || "$live_proj_ok" -ne 1 ]]; then
     fail 'cannot compare normalized gateway config because projection failed'
   elif cmp_text "$repo_norm" "$live_norm"; then
     pass 'repo/live normalized gateway config is in sync'
@@ -228,7 +272,7 @@ if [[ -f "$LIVE_OPENCLAW/cron/jobs.json" ]] && json_valid "$LIVE_OPENCLAW/cron/j
   done
 
   if [[ -n "$missing_ids" ]]; then
-    fail "migrated cron job IDs missing in ~/.openclaw/cron/jobs.json: $missing_ids"
+    fail "migrated cron job IDs are missing from ~/.openclaw/cron/jobs.json: $missing_ids"
   elif [[ -z "$still_enabled" ]]; then
     pass 'migrated OpenClaw cron jobs are disabled in ~/.openclaw/cron/jobs.json'
   else

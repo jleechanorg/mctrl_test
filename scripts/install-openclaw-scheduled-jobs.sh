@@ -11,6 +11,40 @@ RUNNER_DST="$LIVE_DIR/run-scheduled-job.sh"
 SCHEDULED_LOG_DIR="$LIVE_DIR/logs/scheduled-jobs"
 SYNC_SCRIPT="$REPO_ROOT/scripts/sync-openclaw-config.sh"
 
+default_migrated_job_ids() {
+  cat <<'EOF'
+522e23a7-c7c1-41f2-b117-a3af05661578
+7424ea0d-2c8a-4a59-b58e-09b242c6c58e
+5192e214-2754-49d5-b567-07c7b24cb116
+882c6964-1deb-4b4b-936d-9edcab83fbda
+genesis-memory-curation-weekly
+genesis-pattern-extraction-weekly
+EOF
+}
+
+load_migrated_job_ids() {
+  MIGRATED_JOB_IDS=()
+  while IFS= read -r id; do
+    [[ -n "$id" ]] && MIGRATED_JOB_IDS+=("$id")
+  done < <(jq -r '.migratedLaunchdJobIds[]?' "$CONFIG_DIR/cron/jobs.json" 2>/dev/null || true)
+
+  if [[ ${#MIGRATED_JOB_IDS[@]} -eq 0 ]]; then
+    while IFS= read -r id; do
+      [[ -n "$id" ]] && MIGRATED_JOB_IDS+=("$id")
+    done < <(default_migrated_job_ids)
+  fi
+}
+
+detect_local_timezone() {
+  local target
+  target="$(readlink /etc/localtime 2>/dev/null || true)"
+  if [[ "$target" == *"/zoneinfo/"* ]]; then
+    echo "${target##*/zoneinfo/}"
+    return 0
+  fi
+  echo "${TZ:-unknown}"
+}
+
 # Validate required tools before mutating anything (avoids half-migrated state)
 if ! command -v jq >/dev/null 2>&1; then
   echo "Error: jq is required but not installed. Install with: brew install jq" >&2
@@ -24,17 +58,17 @@ fi
 # Sync repo openclaw-config to live before loading (ensures jobs.json and skills are current)
 SYNC_SCRIPT="$REPO_ROOT/scripts/sync-openclaw-config.sh"
 if [[ -x "$SYNC_SCRIPT" ]]; then
-  "$SYNC_SCRIPT" --execute 2>/dev/null || true
+  "$SYNC_SCRIPT" --execute
 fi
 
-MIGRATED_JOB_IDS=(
-  "522e23a7-c7c1-41f2-b117-a3af05661578"
-  "7424ea0d-2c8a-4a59-b58e-09b242c6c58e"
-  "5192e214-2754-49d5-b567-07c7b24cb116"
-  "882c6964-1deb-4b4b-936d-9edcab83fbda"
-  "genesis-memory-curation-weekly"
-  "genesis-pattern-extraction-weekly"
-)
+load_migrated_job_ids
+
+LOCAL_TZ="$(detect_local_timezone)"
+if [[ "$LOCAL_TZ" != "America/Los_Angeles" && "${OPENCLAW_ALLOW_NON_PT_SCHEDULE:-0}" != "1" ]]; then
+  echo "Error: local timezone is '$LOCAL_TZ' but migrated schedules are defined for America/Los_Angeles." >&2
+  echo "Set OPENCLAW_ALLOW_NON_PT_SCHEDULE=1 to override." >&2
+  exit 1
+fi
 
 render_and_load_plist() {
   local src="$1"
@@ -76,20 +110,6 @@ mkdir -p "$LAUNCHD_DIR" "$LIVE_DIR" "$LIVE_DIR/cron" "$SCHEDULED_LOG_DIR"
 install -m 755 "$RUNNER_SRC" "$RUNNER_DST"
 echo "  ✓ installed runner $RUNNER_DST"
 
-if [[ -x "$SYNC_SCRIPT" ]]; then
-  echo "Syncing repo config into ~/.openclaw before launchd load..."
-  SYNC_DIRS="skills cron" "$SYNC_SCRIPT" --execute
-else
-  echo "Missing sync script: $SYNC_SCRIPT" >&2
-  exit 1
-fi
-
-echo "Installing launchd scheduled job plists..."
-for plist in "$CONFIG_DIR"/ai.openclaw.schedule.*.plist; do
-  [[ -f "$plist" ]] || continue
-  render_and_load_plist "$plist"
-done
-
 if [[ -f "$LIVE_JOBS" ]]; then
   backup="$LIVE_JOBS.bak.$(date +%Y%m%d-%H%M%S)"
   cp "$LIVE_JOBS" "$backup"
@@ -112,6 +132,12 @@ if [[ -f "$LIVE_JOBS" ]]; then
 else
   echo "  ! live cron file missing: $LIVE_JOBS (skipped disable step)"
 fi
+
+echo "Installing launchd scheduled job plists..."
+for plist in "$CONFIG_DIR"/ai.openclaw.schedule.*.plist; do
+  [[ -f "$plist" ]] || continue
+  render_and_load_plist "$plist"
+done
 
 printf '\nVerifying loaded labels...\n'
 for plist in "$CONFIG_DIR"/ai.openclaw.schedule.*.plist; do

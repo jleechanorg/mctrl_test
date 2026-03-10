@@ -1,5 +1,13 @@
 {
   "version": 1,
+  "migratedLaunchdJobIds": [
+    "522e23a7-c7c1-41f2-b117-a3af05661578",
+    "7424ea0d-2c8a-4a59-b58e-09b242c6c58e",
+    "5192e214-2754-49d5-b567-07c7b24cb116",
+    "882c6964-1deb-4b4b-936d-9edcab83fbda",
+    "genesis-memory-curation-weekly",
+    "genesis-pattern-extraction-weekly"
+  ],
   "jobs": [
     {
       "id": "522e23a7-c7c1-41f2-b117-a3af05661578",
