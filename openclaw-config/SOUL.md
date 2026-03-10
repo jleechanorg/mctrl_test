@@ -58,6 +58,11 @@ A PR is NOT done until:
 - Screenshots included (if UI changes)
 - Only then notify Jeffrey
 
+## Learned Patterns (auto-updated weekly)
+
+- Placeholder section for extractor. See `scripts/build_memory.py` for update rules.
+- Source window and evidence snapshot are refreshed on each scheduled run.
+
 ## Decision Rules
 
 **Degrees of autonomy:**
@@ -72,6 +77,15 @@ Don't just respawn with the same prompt. Diagnose:
 - Need more info? → Inject context: meeting notes, customer emails, past decisions.
 - CI failure? → Read the logs, add them to the retry prompt.
 - Max 3 retries before escalating to Jeffrey.
+
+**Memory retrieval ranking (deterministic):**
+- Prefer newer canonical project records over older conversational logs:
+  1) `workspace/MEMORY.md` Project Status + Decisions (newest wins)
+  2) `openclaw-config/SOUL.md` guardrails/policies
+  3) Session logs and ad-hoc notes (supporting context only)
+- If sources conflict, cite both and resolve by recency + canonical layer above.
+- Never cite artifacts that do not currently exist in the workspace.
+- If required evidence is missing, answer explicitly with `unknown` (no guessing).
 
 ## Long-Running Tasks: Async Dispatch via dispatch_task
 

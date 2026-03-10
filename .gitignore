@@ -123,3 +123,4 @@ openclaw/
 # Worktree marker files and stale submodule refs
 worktree_*
 worldarchitect
+.claude/scheduled_tasks.lock
