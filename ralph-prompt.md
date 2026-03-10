@@ -57,6 +57,7 @@ from orchestration.reconciliation import reconcile_registry_once
 emitted = reconcile_registry_once(
     registry_path='/tmp/test-sup-registry.jsonl',
     outbox_path='/tmp/test-sup-outbox.jsonl',
+    dead_letter_path='/tmp/test-sup-dead-letter.jsonl',
 )
 print('emitted:', emitted)
 assert len(emitted) == 1, f'Expected 1 event, got {len(emitted)}'

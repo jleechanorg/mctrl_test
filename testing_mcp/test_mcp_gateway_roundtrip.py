@@ -41,16 +41,14 @@ from urllib.request import Request, urlopen
 import pytest
 
 from orchestration.dispatch_task import dispatch
-from orchestration.openclaw_notifier import (
-    SLACK_DM_CHANNEL as _DM_CHANNEL,
-    drain_outbox,
-)
+from orchestration.openclaw_notifier import drain_outbox
 from orchestration.reconciliation import reconcile_registry_once
 from orchestration.session_registry import get_mapping
 
 GATEWAY_URL = "http://localhost:18789"
 GATEWAY_TOKEN = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "")
 MCTRL_TEST_REPO = "jleechanorg/mctrl_test"
+_DM_CHANNEL = os.environ.get("MCTRL_TEST_DM_CHANNEL", "D0AFTLEJGJU")
 
 
 # ---------------------------------------------------------------------------
@@ -230,6 +228,7 @@ def test_mcp_gateway_dispatch_roundtrip(tmp_path: Path) -> None:
     assert GATEWAY_TOKEN, (
         "OPENCLAW_GATEWAY_TOKEN must be set (source ~/.openclaw/set-slack-env.sh)"
     )
+    os.environ.setdefault("OPENCLAW_NOTIFY_TARGET", _DM_CHANNEL)
     assert subprocess.run(["which", "ai_orch"], capture_output=True).returncode == 0, (
         "ai_orch must be in PATH"
     )
@@ -312,6 +311,7 @@ def test_mcp_gateway_dispatch_roundtrip(tmp_path: Path) -> None:
     emitted = reconcile_registry_once(
         registry_path=str(registry),
         outbox_path=str(outbox),
+        dead_letter_path=str(tmp_path / "outbox_dead_letter.jsonl"),
     )
 
     assert len(emitted) == 1, f"Expected 1 event, got {len(emitted)}: {emitted}"

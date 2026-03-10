@@ -22,6 +22,8 @@ import sys
 import time
 from typing import Callable
 
+from orchestration.openclaw_notifier import default_outbox_path
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -33,7 +35,7 @@ REGISTRY_PATH = os.environ.get(
     "MCTRL_REGISTRY_PATH", ".tracking/bead_session_registry.jsonl"
 )
 OUTBOX_PATH = os.environ.get(
-    "MCTRL_OUTBOX_PATH", ".messages/outbox.jsonl"
+    "MCTRL_OUTBOX_PATH", default_outbox_path()
 )
 DEAD_LETTER_PATH = os.environ.get(
     "MCTRL_DEAD_LETTER_PATH", ".messages/outbox_dead_letter.jsonl"

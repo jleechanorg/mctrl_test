@@ -19,6 +19,23 @@ EventSender = Callable[[dict[str, Any]], bool]
 DEFAULT_OUTBOX_PATH = ".messages/outbox.jsonl"
 DEFAULT_DEAD_LETTER_PATH = ".messages/outbox_dead_letter.jsonl"
 DEFAULT_RETRY_LIMIT = 3
+_OPENCLAW_AGENT_TIMEOUT_SECONDS = 60
+_OPENCLAW_MCP_TIMEOUT_SECONDS = 30
+_RETRY_DELAYS_SECONDS = (1, 3)
+
+
+def default_outbox_path() -> str:
+    explicit_outbox = os.environ.get("MCTRL_OUTBOX_PATH", "").strip()
+    if explicit_outbox:
+        return str(Path(explicit_outbox).expanduser())
+    mctrl_home = Path(os.environ.get("MCTRL_HOME", "~/.mctrl")).expanduser()
+    return str(mctrl_home / "messages" / "outbox.jsonl")
+
+
+def openclaw_notification_max_runtime_seconds() -> int:
+    attempts = len(_RETRY_DELAYS_SECONDS) + 1
+    per_attempt_timeout = _OPENCLAW_AGENT_TIMEOUT_SECONDS + _OPENCLAW_MCP_TIMEOUT_SECONDS
+    return (per_attempt_timeout * attempts) + sum(_RETRY_DELAYS_SECONDS)
 
 
 def _normalize_trigger_ts(value: Any) -> str:

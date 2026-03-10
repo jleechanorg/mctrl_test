@@ -10,7 +10,7 @@ test_slack_loopback_roundtrip  [REAL — always runs, requires Slack tokens + ai
   2. dispatch() spawns a real ai_orch agent in a real git worktree via real tmux
   3. Agent commits and exits — supervisor detects the real tmux session death
   4. reconcile_registry_once runs with ZERO monkeypatching
-  5. notify_slack_done posts real DM + threaded reply under trigger_ts
+  5. OpenClaw notification handling posts real DM + threaded reply under trigger_ts
   6. Test polls DM + conversations.replies to assert both landed
 
   No monkeypatching of any kind.
@@ -32,8 +32,6 @@ import pytest
 
 from orchestration.dispatch_task import dispatch
 from orchestration.openclaw_notifier import (
-    SLACK_DM_CHANNEL as _DM_CHANNEL,
-    SLACK_TRIGGER_CHANNEL as _AI_GENERAL,
     drain_outbox,
     read_outbox,
 )
@@ -41,6 +39,8 @@ from orchestration.reconciliation import reconcile_registry_once
 from orchestration.session_registry import BeadSessionMapping, get_mapping, upsert_mapping
 
 MCTRL_ROOT = Path(__file__).resolve().parent.parent.parent
+_DM_CHANNEL = os.environ.get("MCTRL_TEST_DM_CHANNEL", "D0AFTLEJGJU")
+_AI_GENERAL = os.environ.get("MCTRL_TEST_TRIGGER_CHANNEL", "C0AKALZ4CKW")
 
 
 def _slack_post(token: str, channel: str, text: str) -> dict[str, Any]:
@@ -145,6 +145,22 @@ def _write_json_artifact(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def test_slack_history_handles_null_messages(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return b'{"ok":true,"messages":null}'
+
+    monkeypatch.setattr("tests.test_mvp_loopback_e2e.urlopen", lambda req, timeout=10: _Resp())
+
+    assert _slack_history("xoxb-test", _AI_GENERAL, "0") == []
+
+
 def test_e2e_registry_to_outbox_to_delivery(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     registry = tmp_path / "registry.jsonl"
     outbox = tmp_path / "outbox.jsonl"
@@ -167,7 +183,6 @@ def test_e2e_registry_to_outbox_to_delivery(monkeypatch: pytest.MonkeyPatch, tmp
     # still runs on failure — that is what this test exercises.
     monkeypatch.setattr("orchestration.reconciliation.run_tmux_sessions", lambda: set())
     monkeypatch.setattr("orchestration.openclaw_notifier._send_via_mcp_agent_mail", lambda p: False)
-    monkeypatch.setattr("orchestration.reconciliation.notify_slack_done", lambda p: False)
     emitted = reconcile_registry_once(
         registry_path=str(registry),
         outbox_path=str(outbox),
@@ -199,7 +214,7 @@ def test_slack_loopback_roundtrip(tmp_path: Path) -> None:
       2. dispatch() calls ai_orch → real tmux session + real git worktree
       3. Agent makes a real git commit and exits — tmux session dies for real
       4. reconcile_registry_once detects the real dead session (no patches)
-      5. notify_slack_done posts real DM + real threaded reply
+      5. OpenClaw notification handling posts real DM + real threaded reply
       6. Poll Slack API to confirm DM and thread reply both landed
 
     Requires: SLACK_USER_TOKEN, OPENCLAW_SLACK_BOT_TOKEN, ai_orch in PATH

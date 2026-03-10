@@ -127,6 +127,7 @@ The **supervisor daemon** (`ai.mctrl.supervisor`) polls every 30s. When the tmux
 |------|---------|
 | `~/bin/dispatch_task` | Command on PATH — use this |
 | `mctrl/.tracking/bead_session_registry.jsonl` | Live bead↔session registry |
+| `~/.mctrl/messages/outbox.jsonl` | Default shared mctrl outbox for failed/retriable OpenClaw deliveries |
 | `~/Library/Logs/mctrl/supervisor.log` | Supervisor daemon logs |
 
 ### Supervisor status

@@ -166,7 +166,21 @@
       "memory-server_read_graph",
       "memory-server_delete_observations",
       "memory-server_delete_entities",
-      "memory-server_delete_relations"
+      "memory-server_delete_relations",
+      "second-opinion-tool_agent_second_opinion",
+      "second-opinion-tool_rate_limit_status",
+      "second-opinion-tool_health-check",
+      "slack-mcp_channels_list",
+      "slack-mcp_conversations_add_message",
+      "slack-mcp_conversations_history",
+      "slack-mcp_conversations_mark",
+      "slack-mcp_conversations_replies",
+      "slack-mcp_usergroups_create",
+      "slack-mcp_usergroups_list",
+      "slack-mcp_usergroups_me",
+      "slack-mcp_usergroups_update",
+      "slack-mcp_usergroups_users_update",
+      "slack-mcp_users_search"
     ],
     "deny": [
       "browser",
@@ -457,11 +471,24 @@
         "config": {
           "servers": [
             {
-              "name": "mcp-agent-mail",
+              "name": "second-opinion-tool",
               "transport": "http",
-              "url": "http://127.0.0.1:8765/mcp/",
+              "url": "${SECOND_OPINION_MCP_URL}",
               "headers": {
-                "Authorization": "Bearer PLACEHOLDER-mcp-agent-mail"
+                "Authorization": "Bearer ${SECOND_OPINION_MCP_TOKEN}"
+              }
+            },
+            {
+              "name": "slack-mcp",
+              "transport": "stdio",
+              "command": "npx",
+              "args": [
+                "-y",
+                "@anthropic/slack-mcp"
+              ],
+              "env": {
+                "SLACK_MCP_XOXB_TOKEN": "${OPENCLAW_SLACK_BOT_TOKEN}",
+                "SLACK_MCP_ADD_MESSAGE_TOOL": "true"
               }
             },
             {
@@ -531,7 +558,7 @@
             {
               "name": "render",
               "transport": "http",
-              "url": "https://mcp.render.com/mcp",
+              "url": "${RENDER_MCP_URL}",
               "headers": {
                 "Authorization": "Bearer ${RENDER_API_KEY}"
               }

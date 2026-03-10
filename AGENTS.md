@@ -3,6 +3,8 @@
 > **This file is used by agents working on `jleechanorg/jleechanclaw`.**
 > The sections below the divider are upstream openclaw/openclaw guidelines (kept for reference).
 
+Before concluding that a Claude command, workflow, or helper is missing, check both repo-local `.claude/` and home `~/.claude/`; prefer repo-local assets for repo-specific work.
+
 ## MiniMax Agent — No Separate Binary
 
 `minimax` is NOT a standalone binary. It uses the `claude` CLI with `ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic`.

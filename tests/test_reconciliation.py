@@ -84,7 +84,6 @@ class TestReconcileRegistryOnce:
         )
         # Stub network calls — unit tests must not post real Slack or OpenClaw messages.
         monkeypatch.setattr("orchestration.reconciliation.notify_openclaw", lambda p, *, outbox_path: True)
-        monkeypatch.setattr("orchestration.reconciliation.notify_slack_done", lambda p: True)
 
         emitted = reconcile_registry_once(
             registry_path=str(registry),
@@ -164,7 +163,6 @@ class TestReconcileRegistryOnce:
             lambda *_args, **_kwargs: False,
         )
         monkeypatch.setattr("orchestration.reconciliation.notify_openclaw", lambda p, *, outbox_path: True)
-        monkeypatch.setattr("orchestration.reconciliation.notify_slack_done", lambda p: True)
 
         emitted = reconcile_registry_once(
             registry_path=str(registry),
@@ -212,7 +210,6 @@ class TestReconcileRegistryOnce:
             lambda *_args, **_kwargs: True,
         )
         monkeypatch.setattr("orchestration.reconciliation.notify_openclaw", lambda p, *, outbox_path: True)
-        monkeypatch.setattr("orchestration.reconciliation.notify_slack_done", lambda p: True)
 
         emitted = reconcile_registry_once(
             registry_path=str(registry),
@@ -320,9 +317,7 @@ def test_reconcile_leaves_in_progress_when_remote_check_is_transient_failure(
         lambda *_args, **_kwargs: None,
     )
     notify_openclaw = MagicMock(return_value=True)
-    notify_slack = MagicMock(return_value=True)
     monkeypatch.setattr("orchestration.reconciliation.notify_openclaw", notify_openclaw)
-    monkeypatch.setattr("orchestration.reconciliation.notify_slack_done", notify_slack)
 
     emitted = reconcile_registry_once(
         registry_path=str(registry),
@@ -335,4 +330,3 @@ def test_reconcile_leaves_in_progress_when_remote_check_is_transient_failure(
     assert found is not None
     assert found.status == "in_progress"
     notify_openclaw.assert_not_called()
-    notify_slack.assert_not_called()
