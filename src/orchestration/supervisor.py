@@ -57,7 +57,7 @@ OUTBOX_ALERT_COOLDOWN_SECONDS = _get_int_env("MCTRL_OUTBOX_ALERT_COOLDOWN_SECOND
 ARCHIVE_AFTER_DAYS = _get_int_env("MCTRL_ARCHIVE_AFTER_DAYS", 7)
 
 _running = True
-_last_outbox_alert_at = 0.0
+_last_outbox_alert_at: float | None = None
 
 
 def _handle_signal(sig: int, _frame: object) -> None:
@@ -142,7 +142,7 @@ def maybe_alert_outbox_health(
         return False
 
     now = time.monotonic()
-    if (now - _last_outbox_alert_at) < max(0, cooldown_seconds):
+    if _last_outbox_alert_at is not None and (now - _last_outbox_alert_at) < max(0, cooldown_seconds):
         return False
 
     payload = {

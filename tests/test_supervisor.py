@@ -59,6 +59,27 @@ def test_outbox_alert_cooldown_suppresses_repeat_alerts(monkeypatch) -> None:
     assert alert.call_count == 1
 
 
+def test_first_outbox_alert_bypasses_cooldown(monkeypatch) -> None:
+    sys.modules.pop("orchestration.supervisor", None)
+    supervisor = importlib.import_module("orchestration.supervisor")
+    supervisor._last_outbox_alert_at = None
+    alert = MagicMock(return_value=True)
+    monkeypatch.setattr(supervisor, "time", MagicMock(monotonic=MagicMock(return_value=5.0)))
+
+    fired = supervisor.maybe_alert_outbox_health(
+        pending_count=50,
+        dead_letter_count=0,
+        oldest_age_seconds=7200,
+        notify_fn=alert,
+        threshold=10,
+        age_threshold=3600,
+        cooldown_seconds=3600,
+    )
+
+    assert fired is True
+    assert alert.call_count == 1
+
+
 def test_outbox_alert_fires_when_dead_letter_present(monkeypatch) -> None:
     sys.modules.pop("orchestration.supervisor", None)
     supervisor = importlib.import_module("orchestration.supervisor")
