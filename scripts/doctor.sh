@@ -191,9 +191,11 @@ else
 fi
 
 if [[ "$repo_json_ok" -eq 1 && "$live_json_ok" -eq 1 ]]; then
-  repo_norm=$(jq -c '{gateway:{port:.gateway.port,mode:.gateway.mode,bind:.gateway.bind,auth_mode:.gateway.auth.mode,tailscale_mode:.gateway.tailscale.mode,tailscale_reset:.gateway.tailscale.resetOnExit,chat_completions:.gateway.http.endpoints.chatCompletions.enabled},env:{OPENCLAW_RAW_STREAM:.env.OPENCLAW_RAW_STREAM,OPENCLAW_RAW_STREAM_PATH:.env.OPENCLAW_RAW_STREAM_PATH,GOOGLE_CLOUD_PROJECT:.env.GOOGLE_CLOUD_PROJECT}}' "$REPO_CONFIG/openclaw.json" 2>/dev/null)
-  live_norm=$(jq -c '{gateway:{port:.gateway.port,mode:.gateway.mode,bind:.gateway.bind,auth_mode:.gateway.auth.mode,tailscale_mode:.gateway.tailscale.mode,tailscale_reset:.gateway.tailscale.resetOnExit,chat_completions:.gateway.http.endpoints.chatCompletions.enabled},env:{OPENCLAW_RAW_STREAM:.env.OPENCLAW_RAW_STREAM,OPENCLAW_RAW_STREAM_PATH:.env.OPENCLAW_RAW_STREAM_PATH,GOOGLE_CLOUD_PROJECT:.env.GOOGLE_CLOUD_PROJECT}}' "$LIVE_OPENCLAW/openclaw.json" 2>/dev/null)
-  if cmp_text "$repo_norm" "$live_norm"; then
+  repo_norm=$(jq -c '{gateway:{port:.gateway.port,mode:.gateway.mode,bind:.gateway.bind,auth_mode:.gateway.auth.mode,tailscale_mode:.gateway.tailscale.mode,tailscale_reset:.gateway.tailscale.resetOnExit,chat_completions:.gateway.http.endpoints.chatCompletions.enabled},env:{OPENCLAW_RAW_STREAM:.env.OPENCLAW_RAW_STREAM,OPENCLAW_RAW_STREAM_PATH:.env.OPENCLAW_RAW_STREAM_PATH,GOOGLE_CLOUD_PROJECT:.env.GOOGLE_CLOUD_PROJECT}}' "$REPO_CONFIG/openclaw.json" 2>/dev/null || true)
+  live_norm=$(jq -c '{gateway:{port:.gateway.port,mode:.gateway.mode,bind:.gateway.bind,auth_mode:.gateway.auth.mode,tailscale_mode:.gateway.tailscale.mode,tailscale_reset:.gateway.tailscale.resetOnExit,chat_completions:.gateway.http.endpoints.chatCompletions.enabled},env:{OPENCLAW_RAW_STREAM:.env.OPENCLAW_RAW_STREAM,OPENCLAW_RAW_STREAM_PATH:.env.OPENCLAW_RAW_STREAM_PATH,GOOGLE_CLOUD_PROJECT:.env.GOOGLE_CLOUD_PROJECT}}' "$LIVE_OPENCLAW/openclaw.json" 2>/dev/null || true)
+  if [[ -z "$repo_norm" || -z "$live_norm" ]]; then
+    fail 'cannot compare normalized gateway config because projection failed'
+  elif cmp_text "$repo_norm" "$live_norm"; then
     pass 'repo/live normalized gateway config is in sync'
   else
     fail 'repo/live normalized gateway config drift detected'
@@ -205,7 +207,17 @@ fi
 printf '\n'
 if [[ -f "$LIVE_OPENCLAW/cron/jobs.json" ]] && json_valid "$LIVE_OPENCLAW/cron/jobs.json"; then
   still_enabled=''
+  missing_ids=''
   for job_id in "${MIGRATED_JOB_IDS[@]}"; do
+    if ! jq -e --arg id "$job_id" 'any(.jobs[]?; .id == $id)' "$LIVE_OPENCLAW/cron/jobs.json" >/dev/null 2>&1; then
+      if [[ -z "$missing_ids" ]]; then
+        missing_ids="$job_id"
+      else
+        missing_ids="$missing_ids $job_id"
+      fi
+      continue
+    fi
+
     if jq -e --arg id "$job_id" 'any(.jobs[]?; .id == $id and (.enabled == true))' "$LIVE_OPENCLAW/cron/jobs.json" >/dev/null 2>&1; then
       if [[ -z "$still_enabled" ]]; then
         still_enabled="$job_id"
@@ -215,7 +227,9 @@ if [[ -f "$LIVE_OPENCLAW/cron/jobs.json" ]] && json_valid "$LIVE_OPENCLAW/cron/j
     fi
   done
 
-  if [[ -z "$still_enabled" ]]; then
+  if [[ -n "$missing_ids" ]]; then
+    fail "migrated cron job IDs missing in ~/.openclaw/cron/jobs.json: $missing_ids"
+  elif [[ -z "$still_enabled" ]]; then
     pass 'migrated OpenClaw cron jobs are disabled in ~/.openclaw/cron/jobs.json'
   else
     fail "migrated cron job IDs are still enabled in ~/.openclaw/cron/jobs.json: $still_enabled"
@@ -306,10 +320,8 @@ fi
 
 health_body_file="$TMP_DIR/health.json"
 health_err_file="$TMP_DIR/health-curl.err"
-set +e
 health_code=$(curl -sS --max-time 5 -o "$health_body_file" -w '%{http_code}' "http://127.0.0.1:${runtime_port}/health" 2>"$health_err_file")
 curl_rc=$?
-set -e
 if [[ "$curl_rc" -ne 0 ]]; then
   fail "HTTP /health probe command failed (curl exit=$curl_rc)"
   if [[ -s "$health_err_file" ]]; then
@@ -339,10 +351,8 @@ if grep -q 'Service config issue:' <<<"$status_output"; then
   warn 'openclaw gateway status reports service config issue(s)'
 fi
 
-set +e
 health_cli_output="$(openclaw gateway health 2>&1)"
 health_cli_rc=$?
-set -e
 if [[ "$health_cli_rc" -ne 0 ]]; then
   fail "openclaw gateway health command failed (exit=$health_cli_rc)"
   if grep -q 'gateway token mismatch' <<<"$health_cli_output"; then

@@ -9,6 +9,7 @@ LIVE_JOBS="$LIVE_DIR/cron/jobs.json"
 RUNNER_SRC="$CONFIG_DIR/run-scheduled-job.sh"
 RUNNER_DST="$LIVE_DIR/run-scheduled-job.sh"
 SCHEDULED_LOG_DIR="$LIVE_DIR/logs/scheduled-jobs"
+SYNC_SCRIPT="$REPO_ROOT/scripts/sync-openclaw-config.sh"
 
 # Validate required tools before mutating anything (avoids half-migrated state)
 if ! command -v jq >/dev/null 2>&1; then
@@ -57,6 +58,15 @@ render_and_load_plist() {
 printf 'Installing OpenClaw launchd scheduled jobs\n'
 printf 'Repo: %s\n\n' "$REPO_ROOT"
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Missing required command: jq" >&2
+  exit 1
+fi
+if ! command -v launchctl >/dev/null 2>&1; then
+  echo "Missing required command: launchctl" >&2
+  exit 1
+fi
+
 if [[ ! -x "$RUNNER_SRC" ]]; then
   echo "Missing executable runner: $RUNNER_SRC" >&2
   exit 1
@@ -65,6 +75,14 @@ fi
 mkdir -p "$LAUNCHD_DIR" "$LIVE_DIR" "$LIVE_DIR/cron" "$SCHEDULED_LOG_DIR"
 install -m 755 "$RUNNER_SRC" "$RUNNER_DST"
 echo "  ✓ installed runner $RUNNER_DST"
+
+if [[ -x "$SYNC_SCRIPT" ]]; then
+  echo "Syncing repo config into ~/.openclaw before launchd load..."
+  SYNC_DIRS="skills cron" "$SYNC_SCRIPT" --execute
+else
+  echo "Missing sync script: $SYNC_SCRIPT" >&2
+  exit 1
+fi
 
 echo "Installing launchd scheduled job plists..."
 for plist in "$CONFIG_DIR"/ai.openclaw.schedule.*.plist; do
@@ -83,6 +101,14 @@ if [[ -f "$LIVE_JOBS" ]]; then
   mv "$LIVE_JOBS.tmp" "$LIVE_JOBS"
   echo "  ✓ disabled migrated in-app cron jobs in $LIVE_JOBS"
   echo "  ✓ backup saved at $backup"
+
+  gateway_pid="$(pgrep -f 'openclaw.*gateway' | head -n1 || true)"
+  if [[ -n "$gateway_pid" ]]; then
+    kill -HUP "$gateway_pid" 2>/dev/null || true
+    echo "  ✓ signaled gateway reload (pid=$gateway_pid)"
+  else
+    echo "  ! no running gateway pid found for HUP reload"
+  fi
 else
   echo "  ! live cron file missing: $LIVE_JOBS (skipped disable step)"
 fi
