@@ -16,11 +16,14 @@ class TestIsCrossRepoTask:
     @pytest.mark.parametrize(
         "task,expected",
         [
-            # Cross-repo indicators (from implementation)
-            ("fix comments worldai mcp PR to worldarchitect.ai", True),
-            ("make a PR against jleechanorg/mctrl_test", True),
-            ("create a PR to jleechanorg/worldarchitect.ai", True),
-            # Non-cross-repo
+            # Cross-repo indicators (matched by _extract_repo_name_hint)
+            ("make a PR against mctrl_test", True),
+            ("create a PR in mctrl_test repo", True),
+            ("fix in worldarchitect repository", True),
+            ("work in https://github.com/jleechanorg/mctrl_test", True),
+            # Not matched — 'PR to' is not an _extract_repo_name_hint pattern
+            ("fix comments worldai mcp PR to worldarchitect.ai", False),
+            # Blocklist filters common non-repo words
             ("fix the bug in this repo", False),
             ("add tests for the new feature", False),
             ("", False),
@@ -43,10 +46,29 @@ class TestExtractRepoNameHint:
     @pytest.mark.parametrize(
         "task,expected",
         [
+            # Basic patterns
             ("fix in mctrl_test repo", "mctrl_test"),
             ("do something generic", ""),
+            # GitHub URL extraction
+            ("work in https://github.com/jleechanorg/mctrl_test", "mctrl_test"),
+            ("check https://github.com/org/my-repo.git changes", "my-repo.git"),
+            # Backtick-wrapped repo names
+            ("fix in `mctrl_test` repo", "mctrl_test"),
+            ("make PR against `worldarchitect`", "worldarchitect"),
+            # Against patterns
+            ("make a PR against mctrl_test", "mctrl_test"),
+            ("deploy against staging-env", "staging-env"),
+            # Repository keyword
+            ("fix in worldarchitect repository", "worldarchitect"),
+            # Blocklist — common words should NOT be extracted
+            ("fix the bug in this repo", ""),
+            ("add code in the repository", ""),
+            ("work in a repo", ""),
+            # Edge: trailing dots stripped
+            ("fix in mctrl_test. repo", "mctrl_test"),
         ],
     )
     def test_repo_name_extraction(self, task: str, expected: str):
         """Test repo name hint extraction."""
         assert _extract_repo_name_hint(task) == expected
+

@@ -26,6 +26,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
 from orchestration.openclaw_notifier import notify_openclaw
@@ -315,6 +316,12 @@ Do NOT assume a default repo - always verify with memory or user.
 
 def _extract_repo_name_hint(task: str) -> str:
     """Extract repo name from task text."""
+    # Common words that regex patterns may match but are never repo names.
+    _BLOCKLIST = frozenset({
+        "a", "an", "the", "this", "that", "my", "our", "your",
+        "repo", "repository", "here", "it", "one",
+    })
+
     patterns = (
         r"\bagainst\s+`?([A-Za-z0-9._-]+)`?\s*$",
         r"\bagainst\s+`?([A-Za-z0-9._-]+)`?\s+repo",
@@ -328,23 +335,10 @@ def _extract_repo_name_hint(task: str) -> str:
         if not match:
             continue
         candidate = match.group(1).strip().strip(".")
-        if candidate:
+        if candidate and candidate.lower() not in _BLOCKLIST:
             return candidate
     return ""
 
-
-# Cross-repo PR pattern - injected automatically for cross-repo tasks
-_CROSS_REPO_CONTEXT = """
-## CROSS-REPO PR PATTERN (IMPORTANT)
-When the task involves making a PR to a DIFFERENT REPO than your current worktree:
-- DO NOT clone the target repo into a subdirectory
-- DO NOT work in the current jleechanclaw worktree
-- Instead: create a NEW worktree FOR the target repo as a sibling directory
-- Work directly in that repo's worktree
-- Commit and push directly to that repo
-- Example: for "mctrl_test" repo, create worktree at ../mctrl_test or /tmp/ai-orch-worktrees/mctrl_test
-- Use: `gh pr create --repo owner/repo --base main --head <branch>` to PR cross-repo
-"""
 
 
 
@@ -664,7 +658,6 @@ def dispatch(
                         )
 
                     # Create worktree from the target repo - use unique path
-                    import uuid
                     unique_id = uuid.uuid4().hex[:6]
                     branch_name = f"ai-orch-{int(time.time()) % 100000}-{unique_id}"
                     target_worktree_path = os.path.join(worktree_base, f"{repo_name}-{unique_id}")
