@@ -170,6 +170,27 @@ else
 fi
 install_startup_check_script
 install_plist "$CONFIG_DIR/ai.openclaw.startup-check.plist"
+
+# Disable migrated job IDs in live cron before loading launchd schedules (P1: avoid dual scheduling)
+LIVE_JOBS="$OPENCLAW_HOME/cron/jobs.json"
+MIGRATED_JOB_IDS=(
+  "522e23a7-c7c1-41f2-b117-a3af05661578"
+  "7424ea0d-2c8a-4a59-b58e-09b242c6c58e"
+  "5192e214-2754-49d5-b567-07c7b24cb116"
+  "882c6964-1deb-4b4b-936d-9edcab83fbda"
+  "genesis-memory-curation-weekly"
+  "genesis-pattern-extraction-weekly"
+)
+if [[ -f "$LIVE_JOBS" ]] && command -v jq >/dev/null 2>&1; then
+  backup="$LIVE_JOBS.bak.$(date +%Y%m%d-%H%M%S)"
+  cp "$LIVE_JOBS" "$backup"
+  jq --argjson ids "$(printf '%s\n' "${MIGRATED_JOB_IDS[@]}" | jq -R . | jq -s .)" '
+    .jobs = ((.jobs // []) | map(if (.id as $id | ($ids | index($id)) != null) then .enabled = false else . end))
+  ' "$LIVE_JOBS" > "$LIVE_JOBS.tmp"
+  mv "$LIVE_JOBS.tmp" "$LIVE_JOBS"
+  echo "  ✓ disabled migrated in-app cron jobs before loading launchd schedules"
+fi
+
 for schedule_plist in "$CONFIG_DIR"/ai.openclaw.schedule.*.plist; do
   [[ -f "$schedule_plist" ]] || continue
   install_plist "$schedule_plist"

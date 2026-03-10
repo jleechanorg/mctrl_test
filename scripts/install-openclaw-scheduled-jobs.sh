@@ -10,6 +10,22 @@ RUNNER_SRC="$CONFIG_DIR/run-scheduled-job.sh"
 RUNNER_DST="$LIVE_DIR/run-scheduled-job.sh"
 SCHEDULED_LOG_DIR="$LIVE_DIR/logs/scheduled-jobs"
 
+# Validate required tools before mutating anything (avoids half-migrated state)
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Error: jq is required but not installed. Install with: brew install jq" >&2
+  exit 1
+fi
+if ! command -v launchctl >/dev/null 2>&1; then
+  echo "Error: launchctl is required (macOS only)" >&2
+  exit 1
+fi
+
+# Sync repo openclaw-config to live before loading (ensures jobs.json and skills are current)
+SYNC_SCRIPT="$REPO_ROOT/scripts/sync-openclaw-config.sh"
+if [[ -x "$SYNC_SCRIPT" ]]; then
+  "$SYNC_SCRIPT" --execute 2>/dev/null || true
+fi
+
 MIGRATED_JOB_IDS=(
   "522e23a7-c7c1-41f2-b117-a3af05661578"
   "7424ea0d-2c8a-4a59-b58e-09b242c6c58e"
