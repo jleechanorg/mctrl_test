@@ -101,8 +101,8 @@ def drain_outbox(
         else:
             payload["_retry_count"] = retries + 1
             payload["_last_attempt_at"] = _utcnow_iso()
-            if "_first_queued_at" not in payload:
-                payload["_first_queued_at"] = _fallback_first_queued_at(path)
+            if not payload.get("_first_queued_at"):
+                payload["_first_queued_at"] = _fallback_first_queued_at(drain_path)
             if payload["_retry_count"] > max(0, retry_limit):
                 enqueue_dead_letter(payload, dead_letter_path=resolved_dead_letter_path)
             else:
@@ -276,10 +276,10 @@ def notify_slack_outbox_alert(payload: dict[str, Any]) -> bool:
     oldest_age = payload.get("oldest_age_seconds")
     dead_lettered = int(payload.get("dead_lettered", 0))
 
-    if dead_lettered:
+    if dead_lettered or dead_letter_count > 0:
         text = (
             ":warning: *mctrl outbox dead-lettered events*\n\n"
-            f"Moved `{dead_lettered}` event(s) to dead-letter queue.\n"
+            f"Dead-letter queue count: `{dead_letter_count}`\n"
             f"Outbox: `{payload.get('outbox_path', DEFAULT_OUTBOX_PATH)}`\n"
             f"Dead-letter: `{payload.get('dead_letter_path', DEFAULT_DEAD_LETTER_PATH)}`"
         )

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from pathlib import Path
 from subprocess import CompletedProcess
 from unittest.mock import MagicMock, patch
@@ -162,6 +164,33 @@ def test_drain_outbox_derives_dead_letter_path_from_outbox_path(tmp_path: Path) 
     assert dead[0]["bead_id"] == "ORCH-derived-dead"
 
 
+def test_drain_outbox_uses_snapshot_mtime_for_legacy_first_queued_at(tmp_path: Path) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    enqueue_outbox(
+        {
+            "event": "task_needs_human",
+            "bead_id": "ORCH-legacy-age",
+            "_retry_count": 0,
+            "_first_queued_at": "",
+        },
+        outbox_path=str(outbox),
+    )
+    stale_ts = time.time() - 7200
+    os.utime(outbox, (stale_ts, stale_ts))
+
+    drain_outbox(
+        send_fn=lambda _: False,
+        outbox_path=str(outbox),
+        retry_limit=10,
+    )
+    queued = read_outbox(outbox_path=str(outbox))
+    assert len(queued) == 1
+    first_queued = queued[0]["_first_queued_at"]
+    assert first_queued
+    # Should preserve stale age signal rather than resetting to "now".
+    assert "T" in first_queued
+
+
 def test_outbox_health_snapshot_reports_pending_dead_letter_and_histogram(tmp_path: Path) -> None:
     outbox = tmp_path / "outbox.jsonl"
     dead_letter = tmp_path / "outbox_dead_letter.jsonl"
@@ -223,6 +252,27 @@ def test_notify_slack_started_posts_dm(mock_urlopen) -> None:
     assert body["channel"] == SLACK_DM_CHANNEL
     assert "ORCH-1" in body["text"]
     assert ":rocket:" in body["text"]
+
+
+@patch.dict("os.environ", {"OPENCLAW_SLACK_BOT_TOKEN": "xoxb-test"}, clear=False)
+@patch("orchestration.openclaw_notifier.urlopen")
+def test_notify_slack_outbox_alert_uses_dead_letter_message_when_count_present(mock_urlopen) -> None:
+    from orchestration.openclaw_notifier import notify_slack_outbox_alert
+
+    mock_urlopen.side_effect = _make_urlopen_mock()
+    result = notify_slack_outbox_alert(
+        {
+            "pending_count": 1,
+            "dead_letter_count": 3,
+            "outbox_path": "/tmp/outbox.jsonl",
+            "dead_letter_path": "/tmp/dead.jsonl",
+        }
+    )
+
+    assert result is True
+    body = json.loads(mock_urlopen.call_args.args[0].data)
+    assert "dead-lettered events" in body["text"]
+    assert "Dead-letter queue count: `3`" in body["text"]
 
 
 @patch.dict("os.environ", {"OPENCLAW_SLACK_BOT_TOKEN": "xoxb-test"}, clear=False)
