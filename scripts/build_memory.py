@@ -141,7 +141,11 @@ def collect_beads(days: int) -> list[dict]:
             continue
         ts = item.get("updated_at") or item.get("created_at") or ""
         try:
-            when = dt.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+            # Handle both naive and timezone-aware ISO strings
+            ts_str = str(ts).replace("Z", "+00:00")
+            when = dt.datetime.fromisoformat(ts_str)
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=dt.timezone.utc)
         except ValueError:
             continue
         if when < cutoff:
