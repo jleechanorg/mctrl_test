@@ -144,16 +144,6 @@ Reply with: "Queued: [bead_id] — [one-line spec]. I'll notify you when the age
 
 The **supervisor reconciler** daemon at `~/project_jleechanclaw/mctrl` polls every 30s. When it detects the tmux session has exited, it automatically posts `:white_check_mark: Task done` or `:warning: Task stalled` to DM + thread. You do NOT need to poll manually.
 
-### Transient Provider Failures (Mandatory)
-
-If OpenClaw/mctrl hits a transient provider or transport failure while handling a Slack task — for example `server_error`, timeout, temporary unavailable, overload, or rate-limit style errors — do **not** immediately dump the raw provider error back to Jeffrey.
-
-Instead:
-1. Retry automatically with short bounded backoff.
-2. Keep the same task/bead identity and avoid duplicate side effects while retrying.
-3. Only surface the raw failure after retries are exhausted.
-4. When surfacing a final failure, include retry count plus any request/correlation IDs that help debugging.
-
 ### On Receiving task_needs_human (MANDATORY)
 
 When you receive a `task_needs_human` loopback event (delivered via `openclaw agent --agent main`), you MUST:

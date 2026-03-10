@@ -34,14 +34,23 @@ Reply to jleechan's original Slack message in the same thread:
 
 Record the `ts` of jleechan's original message as `SLACK_TRIGGER_TS`.
 
-### 3. Dispatch via mctrl
+### 3. Before dispatching: Search memories
+
+**Always search memories before writing the task prompt.** Use `/mem-search` or the memory MCP to find:
+- Past successes/failures for similar tasks
+- Specific gotchas or patterns for this type of work
+- Any injected context from previous failures
+
+Inject relevant learnings into the task prompt to prevent repeat failures.
+
+### 4. Dispatch via mctrl
 
 ```bash
 cd ~/project_jleechanclaw/mctrl
 
 PYTHONPATH=src python -m orchestration.dispatch_task \
   --bead-id ORCH-xxx \
-  --task "full task description for the agent" \
+  --task "full task description for the agent (enriched with memory learnings)" \
   --slack-trigger-ts "$SLACK_TRIGGER_TS" \
   --slack-trigger-channel "$SLACK_TRIGGER_CHANNEL" \
   --agent-cli claude
@@ -58,6 +67,13 @@ This will:
 For GitHub/PR automation, the lifecycle lane should map directly into this
 dispatch path. `comment-validation`, `fix-comment`, and `fixpr` are mctrl
 lanes, not Mission Control board tasks.
+
+### Cross-repo PRs
+
+When the task involves making a PR to a different repo than the worktree:
+- DO NOT clone the target repo into a subdirectory
+- Use `gh pr create --repo owner/repo --base main --head <branch>` to PR cross-repo
+- Example: for mctrl_test repo, use `gh pr create --repo jleechanorg/mctrl_test --base main`
 
 The dispatcher will ensure the task text instructs the agent to push before it
 stops. If your task text does not already include that, `dispatch_task.dispatch()`
