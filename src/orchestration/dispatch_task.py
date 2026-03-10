@@ -617,6 +617,7 @@ def dispatch(
             cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, agent_task]
         else:
             # For cross-repo tasks, resolve the target repo first
+            # NO FALLBACK - if target repo mentioned, must use it
             target_repo, existing_worktree = _resolve_target_repo(task, repo_root)
 
             if existing_worktree:
@@ -626,54 +627,47 @@ def dispatch(
                 agent_task = _task_with_push_instruction(task, "", cwd)
                 cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, agent_task]
             else:
-                # Need to create a worktree for the target repo
-                # Use the target repo name as the worktree path
-                worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
-                os.makedirs(worktree_base, exist_ok=True)
-
+                # Target repo mentioned but not found locally - extract and create worktree
                 repo_name = _extract_repo_name_hint(task)
-                if repo_name:
-                    # Create a worktree for the target repo
-                    target_worktree_path = os.path.join(worktree_base, repo_name)
-                    target_repo_root = _resolve_repo_root(repo_root, f"in {repo_name} repo")
-
-                    if _looks_like_git_repo(Path(target_repo_root)):
-                        # Create worktree from the target repo
-                        try:
-                            import uuid
-                            branch_name = f"ai-orch-{int(time.time()) % 100000}-{uuid.uuid4().hex[:4]}"
-                            result = subprocess.run(
-                                ["git", "worktree", "add", "-b", branch_name, target_worktree_path],
-                                cwd=target_repo_root,
-                                capture_output=True,
-                                text=True,
-                                timeout=30,
-                            )
-                            if result.returncode != 0:
-                                # Fall back to default behavior
-                                cwd = repo_root
-                                agent_task = _task_with_push_instruction(task, "", repo_root)
-                                cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, agent_task]
-                            else:
-                                cwd = target_worktree_path
-                                known_worktree_path = target_worktree_path
-                                agent_task = _task_with_push_instruction(task, "", cwd)
-                                cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, agent_task]
-                        except Exception:
-                            # Fall back to default behavior
-                            cwd = repo_root
-                            agent_task = _task_with_push_instruction(task, "", repo_root)
-                            cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, agent_task]
-                    else:
-                        # Target repo not found, use default
-                        cwd = repo_root
-                        agent_task = _task_with_push_instruction(task, "", repo_root)
-                        cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, agent_task]
-                else:
-                    # No cross-repo hint, use default
+                if not repo_name:
+                    # No target repo in task - create fresh worktree from current repo
                     cwd = repo_root
                     agent_task = _task_with_push_instruction(task, "", repo_root)
                     cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, agent_task]
+                else:
+                    # Target repo specified - must create worktree for it
+                    worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
+                    os.makedirs(worktree_base, exist_ok=True)
+
+                    # Try to find the target repo root
+                    target_repo_root = _resolve_repo_root(repo_root, f"in {repo_name} repo")
+
+                    if not _looks_like_git_repo(Path(target_repo_root)):
+                        raise ValueError(
+                            f"Target repo '{repo_name}' not found locally. "
+                            f"Expected at: {target_repo_root}. "
+                            f"Please clone the target repo first."
+                        )
+
+                    # Create worktree from the target repo - use unique path
+                    import uuid
+                    unique_id = uuid.uuid4().hex[:6]
+                    branch_name = f"ai-orch-{int(time.time()) % 100000}-{unique_id}"
+                    target_worktree_path = os.path.join(worktree_base, f"{repo_name}-{unique_id}")
+                    result = subprocess.run(
+                        ["git", "worktree", "add", "-b", branch_name, target_worktree_path],
+                        cwd=target_repo_root,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    if result.returncode != 0:
+                        raise RuntimeError(f"Failed to create worktree for {repo_name}: {result.stderr}")
+
+                    cwd = target_worktree_path
+                    known_worktree_path = target_worktree_path
+                    agent_task = _task_with_push_instruction(task, "", cwd)
+                    cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, agent_task]
 
         result, output = _run_ai_orch_with_fallback(cmd, cwd=cwd)
 
