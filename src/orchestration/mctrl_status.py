@@ -2,15 +2,12 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from pathlib import Path
 
 from orchestration.openclaw_notifier import outbox_health_snapshot
 
 _REGISTRY = Path(__file__).parent.parent.parent / ".tracking" / "bead_session_registry.jsonl"
-_OUTBOX = Path(__file__).parent.parent.parent / ".messages" / "outbox.jsonl"
-_DEAD_LETTER = Path(__file__).parent.parent.parent / ".messages" / "outbox_dead_letter.jsonl"
 _STATUS_EMOJI = {
     "in_progress": "🔄",
     "finished": "✅",
@@ -100,8 +97,8 @@ def print_status(
     suffix = "  (--all to show finished/dead)" if active_only else ""
     print(f"Total: {total} beads  |  🔄 {in_prog} running  |  ⚠️  {needs} needs_human  |  ✅ {done} finished  |  ⚫ {len(untracked)} untracked{suffix}")
     outbox = outbox_health_snapshot(
-        outbox_path=outbox_path or os.environ.get("MCTRL_OUTBOX_PATH", str(_OUTBOX)),
-        dead_letter_path=dead_letter_path or os.environ.get("MCTRL_DEAD_LETTER_PATH", str(_DEAD_LETTER)),
+        outbox_path=outbox_path,
+        dead_letter_path=dead_letter_path,
     )
     histogram = ", ".join(
         f"r{retry}:{count}"

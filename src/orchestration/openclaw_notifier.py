@@ -38,6 +38,10 @@ def openclaw_notification_max_runtime_seconds() -> int:
     return (per_attempt_timeout * attempts) + sum(_RETRY_DELAYS_SECONDS)
 
 
+def _resolve_outbox_path(outbox_path: str | None) -> str:
+    return outbox_path or default_outbox_path()
+
+
 def _normalize_trigger_ts(value: Any) -> str:
     """Return a usable Slack thread ts, treating None-like values as missing."""
     if value is None:
@@ -62,7 +66,7 @@ def notify_openclaw(
     payload: dict[str, Any],
     *,
     send_fn: EventSender | None = None,
-    outbox_path: str = DEFAULT_OUTBOX_PATH,
+    outbox_path: str | None = None,
 ) -> bool:
     """Send loopback payload to OpenClaw; fallback to JSONL outbox on failure."""
     sender = send_fn or _send_via_mcp_agent_mail
@@ -81,7 +85,7 @@ def notify_openclaw(
 def drain_outbox(
     *,
     send_fn: EventSender | None = None,
-    outbox_path: str = DEFAULT_OUTBOX_PATH,
+    outbox_path: str | None = None,
     dead_letter_path: str | None = None,
     retry_limit: int = DEFAULT_RETRY_LIMIT,
 ) -> int:
@@ -91,9 +95,10 @@ def drain_outbox(
     enqueue_outbox are never overwritten by the rewrite of remaining items.
     """
     sender = send_fn or _send_via_mcp_agent_mail
-    path = Path(outbox_path)
+    resolved_outbox_path = _resolve_outbox_path(outbox_path)
+    path = Path(resolved_outbox_path)
     resolved_dead_letter_path = _resolve_dead_letter_path(
-        outbox_path=outbox_path,
+        outbox_path=resolved_outbox_path,
         dead_letter_path=dead_letter_path,
     )
 
@@ -127,7 +132,7 @@ def drain_outbox(
 
     # Re-enqueue failed items via append so they merge with any new events.
     for item in remaining:
-        enqueue_outbox(item, outbox_path=outbox_path)
+        enqueue_outbox(item, outbox_path=resolved_outbox_path)
 
     try:
         drain_path.unlink()
@@ -151,7 +156,7 @@ def _parse_jsonl_lines(text: str) -> list[dict[str, Any]]:
     return items
 
 
-def enqueue_outbox(payload: dict[str, Any], *, outbox_path: str = DEFAULT_OUTBOX_PATH) -> None:
+def enqueue_outbox(payload: dict[str, Any], *, outbox_path: str | None = None) -> None:
     normalized_payload = dict(payload)
     if "slack_trigger_ts" in normalized_payload:
         normalized_payload["slack_trigger_ts"] = _normalize_trigger_ts(
@@ -165,7 +170,7 @@ def enqueue_outbox(payload: dict[str, Any], *, outbox_path: str = DEFAULT_OUTBOX
         normalized_payload["_first_queued_at"] = _utcnow_iso()
     if "_retry_count" not in normalized_payload:
         normalized_payload["_retry_count"] = 0
-    path = Path(outbox_path)
+    path = Path(_resolve_outbox_path(outbox_path))
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(normalized_payload, sort_keys=True))
@@ -182,8 +187,8 @@ def enqueue_dead_letter(
         fh.write("\n")
 
 
-def read_outbox(*, outbox_path: str = DEFAULT_OUTBOX_PATH) -> list[dict[str, Any]]:
-    path = Path(outbox_path)
+def read_outbox(*, outbox_path: str | None = None) -> list[dict[str, Any]]:
+    path = Path(_resolve_outbox_path(outbox_path))
     try:
         return _parse_jsonl_lines(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -242,11 +247,16 @@ def _resolve_dead_letter_path(*, outbox_path: str, dead_letter_path: str | None)
 
 def outbox_health_snapshot(
     *,
-    outbox_path: str = DEFAULT_OUTBOX_PATH,
-    dead_letter_path: str = DEFAULT_DEAD_LETTER_PATH,
+    outbox_path: str | None = None,
+    dead_letter_path: str | None = None,
 ) -> dict[str, Any]:
-    outbox = read_outbox(outbox_path=outbox_path)
-    dead = read_dead_letter(dead_letter_path=dead_letter_path)
+    resolved_outbox_path = _resolve_outbox_path(outbox_path)
+    resolved_dead_letter_path = _resolve_dead_letter_path(
+        outbox_path=resolved_outbox_path,
+        dead_letter_path=dead_letter_path,
+    )
+    outbox = read_outbox(outbox_path=resolved_outbox_path)
+    dead = read_dead_letter(dead_letter_path=resolved_dead_letter_path)
 
     retry_histogram: dict[str, int] = {}
     oldest_age_seconds: int | None = None
@@ -265,7 +275,7 @@ def outbox_health_snapshot(
     # mixed-format queues don't under-report backlog age.
     if outbox and (oldest_age_seconds is None or missing_age_metadata):
         try:
-            mtime = Path(outbox_path).stat().st_mtime
+            mtime = Path(resolved_outbox_path).stat().st_mtime
             fallback_age = max(0, int(time.time() - mtime))
             if oldest_age_seconds is None:
                 oldest_age_seconds = fallback_age
