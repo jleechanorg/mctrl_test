@@ -225,6 +225,11 @@ else
   fail 'gateway token missing/placeholder in both ~/.openclaw/openclaw.json and launchd EnvironmentVariables'
 fi
 
+shell_token="${OPENCLAW_GATEWAY_TOKEN:-}"
+if ! is_placeholder_token "$shell_token" && ! is_placeholder_token "$live_token" && [[ "$shell_token" != "$live_token" ]]; then
+  warn 'shell OPENCLAW_GATEWAY_TOKEN differs from ~/.openclaw/openclaw.json; doctor gateway probes will use live config token'
+fi
+
 if [[ "$repo_json_ok" -eq 1 && "$live_json_ok" -eq 1 ]]; then
   repo_norm=''
   live_norm=''
@@ -382,7 +387,12 @@ else
   fail "HTTP /health endpoint failed (code=$health_code)"
 fi
 
-status_output="$(openclaw gateway status 2>&1 || true)"
+gateway_probe_cmd=(env -u OPENCLAW_GATEWAY_TOKEN)
+if ! is_placeholder_token "$live_token"; then
+  gateway_probe_cmd=(env OPENCLAW_GATEWAY_TOKEN="$live_token")
+fi
+
+status_output="$("${gateway_probe_cmd[@]}" openclaw gateway status 2>&1 || true)"
 if grep -q 'Runtime: running' <<<"$status_output"; then
   pass 'openclaw gateway status reports runtime running'
 else
@@ -392,10 +402,14 @@ if grep -q 'RPC probe: failed' <<<"$status_output"; then
   fail 'openclaw gateway status reports RPC probe failure'
 fi
 if grep -q 'Service config issue:' <<<"$status_output"; then
-  warn 'openclaw gateway status reports service config issue(s)'
+  if grep -q 'embeds OPENCLAW_GATEWAY_TOKEN and should be reinstalled' <<<"$status_output"; then
+    pass 'openclaw gateway status reports embedded service token (expected for repo-managed launchd token persistence)'
+  else
+    warn 'openclaw gateway status reports service config issue(s)'
+  fi
 fi
 
-health_cli_output="$(openclaw gateway health 2>&1)"
+health_cli_output="$("${gateway_probe_cmd[@]}" openclaw gateway health 2>&1)"
 health_cli_rc=$?
 if [[ "$health_cli_rc" -ne 0 ]]; then
   fail "openclaw gateway health command failed (exit=$health_cli_rc)"
