@@ -220,17 +220,21 @@ _DEFAULT_WORKTREE_BASE = os.path.expanduser("~/.mctrl/worktrees")
 def _task_with_push_instruction(task: str, branch: str = "") -> str:
     """Append a durable push requirement if the task does not already include one."""
     normalized = task.lower()
-    if "git push" in normalized:
+    if "git commit" in normalized:
         return task
-    push_text = (
-        f"`git push origin {branch}`"
+    commit_text = (
+        f"`git commit -m \"Your message\"`"
         if branch
-        else "`git push origin <your-branch>`"
+        else "`git commit -m \"Your message\"`"
     )
     return (
         f"{task.rstrip()}\n\n"
-        f"Before stopping, push your branch so the work is reviewable remotely: "
-        f"{push_text}."
+        f"IMPORTANT: Work in the worktree ROOT directory (not a subdirectory). "
+        f"After completing your changes, run:\n"
+        f"1. `git add .` to stage all changes\n"
+        f"2. {commit_text} to commit them\n"
+        f"3. `git push origin {branch or '<your-branch>'}` to push to remote.\n"
+        f"Your work is only visible after it is pushed to origin."
     )
 
 
