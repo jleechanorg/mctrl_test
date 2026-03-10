@@ -167,7 +167,9 @@
       "memory-server_search_nodes",
       "memory-server_open_nodes",
       "memory-server_read_graph",
-      "memory-server_delete_observations"
+      "memory-server_delete_observations",
+      "memory-server_delete_entities",
+      "memory-server_delete_relations"
     ],
     "deny": [
       "browser",
@@ -371,9 +373,9 @@
         "historyScope": "thread",
         "inheritParent": true
       },
-      "dmPolicy": "open",
+      "dmPolicy": "allowlist",
       "allowFrom": [
-        "*"
+        "<PLACEHOLDER_SLACK_USER_ID>"
       ],
       "channels": {
         "C0AKALZ4CKW": {

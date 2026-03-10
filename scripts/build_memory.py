@@ -41,7 +41,7 @@ COLLECT_OUTPUT = Path("/tmp/build_memory_collect.json")
 SYNTHESIZE_OUTPUT = Path("/tmp/build_memory_synthesize.json")
 
 # Note: SOUL.md may have suffixes like "(auto-updated weekly)", so we use startswith for flexible matching
-LEARNED_PATTERNS_ANCHOR = "## Learned Patterns"
+LEARNED_PATTERNS_ANCHOR = "## Learned Patterns (auto-updated weekly)"
 PROJECT_STATUS_ANCHOR = "## Project Status"
 
 
