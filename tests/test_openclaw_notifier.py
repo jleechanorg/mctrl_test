@@ -436,3 +436,90 @@ def test_send_via_mcp_agent_mail_prefers_message_delivery_before_agent_non_threa
 def test_openclaw_notification_max_runtime_includes_agent_and_mcp_fallback_timeouts() -> None:
     expected = ((60 + 30) * (len(_RETRY_DELAYS_SECONDS) + 1)) + sum(_RETRY_DELAYS_SECONDS)
     assert openclaw_notification_max_runtime_seconds() == expected
+
+
+# ---------------------------------------------------------------------------
+# Issue #2: Channel IDs must come from env vars, not hardcoded
+# ---------------------------------------------------------------------------
+
+
+def test_default_notify_target_reads_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_DEFAULT_NOTIFY_TARGET should be overridable via env var."""
+    from orchestration import openclaw_notifier
+
+    monkeypatch.setenv("OPENCLAW_NOTIFY_TARGET", "D_CUSTOM_CHANNEL")
+    # Re-import or read the function to check env-var usage
+    target = openclaw_notifier._default_notify_target()
+    assert target == "D_CUSTOM_CHANNEL"
+
+
+def test_default_notify_channel_reads_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_DEFAULT_NOTIFY_CHANNEL should be overridable via env var."""
+    from orchestration import openclaw_notifier
+
+    monkeypatch.setenv("OPENCLAW_NOTIFY_CHANNEL", "teams")
+    channel = openclaw_notifier._default_notify_channel()
+    assert channel == "teams"
+
+
+# ---------------------------------------------------------------------------
+# Issue #3: FileNotFoundError and PermissionError must be non-transient
+# ---------------------------------------------------------------------------
+
+
+def test_is_transient_exception_file_not_found_is_not_transient() -> None:
+    """FileNotFoundError (missing binary) must NOT be treated as transient."""
+    from orchestration.openclaw_notifier import _is_transient_exception
+
+    exc = FileNotFoundError("openclaw: command not found")
+    assert _is_transient_exception(exc) is False
+
+
+def test_is_transient_exception_permission_error_is_not_transient() -> None:
+    """PermissionError must NOT be treated as transient."""
+    from orchestration.openclaw_notifier import _is_transient_exception
+
+    exc = PermissionError("Permission denied: '/usr/bin/openclaw'")
+    assert _is_transient_exception(exc) is False
+
+
+def test_is_transient_exception_connection_refused_is_transient() -> None:
+    """ConnectionRefusedError (network) SHOULD be transient."""
+    from orchestration.openclaw_notifier import _is_transient_exception
+
+    exc = ConnectionRefusedError("Connection refused")
+    assert _is_transient_exception(exc) is True
+
+
+# ---------------------------------------------------------------------------
+# Issue #1: TimeoutExpired in _send_via_openclaw_agent must not bypass MCP fallback
+# ---------------------------------------------------------------------------
+
+
+@patch.dict("os.environ", {
+    "OPENCLAW_PROJECT_KEY": "test-project",
+    "OPENCLAW_SENDER_NAME": "mctrl",
+    "OPENCLAW_TO": "test@example.com",
+}, clear=False)
+@patch("orchestration.openclaw_notifier.subprocess.run")
+def test_agent_timeout_does_not_bypass_mcp_fallback(mock_run: MagicMock) -> None:
+    """When _send_via_openclaw_agent times out, the MCP fallback must still run."""
+    call_count = 0
+
+    def side_effect(*args: object, **kwargs: object) -> CompletedProcess[str]:
+        nonlocal call_count
+        call_count += 1
+        if call_count <= 2:
+            # First two calls: openclaw message send (fails) + openclaw agent (times out)
+            if call_count == 1:
+                return CompletedProcess(args=[], returncode=1, stdout="", stderr="failed")
+            raise subprocess.TimeoutExpired(cmd=["openclaw", "agent"], timeout=60)
+        # Third call: MCP fallback
+        return CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+    mock_run.side_effect = side_effect
+    attempt = _send_via_mcp_agent_mail({"event": "test", "bead_id": "ORCH-timeout-fallback"})
+
+    # MCP fallback should have been attempted (3 calls total)
+    assert call_count >= 3, f"Expected >=3 subprocess calls, got {call_count}"
+
