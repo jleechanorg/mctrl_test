@@ -146,6 +146,20 @@ install_plist() {
 echo "Installing LaunchAgents..."
 if [[ -n "$GATEWAY_TOKEN" && ${#GATEWAY_TOKEN} -ge 20 ]]; then
   openclaw gateway install --force --port 18789 --token "$GATEWAY_TOKEN" >/dev/null
+  # openclaw gateway install doesn't add token to launchd env vars - fix that
+  PLIST="$LAUNCHD_DIR/ai.openclaw.gateway.plist"
+  if [[ -f "$PLIST" ]]; then
+    # Ensure EnvironmentVariables exists, then set token idempotently.
+    if ! /usr/libexec/PlistBuddy -c "Print :EnvironmentVariables" "$PLIST" >/dev/null 2>&1; then
+      /usr/libexec/PlistBuddy -c "Add :EnvironmentVariables dict" "$PLIST"
+    fi
+    if ! plutil -replace EnvironmentVariables.OPENCLAW_GATEWAY_TOKEN -string "$GATEWAY_TOKEN" "$PLIST" 2>/dev/null; then
+      plutil -insert EnvironmentVariables.OPENCLAW_GATEWAY_TOKEN -string "$GATEWAY_TOKEN" "$PLIST"
+    fi
+    # Restart to pick up new env var
+    launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
+    launchctl bootstrap "gui/$(id -u)" "$PLIST"
+  fi
   echo "  ✓ ai.openclaw.gateway installed via openclaw gateway install"
 else
   echo "  ✗ Could not determine gateway token; refusing to reinstall ai.openclaw.gateway"
