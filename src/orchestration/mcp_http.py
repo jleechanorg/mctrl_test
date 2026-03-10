@@ -1,6 +1,6 @@
 """MCP HTTP equivalence — JSON-RPC 2.0 router.
 
-Implements the spec in docs/MCP_HTTP_EQUIVALENCE_SPEC.md:
+Implements:
   - Single POST /mcp endpoint
   - Route by JSON-RPC method
   - JSON-RPC 2.0 request/success/error envelopes
@@ -11,7 +11,7 @@ Implements the spec in docs/MCP_HTTP_EQUIVALENCE_SPEC.md:
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 
@@ -192,8 +192,16 @@ class McpRouter:
             if auth_token != self._auth_token:
                 return 401, {"error": "Unauthorized", "message": "Invalid or missing auth token"}
 
-        # Parse the JSON-RPC request
+        # Try to extract id from body for error correlation (Fix #6)
         req_id: str | int | None = None
+        try:
+            raw = json.loads(body)
+            if isinstance(raw, dict):
+                req_id = raw.get("id")
+        except Exception:
+            pass
+
+        # Parse the JSON-RPC request
         try:
             parsed = parse_jsonrpc_request(body)
         except JsonRpcError as exc:
@@ -201,6 +209,14 @@ class McpRouter:
 
         req_id = parsed.get("id")
         method = parsed["method"]
+
+        # Validate params type — must be dict if present (Fix #5)
+        params = parsed.get("params")
+        if params is not None and not isinstance(params, dict):
+            return 200, build_error(
+                req_id, INVALID_PARAMS,
+                "Invalid params: params must be a JSON object",
+            )
 
         # Route to handler
         handler = self._methods.get(method)
@@ -212,8 +228,8 @@ class McpRouter:
             return 200, result
         except JsonRpcError as exc:
             return 200, build_error(req_id, exc.code, exc.message, exc.data)
-        except Exception as exc:
-            return 200, build_error(req_id, INTERNAL_ERROR, f"Internal error: {exc}")
+        except Exception:
+            return 200, build_error(req_id, INTERNAL_ERROR, "Internal error")
 
     # -- Method handlers ----------------------------------------------------
 

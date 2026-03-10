@@ -1,7 +1,6 @@
 """Tests for orchestration.mcp_http — MCP HTTP equivalence (JSON-RPC 2.0 router).
 
 TDD RED phase: all tests written before implementation.
-Spec: docs/MCP_HTTP_EQUIVALENCE_SPEC.md
 """
 
 from __future__ import annotations
@@ -464,6 +463,9 @@ class TestErrorSemantics:
             "name": "exploder", "arguments": {},
         }))
         assert resp["error"]["code"] == -32603
+        # Fix #4: must NOT leak raw exception text
+        assert "boom" not in resp["error"]["message"]
+        assert resp["error"]["message"] == "Internal error"
 
 
 # ---------------------------------------------------------------------------
@@ -493,6 +495,62 @@ class TestHttpStatusGuidance:
         }))
         assert status == 200
         assert "result" in resp
+
+
+# ---------------------------------------------------------------------------
+# TestParamsValidation
+# ---------------------------------------------------------------------------
+
+class TestParamsValidation:
+    """Non-dict params returns -32602 INVALID_PARAMS."""
+
+    def test_list_params_returns_invalid_params(self):
+        """params as a JSON array should be rejected with -32602."""
+        router = _make_router()
+        body = json.dumps({
+            "jsonrpc": "2.0", "id": "req-1",
+            "method": "tools/list", "params": [1, 2, 3],
+        }).encode()
+        status, resp = router.dispatch(body)
+        assert status == 200
+        assert resp["error"]["code"] == -32602
+
+    def test_string_params_returns_invalid_params(self):
+        """params as a string should be rejected with -32602."""
+        router = _make_router()
+        body = json.dumps({
+            "jsonrpc": "2.0", "id": "req-1",
+            "method": "tools/list", "params": "bad",
+        }).encode()
+        status, resp = router.dispatch(body)
+        assert status == 200
+        assert resp["error"]["code"] == -32602
+
+
+# ---------------------------------------------------------------------------
+# TestReqIdPreservation
+# ---------------------------------------------------------------------------
+
+class TestReqIdPreservation:
+    """Error responses echo back the detectable request id."""
+
+    def test_invalid_request_preserves_detectable_id(self):
+        """Even when jsonrpc version is wrong, the id should be echoed."""
+        router = _make_router()
+        body = json.dumps({"jsonrpc": "1.0", "id": "abc-123", "method": "x"}).encode()
+        status, resp = router.dispatch(body)
+        assert status == 200
+        assert resp["error"]["code"] == -32600
+        assert resp["id"] == "abc-123"
+
+    def test_missing_method_preserves_id(self):
+        """Missing method should still echo the id."""
+        router = _make_router()
+        body = json.dumps({"jsonrpc": "2.0", "id": "xyz-789"}).encode()
+        status, resp = router.dispatch(body)
+        assert status == 200
+        assert resp["error"]["code"] == -32600
+        assert resp["id"] == "xyz-789"
 
 
 # ---------------------------------------------------------------------------
