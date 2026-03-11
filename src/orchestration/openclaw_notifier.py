@@ -505,28 +505,31 @@ def _send_via_mcp_agent_mail(payload: dict[str, Any]) -> bool:
     subject = f"{event_type}: {bead_id}"
     body = json.dumps(payload, indent=2, sort_keys=True)
 
-    result = subprocess.run(
-        [
-            "openclaw",
-            "mcp",
-            "call",
-            "mcp-agent-mail",
-            "send_message",
-            "--project_key",
-            project_key,
-            "--sender_name",
-            sender_name,
-            "--to",
-            to,
-            "--subject",
-            subject,
-            "--body_md",
-            f"```json\n{body}\n```",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "openclaw",
+                "mcp",
+                "call",
+                "mcp-agent-mail",
+                "send_message",
+                "--project_key",
+                project_key,
+                "--sender_name",
+                sender_name,
+                "--to",
+                to,
+                "--subject",
+                subject,
+                "--body_md",
+                f"```json\n{body}\n```",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        return False
     return result.returncode == 0
 
 
@@ -545,20 +548,23 @@ def _send_via_openclaw_agent(payload: dict[str, Any]) -> bool:
         f"Bead: {bead_id}\n\n"
         f"```json\n{body}\n```"
     )
-    result = subprocess.run(
-        [
-            "openclaw",
-            "agent",
-            "--agent",
-            agent_name,
-            "--message",
-            message,
-            "--json",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,  # Prevent indefinite hang on OpenClaw CLI issues
-    )
+    try:
+        result = subprocess.run(
+            [
+                "openclaw",
+                "agent",
+                "--agent",
+                agent_name,
+                "--message",
+                message,
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,  # Prevent indefinite hang on OpenClaw CLI issues
+        )
+    except subprocess.TimeoutExpired:
+        return False
     if result.returncode != 0:
         return False
     # Validate the JSON response indicates successful delivery, not just clean exit.

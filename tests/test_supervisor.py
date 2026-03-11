@@ -99,3 +99,33 @@ def test_outbox_alert_fires_when_dead_letter_present(monkeypatch) -> None:
 
     assert fired is True
     assert alert.call_count == 1
+
+
+def test_outbox_alert_payload_uses_passed_paths(monkeypatch) -> None:
+    sys.modules.pop("orchestration.supervisor", None)
+    supervisor = importlib.import_module("orchestration.supervisor")
+    supervisor._last_outbox_alert_at = None
+    payloads: list[dict] = []
+
+    def _notify(payload: dict) -> bool:
+        payloads.append(payload)
+        return True
+
+    monkeypatch.setattr(supervisor, "time", MagicMock(monotonic=MagicMock(return_value=42.0)))
+
+    fired = supervisor.maybe_alert_outbox_health(
+        pending_count=12,
+        dead_letter_count=0,
+        oldest_age_seconds=4000,
+        notify_fn=_notify,
+        threshold=10,
+        age_threshold=3600,
+        cooldown_seconds=3600,
+        outbox_path="/tmp/custom-outbox.jsonl",
+        dead_letter_path="/tmp/custom-dead.jsonl",
+    )
+
+    assert fired is True
+    assert len(payloads) == 1
+    assert payloads[0]["outbox_path"] == "/tmp/custom-outbox.jsonl"
+    assert payloads[0]["dead_letter_path"] == "/tmp/custom-dead.jsonl"

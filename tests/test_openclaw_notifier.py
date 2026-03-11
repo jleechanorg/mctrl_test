@@ -4,7 +4,7 @@ import json
 import os
 import time
 from pathlib import Path
-from subprocess import CompletedProcess
+from subprocess import CompletedProcess, TimeoutExpired
 from unittest.mock import MagicMock, patch
 
 from orchestration.openclaw_notifier import (
@@ -447,3 +447,27 @@ def test_notify_openclaw_uses_openclaw_agent_when_configured(mock_run, tmp_path:
         "jleechanclaw",
     ]
     assert read_outbox(outbox_path=str(outbox)) == []
+
+
+@patch.dict(
+    "os.environ",
+    {
+        "OPENCLAW_PROJECT_KEY": "project-x",
+        "OPENCLAW_SENDER_NAME": "sender-x",
+        "OPENCLAW_TO": "receiver-x",
+    },
+    clear=False,
+)
+@patch("orchestration.openclaw_notifier._send_via_openclaw_agent", return_value=False)
+@patch("orchestration.openclaw_notifier.subprocess.run")
+def test_notify_openclaw_mcp_fallback_handles_timeout(mock_run, _mock_agent, tmp_path: Path) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    payload = {"event": "task_finished", "bead_id": "ORCH-timeout"}
+    mock_run.side_effect = TimeoutExpired(cmd=["openclaw"], timeout=30)
+
+    delivered = notify_openclaw(payload, outbox_path=str(outbox))
+
+    assert delivered is False
+    queued = read_outbox(outbox_path=str(outbox))
+    assert len(queued) == 1
+    assert queued[0]["bead_id"] == "ORCH-timeout"

@@ -115,6 +115,8 @@ def run_once() -> list[dict]:
         threshold=OUTBOX_ALERT_THRESHOLD,
         age_threshold=OUTBOX_AGE_ALERT_SECONDS,
         cooldown_seconds=OUTBOX_ALERT_COOLDOWN_SECONDS,
+        outbox_path=OUTBOX_PATH,
+        dead_letter_path=DEAD_LETTER_PATH,
     )
     archived = archive_terminal_mappings(
         registry_path=REGISTRY_PATH,
@@ -134,6 +136,8 @@ def maybe_alert_outbox_health(
     threshold: int,
     age_threshold: int,
     cooldown_seconds: int,
+    outbox_path: str | None = None,
+    dead_letter_path: str | None = None,
 ) -> bool:
     global _last_outbox_alert_at
 
@@ -154,8 +158,8 @@ def maybe_alert_outbox_health(
         "oldest_age_seconds": oldest_age_seconds,
         "threshold": threshold,
         "age_threshold": age_threshold,
-        "outbox_path": OUTBOX_PATH,
-        "dead_letter_path": DEAD_LETTER_PATH,
+        "outbox_path": outbox_path or OUTBOX_PATH,
+        "dead_letter_path": dead_letter_path or DEAD_LETTER_PATH,
     }
     if notify_fn(payload):
         _last_outbox_alert_at = now
