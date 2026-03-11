@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib import parse, request
+from urllib import error, parse, request
 
 DEFAULT_CONFIG = Path("~/.openclaw/openclaw.json").expanduser()
 DEFAULT_STAGE_ROOT = Path("/tmp/openclaw-slack-memory-staging")
@@ -32,12 +32,12 @@ DEFAULT_STATE_FILE = Path("~/.openclaw/memory/slack-sync-state.json").expanduser
 
 TOKEN_PATTERNS = [
     re.compile(r"xox[baprs]-[A-Za-z0-9-]{20,}"),
-    re.compile(r"(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*['\"]?[^\\s'\"]+"),
-    re.compile(r"\\b[A-Fa-f0-9]{32,}\\b"),
-    re.compile(r"[A-Za-z0-9_\\-]{40,}"),
+    re.compile(r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*['\"]?[^\s'\"]+"),
+    re.compile(r"\b[A-Fa-f0-9]{32,}\b"),
+    re.compile(r"[A-Za-z0-9_-]{40,}"),
 ]
-EMAIL_PATTERN = re.compile(r"\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b")
-ENV_SECRET_NAME_PATTERN = re.compile(r"\\b[A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD)\\b")
+EMAIL_PATTERN = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+ENV_SECRET_NAME_PATTERN = re.compile(r"\b[A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD)\b")
 
 
 @dataclass
@@ -46,11 +46,37 @@ class SlackClient:
     pause_seconds: float = 0.25
 
     def api(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
-        query = parse.urlencode({k: v for k, v in params.items() if v is not None})
+        encoded_params: dict[str, Any] = {}
+        for key, value in params.items():
+            if value is None:
+                continue
+            if isinstance(value, bool):
+                encoded_params[key] = "true" if value else "false"
+            else:
+                encoded_params[key] = value
+        query = parse.urlencode(encoded_params)
         url = f"https://slack.com/api/{method}?{query}"
         req = request.Request(url, headers={"Authorization": f"Bearer {self.token}"})
-        with request.urlopen(req, timeout=30) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
+        max_attempts = 5
+        body: str | None = None
+        for attempt in range(max_attempts):
+            try:
+                with request.urlopen(req, timeout=30) as resp:
+                    body = resp.read().decode("utf-8", errors="replace")
+                break
+            except error.HTTPError as exc:
+                if exc.code != 429 or attempt == max_attempts - 1:
+                    raise
+                retry_after = (exc.headers or {}).get("Retry-After")
+                try:
+                    wait_seconds = max(0.0, float(retry_after)) if retry_after else 0.0
+                except (TypeError, ValueError):
+                    wait_seconds = 0.0
+                if wait_seconds <= 0:
+                    wait_seconds = float(min(2 ** attempt, 30))
+                time.sleep(wait_seconds)
+        if body is None:
+            raise RuntimeError(f"Slack API {method} returned no response body")
         data = json.loads(body)
         if not data.get("ok"):
             raise RuntimeError(f"Slack API {method} failed: {data.get('error', 'unknown_error')}")
@@ -63,14 +89,20 @@ def load_config_channel_ids(config_path: Path) -> list[str]:
     if not config_path.exists():
         return []
     data = json.loads(config_path.read_text(encoding="utf-8"))
-    channels = (
-        data.get("messaging", {})
-        .get("slack", {})
-        .get("channels", {})
-    )
+    channels: dict[str, Any] | None = None
+    for path in (("channels", "slack", "channels"), ("messaging", "slack", "channels")):
+        current: Any = data
+        for key in path:
+            if not isinstance(current, dict):
+                current = None
+                break
+            current = current.get(key)
+        if isinstance(current, dict):
+            channels = current
+            break
     if not isinstance(channels, dict):
         return []
-    return [cid for cid in channels.keys() if isinstance(cid, str) and cid]
+    return [cid for cid in channels.keys() if isinstance(cid, str) and cid and cid != "*"]
 
 
 def parse_channels(channels_arg: str | None, config_path: Path) -> list[str]:
@@ -134,7 +166,7 @@ def collect_history(
             "cursor": cursor,
             "oldest": oldest,
             "latest": latest,
-            "inclusive": True,
+            "inclusive": False,
         }
         data = client.api("conversations.history", params)
         batch = data.get("messages", [])
@@ -154,24 +186,30 @@ def collect_history(
         thread_ts = str(root.get("thread_ts"))
         if not thread_ts:
             continue
-        replies_data = client.api(
-            "conversations.replies",
-            {
-                "channel": channel,
-                "ts": thread_ts,
-                "limit": 200,
-                "oldest": oldest,
-                "latest": latest,
-                "inclusive": True,
-            },
-        )
-        replies = replies_data.get("messages", [])
-        for rep in replies:
-            rep["_thread_of"] = thread_ts
-            ts = str(rep.get("ts", ""))
-            if ts and (newest_ts is None or float(ts) > float(newest_ts)):
-                newest_ts = ts
-        messages.extend(replies)
+        replies_cursor: str | None = None
+        while True:
+            replies_data = client.api(
+                "conversations.replies",
+                {
+                    "channel": channel,
+                    "ts": thread_ts,
+                    "limit": 200,
+                    "oldest": oldest,
+                    "latest": latest,
+                    "inclusive": False,
+                    "cursor": replies_cursor,
+                },
+            )
+            replies = replies_data.get("messages", [])
+            for rep in replies:
+                rep["_thread_of"] = thread_ts
+                ts = str(rep.get("ts", ""))
+                if ts and (newest_ts is None or float(ts) > float(newest_ts)):
+                    newest_ts = ts
+            messages.extend(replies)
+            replies_cursor = replies_data.get("response_metadata", {}).get("next_cursor")
+            if not replies_cursor:
+                break
 
     dedup: dict[str, dict[str, Any]] = {}
     for msg in messages:
@@ -230,7 +268,7 @@ def resolve_token(explicit: str | None) -> str:
         value = os.environ.get(key)
         if value:
             return value
-    raise RuntimeError("Missing Slack token. Set OPENCLAW_SLACK_BOT_TOKEN, SLACK_BOT_TOKEN, or --token")
+    raise RuntimeError("Missing Slack token. Set OPENCLAW_SLACK_BOT_TOKEN, SLACK_BOT_TOKEN, SLACK_USER_TOKEN, or --token")
 
 
 def main() -> int:
@@ -257,7 +295,7 @@ def main() -> int:
 
     channels = parse_channels(args.channels, config_path)
     if not channels:
-        raise RuntimeError("No channels resolved. Provide --channels or configure messaging.slack.channels")
+        raise RuntimeError("No channels resolved. Provide --channels or configure channels.slack.channels (or messaging.slack.channels)")
 
     state = load_state(state_path)
     client = SlackClient(token=token)
@@ -299,11 +337,14 @@ def main() -> int:
     if not args.dry_run:
         manifest = stage_dir / "manifest.json"
         manifest.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
-        save_state(state_path, state)
         promoted: list[Path] = []
         if args.promote:
             promoted = promote_files(stage_files + [manifest], promote_dir)
             summary["promoted_files"] = [str(p) for p in promoted]
+            save_state(state_path, state)
+            summary["state_saved"] = True
+        else:
+            summary["state_saved"] = False
 
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0

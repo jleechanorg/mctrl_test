@@ -221,20 +221,27 @@ done
 echo ""
 echo "Verifying launchd labels..."
 EXPECTED_LABELS=("ai.openclaw.gateway" "ai.openclaw.startup-check")
-for plist in "$CONFIG_DIR"/ai.openclaw.schedule.*.plist; do
+for plist in "$LAUNCHD_DIR"/ai.openclaw.schedule.*.plist; do
   [[ -f "$plist" ]] || continue
   EXPECTED_LABELS+=("$(basename "$plist" .plist)")
 done
 [[ -f "$MC_BACKEND_PLIST" ]] && EXPECTED_LABELS+=("ai.openclaw.mission-control")
 [[ -f "$MC_FRONTEND_PLIST" ]] && EXPECTED_LABELS+=("ai.openclaw.mission-control-frontend")
 
+missing=0
 for label in "${EXPECTED_LABELS[@]}"; do
   if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
     echo "  ✓ $label registered"
   else
     echo "  ✗ $label NOT registered"
+    missing=1
   fi
 done
+
+if [[ "$missing" -ne 0 ]]; then
+  echo "ERROR: one or more expected launchd labels were not registered."
+  exit 1
+fi
 
 echo ""
 echo "Log locations:"
