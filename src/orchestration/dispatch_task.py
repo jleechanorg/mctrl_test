@@ -335,6 +335,7 @@ Do NOT assume a default repo - always verify with memory or user.
         if branch
         else "`git commit -m \"Your message\"`"
     )
+    push_text = f"`git push origin {branch or '<your-branch>'}`"
     if "git push" in normalized:
         # Task already includes a push instruction — leave as-is.
         push_clause = task

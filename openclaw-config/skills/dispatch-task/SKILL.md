@@ -81,7 +81,7 @@ appends it automatically. You may also include wording like:
 
 > After making and committing the change, run `git push origin <branch>` and only then stop.
 
-### 4. Confirm dispatch
+### 5. Confirm dispatch
 
 The command prints:
 ```
