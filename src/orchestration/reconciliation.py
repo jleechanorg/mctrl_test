@@ -122,7 +122,9 @@ def _remote_branch_exists(branch: str, worktree_path: str | None) -> bool | None
         deterministic_failure_seen = False
         transient_fetch_failure_seen = False
         for remote in remotes:
-            fetch_result = _git(["git", "fetch", "--no-tags", remote], timeout=15)
+            fetch_result = _git(
+                ["git", "fetch", "--no-tags", "--prune", remote], timeout=15
+            )
             if fetch_result.returncode != 0:
                 stderr = (fetch_result.stderr or "").strip()
                 if _is_transient_fetch_error(stderr):
@@ -154,12 +156,15 @@ def _remote_branch_exists(branch: str, worktree_path: str | None) -> bool | None
                 )
                 if ancestry_result.returncode == 0:
                     return True
-                deterministic_failure_seen = True
+                if ancestry_result.returncode == 1:
+                    deterministic_failure_seen = True
+                    continue
+                transient_fetch_failure_seen = True
 
-        if deterministic_failure_seen:
-            return False
         if transient_fetch_failure_seen:
             return None
+        if deterministic_failure_seen:
+            return False
         return False
     except Exception as exc:
         logger.warning(

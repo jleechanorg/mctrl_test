@@ -237,7 +237,7 @@ class TestRemoteBranchExists:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="feat/current\n", stderr="")
             if args == ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="upstream/feat/current\n", stderr="")
-            if args == ["git", "fetch", "--no-tags", "upstream"]:
+            if args == ["git", "fetch", "--no-tags", "--prune", "upstream"]:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
             if args == ["git", "rev-parse", "--verify", "upstream/feat/demo"]:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="deadbeef\n", stderr="")
@@ -261,7 +261,7 @@ class TestRemoteBranchExists:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="leetcode-hard-3\n", stderr="")
             if args == ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="mctrl_test/leetcode-hard-3\n", stderr="")
-            if args == ["git", "fetch", "--no-tags", "mctrl_test"]:
+            if args == ["git", "fetch", "--no-tags", "--prune", "mctrl_test"]:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
             if args == ["git", "rev-parse", "--verify", "mctrl_test/leetcode-hard-3"]:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="deadbeef\n", stderr="")
@@ -269,7 +269,7 @@ class TestRemoteBranchExists:
                 return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="")
             if args == ["git", "merge-base", "--is-ancestor", "HEAD", "mctrl_test/leetcode-hard-3"]:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
-            if args == ["git", "fetch", "--no-tags", "origin"]:
+            if args == ["git", "fetch", "--no-tags", "--prune", "origin"]:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
             if args == ["git", "rev-parse", "--verify", "origin/ai-orch-4121"]:
                 return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="")
@@ -291,7 +291,7 @@ class TestRemoteBranchExists:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="feat/demo\n", stderr="")
             if args == ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]:
                 return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="")
-            if args == ["git", "fetch", "--no-tags", "origin"]:
+            if args == ["git", "fetch", "--no-tags", "--prune", "origin"]:
                 return subprocess.CompletedProcess(
                     args=args, returncode=128, stdout="", stderr="network timeout"
                 )
@@ -300,6 +300,29 @@ class TestRemoteBranchExists:
         monkeypatch.setattr(subprocess, "run", fake_run)
 
         assert _remote_branch_exists("feat/demo", "/tmp/wt-demo") is None
+
+
+def test_returns_none_when_merge_base_check_errors_for_remote_ref(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_run(args, **kwargs):
+        if args == ["git", "remote"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="origin\n", stderr="")
+        if args == ["git", "branch", "--show-current"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="feat/demo\n", stderr="")
+        if args == ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]:
+            return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="")
+        if args == ["git", "fetch", "--no-tags", "--prune", "origin"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+        if args == ["git", "rev-parse", "--verify", "origin/feat/demo"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="deadbeef\n", stderr="")
+        if args == ["git", "merge-base", "--is-ancestor", "HEAD", "origin/feat/demo"]:
+            return subprocess.CompletedProcess(args=args, returncode=128, stdout="", stderr="fatal: bad object")
+        raise AssertionError(f"unexpected subprocess call: {args}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert _remote_branch_exists("feat/demo", "/tmp/wt-demo") is None
 
 
 def test_reconcile_leaves_in_progress_when_remote_check_is_transient_failure(
