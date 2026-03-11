@@ -13,3 +13,4 @@ python hello.py
 ```bash
 pytest test_hello.py -v
 ```
+- smoke: rev-vvq
