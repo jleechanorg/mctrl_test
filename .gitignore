@@ -113,6 +113,12 @@ RESUME.md
 .beads/interactions.jsonl
 .beads/dolt
 .beads/dolt-wal
+.beads/dolt-*.pid
+.beads/dolt-*.pid.lock
+.beads/dolt-*.lock
+.beads/dolt-*.log
+.beads/dolt-*.port
+.beads/dolt-*.activity
 .claude/scheduled_tasks.lock
 .messages
 
