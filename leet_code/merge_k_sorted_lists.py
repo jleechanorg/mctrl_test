@@ -123,7 +123,7 @@ if __name__ == "__main__":
     assert linkedlist_to_list(result) == [], "Test 2 failed"
 
     # Test Case 3: List containing empty lists
-    lists = [[]]
+    lists = [list_to_linkedlist([])]
     result = merge_k_lists(lists)
     print(f"Test 3: {linkedlist_to_list(result)}")
     assert linkedlist_to_list(result) == [], "Test 3 failed"
