@@ -219,6 +219,24 @@ for port in "${PORTS[@]}"; do
 done
 
 echo ""
+echo "Verifying launchd labels..."
+EXPECTED_LABELS=("ai.openclaw.gateway" "ai.openclaw.startup-check")
+for plist in "$CONFIG_DIR"/ai.openclaw.schedule.*.plist; do
+  [[ -f "$plist" ]] || continue
+  EXPECTED_LABELS+=("$(basename "$plist" .plist)")
+done
+[[ -f "$MC_BACKEND_PLIST" ]] && EXPECTED_LABELS+=("ai.openclaw.mission-control")
+[[ -f "$MC_FRONTEND_PLIST" ]] && EXPECTED_LABELS+=("ai.openclaw.mission-control-frontend")
+
+for label in "${EXPECTED_LABELS[@]}"; do
+  if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
+    echo "  ✓ $label registered"
+  else
+    echo "  ✗ $label NOT registered"
+  fi
+done
+
+echo ""
 echo "Log locations:"
 echo "  gateway:  ~/.openclaw/logs/gateway.log"
 echo "  startup check: ~/.openclaw/logs/startup-check.log"
