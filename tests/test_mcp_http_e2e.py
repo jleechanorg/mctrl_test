@@ -12,6 +12,7 @@ import http.server
 import json
 import os
 import threading
+from collections.abc import Generator
 from typing import Any
 from urllib.request import Request, urlopen
 
@@ -29,7 +30,7 @@ class McpHttpHandler(http.server.BaseHTTPRequestHandler):
 
     router: McpRouter  # Set by the fixture
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         if self.path != "/mcp":
             self.send_response(404)
             self.end_headers()
@@ -51,12 +52,12 @@ class McpHttpHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(resp).encode())
 
-    def log_message(self, format, *args):
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
         pass  # Suppress server logs during tests
 
 
 @pytest.fixture
-def mcp_server():
+def mcp_server() -> Generator[tuple[str, McpRouter], None, None]:
     """Start a real HTTP server with an McpRouter and yield its base URL."""
     router = McpRouter(
         server_name="e2e-test-server",
@@ -303,6 +304,7 @@ GATEWAY_URL = "http://localhost:18789"
 GATEWAY_TOKEN = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "")
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(not GATEWAY_TOKEN, reason="OPENCLAW_GATEWAY_TOKEN not set")
 class TestGatewayConnectivity:
     """Smoke: verify the OpenClaw gateway is up and reachable."""

@@ -535,7 +535,7 @@
               "command": "bash",
               "args": [
                 "-lc",
-                "source ~/.profile >/dev/null 2>&1 && SLACK_MCP_XOXB_TOKEN=\"${OPENCLAW_SLACK_BOT_TOKEN:-$SLACK_USER_TOKEN}\" SLACK_MCP_ADD_MESSAGE_TOOL=true /Users/jleechan/go/bin/slack-mcp-server"
+                "source ~/.profile >/dev/null 2>&1 && SLACK_MCP_XOXB_TOKEN=\"${OPENCLAW_SLACK_BOT_TOKEN:?OPENCLAW_SLACK_BOT_TOKEN must be set}\" SLACK_MCP_ADD_MESSAGE_TOOL=true /Users/jleechan/go/bin/slack-mcp-server"
               ]
             },
             {

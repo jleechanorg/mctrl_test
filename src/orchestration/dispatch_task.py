@@ -239,18 +239,18 @@ When the task involves making a PR to a DIFFERENT REPO than your current worktre
 
 
 def _is_cross_repo_task(task: str) -> bool:
-    """Detect if task is targeting a different repo."""
+    """Detect if task is targeting a different repo.
+
+    Uses high-confidence patterns and falls back to repo-name extraction
+    (which includes a blocklist) to avoid false positives on generic
+    English phrases like "fix the bug in this repo".
+    """
     task_lower = task.lower()
-    # Patterns indicating cross-repo work — must be specific to avoid
-    # false positives on generic English phrases like "Add tests to the codebase".
-    cross_repo_indicators = [
-        " pr against ",
-        " pr to ",
-        "github.com/",
-        " repo ",
-        " repository ",
-    ]
-    return any(indicator in task_lower for indicator in cross_repo_indicators)
+    # High-confidence patterns only — avoid false positives
+    if "github.com/" in task_lower or " pr against " in task_lower:
+        return True
+    # Fall back to repo-name extraction (includes blocklist filtering)
+    return bool(_extract_repo_name_hint(task))
 
 
 def _inject_cross_repo_context(task: str, repo_root: str) -> str:
@@ -308,70 +308,43 @@ def _resolve_target_repo(task: str, default_repo_root: str) -> tuple[str, str]:
 
 
 def _task_with_push_instruction(task: str, branch: str = "", repo_root: str = ".") -> str:
-    """Append instructions and context to help the LLM determine the target repo."""
-    # Only add target-repo reminders when the task hints at repo routing.
-    task_lower = task.lower()
-    routing_hint = ("repo" in task_lower) or ("pr" in task_lower)
-    if routing_hint and not _extract_repo_name_hint(task) and not _is_cross_repo_task(task):
-        memory_reminder = """
-## TARGET REPO REMINDER
-This task does not specify a target repo. Before starting:
-1. Search memories for similar past tasks and their target repos
-2. Search ~/projects for relevant repos
-3. If unsure, ask the user which repo to target
-
-Do NOT assume a default repo - always verify with memory or user.
-"""
-        task = f"{task.rstrip()}\n{memory_reminder}"
-
-    # First inject cross-repo context
+    """Append git commit/push instructions and cross-repo context to help the LLM."""
+    # Inject cross-repo context when applicable
     task = _inject_cross_repo_context(task, repo_root)
 
     normalized = task.lower()
     if "git commit" in normalized:
         return task
-    commit_text = (
-        f"`git commit -m \"Your message\"`"
-        if branch
-        else "`git commit -m \"Your message\"`"
-    )
-    push_text = f"`git push origin {branch or '<your-branch>'}`"
     if "git push" in normalized:
-        # Task already includes a push instruction — leave as-is.
-        push_clause = task
-    elif "git commit" in normalized:
-        # Task mentions commit but not push — append push-only reminder.
-        push_clause = (
-            f"{task.rstrip()}\n\n"
-            f"After committing, push your branch to origin: {push_text}.\n"
-            "Your work is only visible after it is pushed to origin."
-        )
-    else:
-        commit_text = "`git commit -m \"Your message\"`"
-        push_clause = (
-            f"{task.rstrip()}\n\n"
-            f"IMPORTANT: Work in the worktree ROOT directory (NOT a subdirectory).\n"
-            f"After completing changes, run:\n"
-            f"1. `git add .` to stage all changes\n"
-            f"2. {commit_text} to commit\n"
-            f"3. {push_text} to push to remote.\n"
-            "Your work is only visible after it is pushed to origin."
-        )
-    if "do not switch to another local checkout" in normalized:
-        return push_clause
+        return task  # Already has push instruction — leave as-is
+
+    commit_text = "`git commit -m \"Your message\"`"
+    push_text = f"`git push origin {branch or '<your-branch>'}`"
     return (
         f"{task.rstrip()}\n\n"
         f"IMPORTANT: Work in the worktree ROOT directory (not a subdirectory). "
         f"After completing your changes, run:\n"
         f"1. `git add .` to stage all changes\n"
         f"2. {commit_text} to commit them\n"
-        f"3. `git push origin {branch or '<your-branch>'}` to push to remote.\n"
+        f"3. {push_text} to push to remote.\n"
         f"Your work is only visible after it is pushed to origin."
     )
 
 
+# Common English words that should never be treated as repo names.
+_REPO_NAME_BLOCKLIST = frozenset({
+    "a", "an", "the", "this", "that", "my", "our", "your", "its",
+    "fix", "bug", "code", "main", "test", "tests", "new", "old",
+    "repo", "repository", "project", "branch", "codebase",
+    "same", "current", "local", "remote", "upstream",
+})
+
+
 def _extract_repo_name_hint(task: str) -> str:
-    """Extract repo name from task text."""
+    """Extract repo name from task text.
+
+    Returns the first candidate that is not in the blocklist.
+    """
     patterns = (
         r"\bagainst\s+`?([A-Za-z0-9._-]+)`?\s*$",
         r"\bagainst\s+`?([A-Za-z0-9._-]+)`?\s+repo",
@@ -385,7 +358,7 @@ def _extract_repo_name_hint(task: str) -> str:
         if not match:
             continue
         candidate = match.group(1).strip().strip(".")
-        if candidate:
+        if candidate and candidate.lower() not in _REPO_NAME_BLOCKLIST:
             return candidate
     return ""
 
@@ -614,8 +587,11 @@ def dispatch(
     - Remote-only branch → checkout fresh worktree, ai_orch runs there
     - Branch missing everywhere → raises ValueError before spawning
 
-    Without branch, ai_orch creates a new worktree via --worktree for same-repo
-    tasks and creates target-repo worktrees for explicit cross-repo tasks.
+    Without branch:
+    - Cross-repo tasks (detected via repo hints or GitHub URLs) create a
+      dedicated worktree inside the target repo. On failure, the worktree
+      is cleaned up automatically.
+    - Same-repo tasks use ai_orch's built-in --worktree flag.
     """
     if slack_trigger_ts and not slack_trigger_channel:
         raise ValueError("slack_trigger_channel is required when slack_trigger_ts is set")
