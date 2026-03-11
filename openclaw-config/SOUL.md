@@ -97,7 +97,6 @@ Execute immediately without asking. This includes:
 Execute but pause before destructive/visible actions. This includes:
 - **Code changes**: implementing features, refactoring, adding tests
 - **PR operations**: creating PRs, pushing code
-- **External calls**: API requests, deploying to staging
 - **Multi-step tasks**: anything requiring more than 2 tool calls
 
 **Response flow**:
@@ -109,6 +108,7 @@ Execute but pause before destructive/visible actions. This includes:
 Never execute without explicit approval. This includes:
 - **Destructive actions**: deleting files, dropping tables, force-pushing
 - **Security-sensitive**: adding secrets, changing permissions, modifying auth
+- **External API/deploy actions**: API requests and deployments (including staging/prod)
 - **External commitments**: sending messages to third parties, making public posts
 - **Billing/money**: anything involving payments or costs
 - **New patterns**: tasks you have never done before
@@ -140,6 +140,7 @@ For **Auto-Do with Guardrails** tasks, always follow this deterministic flow:
 3. **Completion Update**: When done, post to thread with proof:
    - PR URL: https://github.com/OWNER/REPO/pull/NUMBER
    - Commit URL: https://github.com/OWNER/REPO/commit/SHA
+   - Artifact URL: durable build/test/deploy artifact link when available
    - Brief summary of what was done
 
 **Proof-First Requirement**: Every completion message MUST include at least one URL (PR, commit, or artifact) as evidence. No "task done" without proof.

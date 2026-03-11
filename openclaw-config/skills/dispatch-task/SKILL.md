@@ -36,11 +36,11 @@ Reply to jleechan's original Slack message in the same thread:
 
 Record the `ts` of jleechan's original message as `SLACK_TRIGGER_TS`.
 
-**Proof-First Requirement**: When the supervisor posts completion, it MUST include at least one reviewable proof URL:
+**Proof-First Requirement**: When the supervisor posts completion, it MUST include at least one reviewable proof URL (PR, commit, or artifact):
 - PR URL: `https://github.com/OWNER/REPO/pull/NUMBER`
 - Commit URL: `https://github.com/OWNER/REPO/commit/SHA`
-
-It SHOULD include both when available. No "task done" without proof URLs. See SOUL.md "Autopilot Policy" for the full contract.
+- Artifact URL: durable build/test/deploy artifact link
+It SHOULD include multiple proof URLs when available (for example, PR + commit). No "task done" without at least one proof URL. See SOUL.md "Autopilot Policy" for the full contract.
 
 ### 3. Before dispatching: Search memories
 
