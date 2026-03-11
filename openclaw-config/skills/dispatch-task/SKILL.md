@@ -26,13 +26,21 @@ bd create -p P1 -t task --title "short description"
 # Note the ORCH-xxx ID from output
 ```
 
-### 2. Ack in Slack thread
+### 2. Ack in Slack thread (REQUIRED)
+
+**This is the Deterministic Slack Thread Response Contract.**
 
 Reply to jleechan's original Slack message in the same thread:
 
 > On it. Spawning agent for **ORCH-xxx** — will reply here when done.
 
 Record the `ts` of jleechan's original message as `SLACK_TRIGGER_TS`.
+
+**Proof-First Requirement**: When the supervisor posts completion, it MUST include:
+- PR URL: `https://github.com/OWNER/REPO/pull/NUMBER`
+- Commit URL: `https://github.com/OWNER/REPO/commit/SHA`
+
+No "task done" without proof URLs. See SOUL.md "Autopilot Policy" for the full contract.
 
 ### 3. Before dispatching: Search memories
 
