@@ -143,7 +143,7 @@ For **Auto-Do with Guardrails** tasks, always follow this deterministic flow:
    - Artifact URL: durable build/test/deploy artifact link when available
    - Brief summary of what was done
 
-**Proof-First Requirement**: Every completion message MUST include at least one URL (PR, commit, or artifact) as evidence. No "task done" without proof.
+**Proof-First Requirement**: Every completion message MUST include at least one PR or commit URL as evidence. No "task done" without proof.
 
 This contract ensures Jeffrey always knows:
 - Request was received (ack)
