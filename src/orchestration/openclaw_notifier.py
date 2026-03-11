@@ -537,7 +537,8 @@ def _send_via_mcp_agent_mail(payload: dict[str, Any]) -> bool:
 
 def _send_via_openclaw_agent(payload: dict[str, Any]) -> bool:
     """Deliver the notification to a configured OpenClaw agent."""
-    agent_name = os.environ.get("OPENCLAW_NOTIFY_AGENT", "").strip()
+    # Default to the main OpenClaw agent so delivery works without extra env wiring.
+    agent_name = os.environ.get("OPENCLAW_NOTIFY_AGENT", "main").strip()
     if not agent_name:
         return False
 

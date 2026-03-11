@@ -8,11 +8,19 @@ from typing import Any
 from orchestration.openclaw_notifier import (
     drain_outbox,
     notify_openclaw,
+    notify_slack_done,
     openclaw_notification_max_runtime_seconds,
 )
 from orchestration.session_registry import list_mappings, update_mapping_status
 
 logger = logging.getLogger(__name__)
+
+
+def _notify_completion(payload: dict[str, Any], outbox_path: str) -> None:
+    # Slack thread closure is the primary user-visible completion signal.
+    # OpenClaw delivery remains a secondary system-to-system channel.
+    notify_slack_done(payload)
+    notify_openclaw(payload, outbox_path=outbox_path)
 
 
 def run_tmux_sessions() -> set[str]:
@@ -252,9 +260,8 @@ def reconcile_registry_once(
         }
         # Emit a single channel-agnostic notification to OpenClaw.
         t_openclaw = threading.Thread(
-            target=notify_openclaw,
-            args=(payload,),
-            kwargs={"outbox_path": outbox_path},
+            target=_notify_completion,
+            args=(payload, outbox_path),
             daemon=True,
         )
         t_openclaw.start()

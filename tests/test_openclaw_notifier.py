@@ -455,6 +455,22 @@ def test_notify_openclaw_uses_openclaw_agent_when_configured(mock_run, tmp_path:
     assert read_outbox(outbox_path=str(outbox)) == []
 
 
+@patch.dict("os.environ", {}, clear=True)
+@patch("orchestration.openclaw_notifier.subprocess.run")
+def test_notify_openclaw_defaults_agent_name_to_main(mock_run, tmp_path: Path) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    payload = {"event": "task_finished", "bead_id": "ORCH-default-agent"}
+    mock_run.return_value = CompletedProcess(
+        args=["openclaw", "agent", "--agent", "main"], returncode=0
+    )
+
+    delivered = notify_openclaw(payload, outbox_path=str(outbox))
+
+    assert delivered is True
+    assert mock_run.call_args.args[0][:4] == ["openclaw", "agent", "--agent", "main"]
+    assert read_outbox(outbox_path=str(outbox)) == []
+
+
 @patch.dict(
     "os.environ",
     {

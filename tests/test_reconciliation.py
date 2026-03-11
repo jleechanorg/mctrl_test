@@ -84,6 +84,7 @@ class TestReconcileRegistryOnce:
         )
         # Stub network calls — unit tests must not post real Slack or OpenClaw messages.
         monkeypatch.setattr("orchestration.reconciliation.notify_openclaw", lambda p, *, outbox_path: True)
+        monkeypatch.setattr("orchestration.reconciliation.notify_slack_done", lambda _p: True)
 
         emitted = reconcile_registry_once(
             registry_path=str(registry),
@@ -163,6 +164,7 @@ class TestReconcileRegistryOnce:
             lambda *_args, **_kwargs: False,
         )
         monkeypatch.setattr("orchestration.reconciliation.notify_openclaw", lambda p, *, outbox_path: True)
+        monkeypatch.setattr("orchestration.reconciliation.notify_slack_done", lambda _p: True)
 
         emitted = reconcile_registry_once(
             registry_path=str(registry),
@@ -210,6 +212,7 @@ class TestReconcileRegistryOnce:
             lambda *_args, **_kwargs: True,
         )
         monkeypatch.setattr("orchestration.reconciliation.notify_openclaw", lambda p, *, outbox_path: True)
+        monkeypatch.setattr("orchestration.reconciliation.notify_slack_done", lambda _p: True)
 
         emitted = reconcile_registry_once(
             registry_path=str(registry),
@@ -224,6 +227,53 @@ class TestReconcileRegistryOnce:
         found = get_mapping("ORCH-remote-ok", registry_path=str(registry))
         assert found is not None
         assert found.status == "finished"
+
+    def test_falls_back_to_direct_slack_done_when_openclaw_delivery_fails(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        registry = tmp_path / "registry.jsonl"
+        outbox = tmp_path / "outbox.jsonl"
+
+        upsert_mapping(
+            BeadSessionMapping.create(
+                bead_id="ORCH-slack-fallback",
+                session_name="session-slack-fallback",
+                worktree_path="/tmp/wt-slack-fallback",
+                branch="feat/slack-fallback",
+                agent_cli="claude",
+                status="in_progress",
+                start_sha="abc123",
+            ),
+            registry_path=str(registry),
+        )
+        monkeypatch.setattr(
+            "orchestration.reconciliation.run_tmux_sessions",
+            lambda: set(),
+        )
+        monkeypatch.setattr(
+            "orchestration.reconciliation._worktree_has_commits",
+            lambda *_args, **_kwargs: True,
+        )
+        monkeypatch.setattr(
+            "orchestration.reconciliation._remote_branch_exists",
+            lambda *_args, **_kwargs: True,
+        )
+
+        notify_openclaw = MagicMock(return_value=False)
+        notify_slack_done = MagicMock(return_value=True)
+        monkeypatch.setattr("orchestration.reconciliation.notify_openclaw", notify_openclaw)
+        monkeypatch.setattr("orchestration.reconciliation.notify_slack_done", notify_slack_done)
+
+        emitted = reconcile_registry_once(
+            registry_path=str(registry),
+            outbox_path=str(outbox),
+            dead_letter_path=str(tmp_path / "dead_letter.jsonl"),
+        )
+
+        assert len(emitted) == 1
+        assert emitted[0]["event"] == "task_finished"
+        notify_openclaw.assert_called_once()
+        notify_slack_done.assert_called_once()
 
 
 class TestRemoteBranchExists:
