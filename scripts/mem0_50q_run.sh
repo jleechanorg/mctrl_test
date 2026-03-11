@@ -170,7 +170,7 @@ for i, e in enumerate(expected, 1):
     attempts = []
     extracted = ''
     raw_answer = ''
-    for attempt in range(1, 2):
+    for attempt in range(1, 4):
         session_id = run_session_id
         try:
             p = subprocess.run(
@@ -192,11 +192,33 @@ for i, e in enumerate(expected, 1):
                 answer = raw
             if stderr:
                 answer = (answer + '\n' + stderr).strip()
+            err_l = (stderr or "").lower()
+            if p.returncode != 0 and (
+                "session file locked" in err_l
+                or "rate limit" in err_l
+                or "timed out" in err_l
+                or "all models failed" in err_l
+            ):
+                # Runtime/transient failure: repair session metadata and retry.
+                subprocess.run(
+                    ['openclaw', 'sessions', 'cleanup'],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                attempts.append({
+                    'attempt': attempt,
+                    'answer': answer[:2000],
+                    'extracted': '',
+                    'returncode': p.returncode,
+                    'transient_retry': True,
+                })
+                continue
         except subprocess.TimeoutExpired:
             answer = 'I_DONT_KNOW'
 
         token = extract_identifier(kind, answer)
-        attempts.append({'attempt': attempt, 'answer': answer[:2000], 'extracted': token})
+        attempts.append({'attempt': attempt, 'answer': answer[:2000], 'extracted': token, 'returncode': p.returncode if 'p' in locals() else None})
         raw_answer = answer
         if token:
             extracted = token

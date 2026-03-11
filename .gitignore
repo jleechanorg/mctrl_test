@@ -125,6 +125,8 @@ RESUME.md
 # openclaw credentials — never commit tokens
 openclaw-config/credentials/
 openclaw-config/agents/*/agent/auth-profiles.json
+!openclaw-config/workspaces/monitor/IDENTITY.md
+!openclaw-config/workspaces/monitor/USER.md
 
 # Old timestamped backup snapshots (only latest/ is kept)
 openclaw/

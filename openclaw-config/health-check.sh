@@ -1,71 +1,313 @@
 #!/bin/bash
 # OpenClaw Health Check & Auto-Recovery Script
-# Purpose: Monitors OpenClaw gateway and restarts if needed
+# Staged remediation: health probe -> restart -> doctor --fix -> reinstall -> escalate.
+
+set -u
 
 LOG_FILE="$HOME/.openclaw/logs/health-check.log"
 LOG_DIR="$(dirname "$LOG_FILE")"
-TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
+LOCK_DIR="$HOME/.openclaw/locks/health-check.lock"
+LOCK_PID_FILE="$LOCK_DIR/pid"
+LOCK_MAX_AGE_SECONDS="${OPENCLAW_HEALTH_LOCK_MAX_AGE_SECONDS:-900}"
+STATE_DIR="$HOME/.openclaw/state"
+ESCALATION_STAMP="$STATE_DIR/health-check-last-escalation.ts"
+ALERT_STAMP="$STATE_DIR/health-check-last-alert.ts"
+
+export PATH="$HOME/.nvm/versions/node/current/bin:$HOME/.nvm/versions/node/v22.22.0/bin:$HOME/Library/pnpm:$HOME/.bun/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
 OPENCLAW_BIN="$(command -v openclaw || true)"
+AI_ORCH_BIN="$(command -v ai_orch || true)"
+AGENTO_BIN="$(command -v agento || true)"
+GOG_BIN="$(command -v gog || true)"
+MAIL_BIN="$(command -v mail || true)"
 
-if [ -z "$OPENCLAW_BIN" ]; then
-    echo "[$TIMESTAMP] ❌ openclaw CLI not found in PATH"
-    exit 1
-fi
+GATEWAY_PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
+HEALTH_URL="${OPENCLAW_HEALTH_URL:-http://127.0.0.1:${GATEWAY_PORT}/health}"
+CURL_TIMEOUT="${OPENCLAW_HEALTH_CURL_TIMEOUT:-8}"
+POST_ACTION_WAIT="${OPENCLAW_POST_ACTION_WAIT_SECONDS:-3}"
+ESCALATION_COOLDOWN_SECONDS="${OPENCLAW_ESCALATION_COOLDOWN_SECONDS:-3600}"
+ALERT_COOLDOWN_SECONDS="${OPENCLAW_ALERT_COOLDOWN_SECONDS:-900}"
+MAX_LOG_TAIL_LINES="${OPENCLAW_SELF_HEAL_LOG_TAIL_LINES:-80}"
 
-if ! mkdir -p "$LOG_DIR"; then
-    echo "[$TIMESTAMP] ❌ Failed to create log directory: $LOG_DIR"
-    exit 1
-fi
+ALERT_SLACK_TARGET="${OPENCLAW_ALERT_SLACK_TARGET:-C0AJQ5M0A0Y}"
+ALERT_EMAIL_TO="${OPENCLAW_ALERT_EMAIL_TO:-jleechan@gmail.com}"
+ALERT_EMAIL_FROM="${OPENCLAW_ALERT_EMAIL_FROM:-}"
 
-# Function to log messages
-log_message() {
-    echo "[$TIMESTAMP] $1" >> "$LOG_FILE"
+now_epoch() {
+  date +%s
 }
 
-# Check if gateway is running
-if ! launchctl list | grep -q "ai.openclaw.gateway"; then
-    log_message "❌ Gateway not loaded in launchctl. Installing..."
-    if "$OPENCLAW_BIN" gateway install >> "$LOG_FILE" 2>&1; then
-        log_message "✅ Gateway installed"
-        exit 0
+ts() {
+  date '+%Y-%m-%d %H:%M:%S'
+}
+
+log() {
+  mkdir -p "$LOG_DIR" 2>/dev/null || true
+  printf '[%s] %s\n' "$(ts)" "$*" >> "$LOG_FILE"
+}
+
+command_ok() {
+  "$@" >> "$LOG_FILE" 2>&1
+  return $?
+}
+
+gateway_health_ok() {
+  curl -fsS -m "$CURL_TIMEOUT" "$HEALTH_URL" >/dev/null 2>&1
+}
+
+service_loaded() {
+  launchctl list | grep -q "ai.openclaw.gateway"
+}
+
+service_running_pid() {
+  launchctl list | awk '/ai\.openclaw\.gateway/{print $1}'
+}
+
+restart_gateway() {
+  if [ -n "$OPENCLAW_BIN" ] && command_ok "$OPENCLAW_BIN" gateway restart; then
+    return 0
+  fi
+
+  log "openclaw CLI unavailable or restart failed; trying launchctl kickstart fallback."
+  launchctl kickstart -k "gui/$(id -u)/ai.openclaw.gateway" >> "$LOG_FILE" 2>&1
+}
+
+install_gateway() {
+  if [ -n "$OPENCLAW_BIN" ] && command_ok "$OPENCLAW_BIN" gateway install --force; then
+    return 0
+  fi
+
+  log "openclaw CLI unavailable or install failed; trying launchctl bootstrap fallback."
+  launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/ai.openclaw.gateway.plist" >> "$LOG_FILE" 2>&1
+}
+
+doctor_fix() {
+  if [ -z "$OPENCLAW_BIN" ]; then
+    return 1
+  fi
+  command_ok "$OPENCLAW_BIN" doctor --fix
+}
+
+cooldown_allows() {
+  local stamp_file="$1"
+  local cooldown_seconds="$2"
+
+  mkdir -p "$STATE_DIR" 2>/dev/null || true
+  if [ ! -f "$stamp_file" ]; then
+    return 0
+  fi
+
+  local last now delta
+  last="$(cat "$stamp_file" 2>/dev/null || echo 0)"
+  now="$(now_epoch)"
+  delta=$((now - last))
+  [ "$delta" -ge "$cooldown_seconds" ]
+}
+
+mark_stamp() {
+  local stamp_file="$1"
+  mkdir -p "$STATE_DIR" 2>/dev/null || true
+  now_epoch > "$stamp_file"
+}
+
+send_slack_alert() {
+  local message="$1"
+  [ -n "$OPENCLAW_BIN" ] || return 1
+  [ -n "$ALERT_SLACK_TARGET" ] || return 1
+
+  "$OPENCLAW_BIN" message send \
+    --channel slack \
+    --target "$ALERT_SLACK_TARGET" \
+    --message "$message" >> "$LOG_FILE" 2>&1
+}
+
+send_email_alert() {
+  local subject="$1"
+  local body="$2"
+
+  [ -n "$ALERT_EMAIL_TO" ] || return 1
+
+  if [ -n "$GOG_BIN" ]; then
+    if [ -n "$ALERT_EMAIL_FROM" ]; then
+      "$GOG_BIN" send --to "$ALERT_EMAIL_TO" --from "$ALERT_EMAIL_FROM" --subject "$subject" --body "$body" >> "$LOG_FILE" 2>&1
     else
-        log_message "❌ Gateway install failed"
-        exit 1
+      "$GOG_BIN" send --to "$ALERT_EMAIL_TO" --subject "$subject" --body "$body" >> "$LOG_FILE" 2>&1
     fi
-fi
+    return $?
+  fi
 
-# Check if process is actually running
-PID=$(launchctl list | grep "ai.openclaw.gateway" | awk '{print $1}')
-if [ "$PID" = "-" ] || [ -z "$PID" ]; then
-    log_message "⚠️  Gateway loaded but not running. Restarting..."
-    if launchctl kickstart gui/$(id -u)/ai.openclaw.gateway >> "$LOG_FILE" 2>&1; then
-        log_message "✅ Gateway kickstarted"
-        exit 0
-    else
-        log_message "❌ Gateway kickstart failed"
-        exit 1
+  if [ -n "$MAIL_BIN" ]; then
+    printf '%s\n' "$body" | "$MAIL_BIN" -s "$subject" "$ALERT_EMAIL_TO" >> "$LOG_FILE" 2>&1
+    return $?
+  fi
+
+  return 1
+}
+
+send_alert() {
+  local summary="$1"
+  local detail="$2"
+  local alert_message
+  local email_subject
+  local email_body
+
+  if ! cooldown_allows "$ALERT_STAMP" "$ALERT_COOLDOWN_SECONDS"; then
+    log "Alert suppressed by cooldown (${ALERT_COOLDOWN_SECONDS}s)."
+    return 0
+  fi
+
+  alert_message=":warning: OpenClaw gateway self-heal alert\n${summary}\n${detail}"
+  email_subject="[OpenClaw] Gateway self-heal alert"
+  email_body="${summary}\n\n${detail}\n\nHost: $(hostname)\nTime: $(ts)\nHealth URL: ${HEALTH_URL}"
+
+  if send_slack_alert "$alert_message"; then
+    log "Slack alert sent to ${ALERT_SLACK_TARGET}."
+  else
+    log "Slack alert failed."
+  fi
+
+  if send_email_alert "$email_subject" "$email_body"; then
+    log "Email alert sent to ${ALERT_EMAIL_TO}."
+  else
+    log "Email alert failed or unavailable."
+  fi
+
+  mark_stamp "$ALERT_STAMP"
+}
+
+escalate_to_agent() {
+  local reason="$1"
+  local task
+  task="OpenClaw gateway self-heal escalation: ${reason}. Investigate gateway health, recover service, and leave findings in ~/.openclaw/logs/health-check.log and ~/.openclaw/logs/gateway.err.log."
+
+  if ! cooldown_allows "$ESCALATION_STAMP" "$ESCALATION_COOLDOWN_SECONDS"; then
+    log "Escalation suppressed by cooldown (${ESCALATION_COOLDOWN_SECONDS}s)."
+    return 0
+  fi
+
+  if [ -n "$AI_ORCH_BIN" ]; then
+    if "$AI_ORCH_BIN" run --async --agent-cli codex "$task" >> "$LOG_FILE" 2>&1; then
+      mark_stamp "$ESCALATION_STAMP"
+      log "Escalation dispatched via ai_orch."
+      return 0
     fi
-fi
+    log "ai_orch escalation dispatch failed."
+  fi
 
-# Check if gateway is responding
-if ! "$OPENCLAW_BIN" gateway status | grep -q "Runtime: running"; then
-    log_message "⚠️  Gateway not responding. Restarting..."
-    if "$OPENCLAW_BIN" gateway stop >> "$LOG_FILE" 2>&1 && sleep 2 && "$OPENCLAW_BIN" gateway install >> "$LOG_FILE" 2>&1; then
-        log_message "✅ Gateway restarted"
-        exit 0
-    else
-        log_message "❌ Gateway restart failed"
-        exit 1
+  if [ -n "$AGENTO_BIN" ]; then
+    if "$AGENTO_BIN" "$task" >> "$LOG_FILE" 2>&1; then
+      mark_stamp "$ESCALATION_STAMP"
+      log "Escalation dispatched via agento."
+      return 0
     fi
+    log "agento escalation dispatch failed."
+  fi
+
+  log "No escalation tool available or dispatch failed."
+  return 1
+}
+
+if [ -z "$OPENCLAW_BIN" ]; then
+  log "openclaw CLI not found in PATH=$PATH (continuing with launchctl fallbacks)."
 fi
 
-# Check WhatsApp connection
-if ! "$OPENCLAW_BIN" channels list | grep -q "WhatsApp default: linked, enabled"; then
-    log_message "⚠️  WhatsApp not linked. Attempting recovery..."
-    # Note: Auto-relink requires QR scan, so just log the issue
-    log_message "❌ WhatsApp disconnected - manual intervention required"
-    exit 1
+# Single-run lock to prevent overlapping launchd invocations.
+mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  now="$(now_epoch)"
+  lock_mtime="$(stat -f %m "$LOCK_DIR" 2>/dev/null || echo 0)"
+  lock_age=$((now - lock_mtime))
+  lock_pid="$(cat "$LOCK_PID_FILE" 2>/dev/null || echo "")"
+
+  if [ "$lock_age" -ge "$LOCK_MAX_AGE_SECONDS" ]; then
+    if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
+      log "Active lock held by pid=${lock_pid}; skipping."
+      exit 0
+    fi
+
+    log "Stale lock detected (age=${lock_age}s, pid=${lock_pid:-unknown}); clearing."
+    rmdir "$LOCK_DIR" 2>/dev/null || rm -rf "$LOCK_DIR" 2>/dev/null || true
+    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+      log "Unable to acquire lock after stale-lock cleanup; skipping."
+      exit 0
+    fi
+  else
+    log "Another health-check run is active; skipping."
+    exit 0
+  fi
 fi
 
-log_message "✅ All health checks passed (PID: $PID)"
-exit 0
+printf '%s\n' "$$" > "$LOCK_PID_FILE"
+trap 'rm -f "$LOCK_PID_FILE" 2>/dev/null || true; rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
+
+log "Health-check start (port=${GATEWAY_PORT}, url=${HEALTH_URL})."
+
+if gateway_health_ok; then
+  pid="$(service_running_pid)"
+  log "Gateway healthy (pid=${pid:-unknown})."
+  exit 0
+fi
+
+log "Gateway unhealthy: initial probe failed."
+
+if ! service_loaded; then
+  log "Gateway service not loaded; installing service."
+  install_gateway || log "Gateway install failed during service-load remediation."
+  sleep "$POST_ACTION_WAIT"
+fi
+
+if gateway_health_ok; then
+  log "Gateway recovered after service-load remediation."
+  send_alert "Gateway recovered" "Recovered after service-load remediation."
+  exit 0
+fi
+
+log "Attempting remediation step 1: gateway restart."
+restart_gateway || log "Gateway restart command failed."
+sleep "$POST_ACTION_WAIT"
+
+if gateway_health_ok; then
+  log "Gateway recovered after restart."
+  send_alert "Gateway recovered" "Recovered after gateway restart."
+  exit 0
+fi
+
+log "Attempting remediation step 2: openclaw doctor --fix."
+doctor_fix || log "Doctor --fix failed."
+sleep "$POST_ACTION_WAIT"
+
+if gateway_health_ok; then
+  log "Gateway recovered after doctor --fix."
+  send_alert "Gateway recovered" "Recovered after openclaw doctor --fix."
+  exit 0
+fi
+
+log "Attempting remediation step 3: force reinstall + restart gateway."
+install_gateway || log "Gateway force install failed."
+restart_gateway || log "Gateway restart after install failed."
+sleep "$POST_ACTION_WAIT"
+
+if gateway_health_ok; then
+  log "Gateway recovered after force reinstall + restart."
+  send_alert "Gateway recovered" "Recovered after force reinstall + restart."
+  exit 0
+fi
+
+log "Gateway still unhealthy after all remediation steps."
+if [ -f "$HOME/.openclaw/logs/gateway.err.log" ]; then
+  log "Recent gateway.err.log tail:"
+  tail -n "$MAX_LOG_TAIL_LINES" "$HOME/.openclaw/logs/gateway.err.log" >> "$LOG_FILE" 2>/dev/null || true
+fi
+
+send_alert "Gateway unhealthy" "Health probe failed after restart, doctor --fix, and force reinstall."
+escalate_to_agent "health probe failed after restart/doctor/reinstall"
+
+if gateway_health_ok; then
+  log "Gateway became healthy after escalation dispatch."
+  send_alert "Gateway recovered" "Recovered after escalation dispatch."
+  exit 0
+fi
+
+log "Final status: unhealthy. Manual intervention required."
+send_alert "Gateway still unhealthy" "Manual intervention required. Self-heal and escalation did not restore health."
+exit 1

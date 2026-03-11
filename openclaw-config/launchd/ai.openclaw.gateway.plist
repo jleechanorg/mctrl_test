@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Comment</key>
+	<string>OpenClaw Gateway (v2026.3.8)</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>GOG_KEYRING_PASSWORD</key>
+		<string>openclaw-gog-2026</string>
+		<key>GOOGLE_CLOUD_PROJECT</key>
+		<string>infinite-zephyr-487405-d0</string>
+		<key>HOME</key>
+		<string>/Users/jleechan</string>
+		<key>MISSION_CONTROL_BASE_URL</key>
+		<string>http://localhost:9010</string>
+		<key>MISSION_CONTROL_BOARD_ID</key>
+		<string>aa68f729-d5e0-4d44-8c99-51bcebc0b8bc</string>
+		<key>MISSION_CONTROL_TOKEN</key>
+		<string>your-local-auth-token-here</string>
+		<key>NODE_EXTRA_CA_CERTS</key>
+		<string>/etc/ssl/cert.pem</string>
+		<key>NODE_USE_SYSTEM_CA</key>
+		<string>1</string>
+		<key>OPENCLAW_GATEWAY_PORT</key>
+		<string>18789</string>
+		<key>OPENCLAW_LAUNCHD_LABEL</key>
+		<string>ai.openclaw.gateway</string>
+		<key>OPENCLAW_RAW_STREAM</key>
+		<string>1</string>
+		<key>OPENCLAW_RAW_STREAM_PATH</key>
+		<string>/tmp/openclaw/raw-stream.jsonl</string>
+		<key>OPENCLAW_SERVICE_KIND</key>
+		<string>gateway</string>
+		<key>OPENCLAW_SERVICE_MARKER</key>
+		<string>openclaw</string>
+		<key>OPENCLAW_SERVICE_VERSION</key>
+		<string>2026.3.8</string>
+		<key>OPENCLAW_SLACK_BOT_TOKEN</key>
+		<string>xoxb-9541820692839-10509415881058-L1ZGmeXYa5B9OxbmRj7pgi9K</string>
+		<key>OPENCLAW_SYSTEMD_UNIT</key>
+		<string>openclaw-gateway.service</string>
+		<key>OPENCLAW_WINDOWS_TASK_NAME</key>
+		<string>OpenClaw Gateway</string>
+		<key>PATH</key>
+		<string>/Users/jleechan/.local/bin:/Users/jleechan/.npm-global/bin:/Users/jleechan/bin:/Users/jleechan/.volta/bin:/Users/jleechan/.asdf/shims:/Users/jleechan/.bun/bin:/Users/jleechan/Library/Application Support/fnm/aliases/default/bin:/Users/jleechan/.fnm/aliases/default/bin:/Users/jleechan/Library/pnpm:/Users/jleechan/.local/share/pnpm:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+		<key>TMPDIR</key>
+		<string>/var/folders/j0/byd1z6px50v88lf679bgt0h00000gn/T/</string>
+		<key>XAI_API_KEY</key>
+		<string>xai-ZAMQ6HDNby4CM0fbrtT3cZH6mkMa6o5RKjMDZsJQRVYipRF4pQtJ1pVNsWgRiFMvZ9C7Tbyi2HJXAwah</string>
+	</dict>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>ai.openclaw.gateway</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/jleechan/.nvm/versions/node/v22.22.0/bin/node</string>
+		<string>/Users/jleechan/.nvm/versions/node/v22.22.0/lib/node_modules/openclaw/dist/index.js</string>
+		<string>gateway</string>
+		<string>--port</string>
+		<string>18789</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/jleechan/.openclaw/logs/gateway.err.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/jleechan/.openclaw/logs/gateway.log</string>
+	<key>ThrottleInterval</key>
+	<integer>1</integer>
+	<key>Umask</key>
+	<integer>63</integer>
+</dict>
+</plist>
