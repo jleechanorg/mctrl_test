@@ -241,10 +241,15 @@ When the task involves making a PR to a DIFFERENT REPO than your current worktre
 def _is_cross_repo_task(task: str) -> bool:
     """Detect if task is targeting a different repo.
 
-    Only returns True when the task text contains an extractable repo name
-    hint (e.g. 'against mctrl_test', 'in worldarchitect repo').  Generic
-    phrases like 'make a PR to fix the login button' do NOT qualify.
+    Uses high-confidence patterns and falls back to repo-name extraction
+    (which includes a blocklist) to avoid false positives on generic
+    English phrases like "fix the bug in this repo".
     """
+    task_lower = task.lower()
+    # High-confidence patterns only — avoid false positives
+    if "github.com/" in task_lower or " pr against " in task_lower:
+        return True
+    # Fall back to repo-name extraction (includes blocklist filtering)
     return bool(_extract_repo_name_hint(task))
 
 
@@ -265,44 +270,56 @@ def _inject_cross_repo_context(task: str, repo_root: str) -> str:
     return f"{task.rstrip()}\n{_CROSS_REPO_CONTEXT}"
 
 
+def _resolve_target_repo(task: str, default_repo_root: str) -> tuple[str, str]:
+    """Resolve the target repo for cross-repo tasks.
+
+    Returns (repo_root, worktree_path) for the target repo.
+    worktree_path is only set when a pre-existing worktree is intentionally reused.
+    If no resolvable cross-repo target exists, returns ("", "").
+    """
+    if not _is_cross_repo_task(task):
+        return "", ""
+
+    repo_name = _extract_repo_name_hint(task)
+    if not repo_name:
+        return "", ""
+
+    # Check if we're already in the target repo
+    current_repo = Path(default_repo_root).name
+    if current_repo.lower() == repo_name.lower():
+        return default_repo_root, ""
+
+    # Try to find the target repo locally
+    worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
+
+    # Common locations to look for the target repo
+    search_paths = [
+        Path(worktree_base) / repo_name,
+        Path.home() / "projects" / repo_name,
+        Path.home() / "project_jleechanclaw" / repo_name,
+        Path("/tmp") / repo_name,
+    ]
+
+    for search_path in search_paths:
+        if _looks_like_git_repo(search_path):
+            return str(search_path), ""
+
+    return "", ""
+
 
 def _task_with_push_instruction(task: str, branch: str = "", repo_root: str = ".") -> str:
-    """Append instructions and context to help the LLM determine the target repo."""
-    # If no explicit target repo in task, remind LLM to use memory
-    if not _extract_repo_name_hint(task) and not _is_cross_repo_task(task):
-        memory_reminder = """
-## TARGET REPO REMINDER
-This task does not specify a target repo. Before starting:
-1. Search memories for similar past tasks and their target repos
-2. Search ~/projects for relevant repos
-3. If unsure, ask the user which repo to target
-
-Do NOT assume a default repo - always verify with memory or user.
-"""
-        task = f"{task.rstrip()}\n{memory_reminder}"
-
-    # First inject cross-repo context
+    """Append git commit/push instructions and cross-repo context to help the LLM."""
+    # Inject cross-repo context when applicable
     task = _inject_cross_repo_context(task, repo_root)
 
     normalized = task.lower()
-    commit_text = "`git commit -m \"Your message\"`"
-    push_text = (
-        f"`git push origin {branch}`"
-        if branch
-        else "`git push origin <your-branch>`"
-    )
-    if "git push" in normalized:
-        # Task already includes push — leave as-is.
-        return task
     if "git commit" in normalized:
-        # Task mentions commit but not push — append push-only reminder.
-        return (
-            f"{task.rstrip()}\n\n"
-            f"After committing, push your branch to origin: {push_text}.\n"
-            "Your work is only visible after it is pushed to origin."
-        )
-    if "do not switch to another local checkout" in normalized:
         return task
+    if "git push" in normalized:
+        return task  # Already has push instruction — leave as-is
+
+    commit_text = "`git commit -m \"Your message\"`"
+    push_text = f"`git push origin {branch or '<your-branch>'}`"
     return (
         f"{task.rstrip()}\n\n"
         f"IMPORTANT: Work in the worktree ROOT directory (not a subdirectory). "
@@ -314,14 +331,20 @@ Do NOT assume a default repo - always verify with memory or user.
     )
 
 
-def _extract_repo_name_hint(task: str) -> str:
-    """Extract repo name from task text."""
-    # Common words that regex patterns may match but are never repo names.
-    _BLOCKLIST = frozenset({
-        "a", "an", "the", "this", "that", "my", "our", "your",
-        "repo", "repository", "here", "it", "one",
-    })
+# Common English words that should never be treated as repo names.
+_REPO_NAME_BLOCKLIST = frozenset({
+    "a", "an", "the", "this", "that", "my", "our", "your", "its",
+    "fix", "bug", "code", "main", "test", "tests", "new", "old",
+    "repo", "repository", "project", "branch", "codebase",
+    "same", "current", "local", "remote", "upstream",
+})
 
+
+def _extract_repo_name_hint(task: str) -> str:
+    """Extract repo name from task text.
+
+    Returns the first candidate that is not in the blocklist.
+    """
     patterns = (
         r"\bagainst\s+`?([A-Za-z0-9._-]+)`?\s*$",
         r"\bagainst\s+`?([A-Za-z0-9._-]+)`?\s+repo",
@@ -335,84 +358,13 @@ def _extract_repo_name_hint(task: str) -> str:
         if not match:
             continue
         candidate = match.group(1).strip().strip(".")
-        if candidate and candidate.lower() not in _BLOCKLIST:
+        if candidate and candidate.lower() not in _REPO_NAME_BLOCKLIST:
             return candidate
     return ""
 
 
-
-
 def _looks_like_git_repo(path: Path) -> bool:
     return (path / ".git").exists()
-
-
-def _find_repo_by_name(name: str, *, fallback_root: str = ".") -> str | None:
-    """Find a local git repo by name across common locations.
-
-    Searches a unified set of candidate directories, deduplicates by resolved
-    path, and returns the first match that looks like a git repo.  Returns None
-    if no match is found.
-    """
-    if not name:
-        return None
-
-    explicit = os.path.realpath(os.path.expanduser(fallback_root))
-    worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
-
-    # Unified candidate base directories — superset of both old functions.
-    bases: list[Path] = [
-        Path(worktree_base),
-        Path("/tmp"),
-        Path("/tmp/ai-orch-worktrees"),
-        Path(explicit),
-        Path(explicit).parent,
-        Path.home() / "projects",
-        Path.home() / "project_jleechanclaw",
-        Path.home() / ".openclaw" / "workspace",
-    ]
-
-    extra_bases = os.environ.get("MCTRL_REPO_HINT_PATHS", "").strip()
-    if extra_bases:
-        for raw in extra_bases.split(":"):
-            raw = raw.strip()
-            if raw:
-                bases.append(Path(os.path.expanduser(raw)))
-
-    # Deduplicate by resolved path.
-    seen: set[str] = set()
-    for base in bases:
-        candidate = base / name
-        resolved = os.path.realpath(str(candidate))
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        if _looks_like_git_repo(Path(resolved)):
-            return resolved
-
-    return None
-
-
-def _resolve_target_repo(task: str, default_repo_root: str) -> tuple[str, str]:
-    """Resolve the target repo for cross-repo tasks.
-
-    Returns (repo_root, worktree_path) for the target repo.
-    If no cross-repo hint found, returns default - LLM will use memory to infer.
-    """
-    if not _is_cross_repo_task(task):
-        return default_repo_root, ""
-
-    repo_name = _extract_repo_name_hint(task)
-    if not repo_name:
-        return default_repo_root, ""
-
-    current_repo = Path(default_repo_root).name
-    if current_repo.lower() == repo_name.lower():
-        return default_repo_root, ""
-
-    found = _find_repo_by_name(repo_name, fallback_root=default_repo_root)
-    if found:
-        return found, found
-    return default_repo_root, ""
 
 
 def _resolve_repo_root(repo_root: str, task: str) -> str:
@@ -427,10 +379,45 @@ def _resolve_repo_root(repo_root: str, task: str) -> str:
 
     repo_name = _extract_repo_name_hint(task)
     if not repo_name:
+        # No explicit target - LLM will use memory to infer
         return explicit
 
-    found = _find_repo_by_name(repo_name, fallback_root=explicit)
-    return found or explicit
+    candidates: list[Path] = []
+
+    # Most common local clone locations in this environment.
+    for base in (
+        Path("/tmp"),
+        Path("/tmp/ai-orch-worktrees"),
+        Path(explicit),
+        Path(explicit).parent,
+        Path.home() / "projects",
+        Path.home() / "project_jleechanclaw",
+        Path.home() / ".openclaw" / "workspace",
+    ):
+        candidates.append(base / repo_name)
+
+    extra_bases = os.environ.get("MCTRL_REPO_HINT_PATHS", "").strip()
+    if extra_bases:
+        for raw in extra_bases.split(":"):
+            raw = raw.strip()
+            if not raw:
+                continue
+            candidates.append(Path(os.path.expanduser(raw)) / repo_name)
+
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        resolved = os.path.realpath(str(candidate))
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        deduped.append(Path(resolved))
+
+    for candidate in deduped:
+        if _looks_like_git_repo(candidate):
+            return str(candidate)
+
+    return explicit
 
 
 def _unique_session_name(bead_id: str, session_name: str) -> str:
@@ -592,7 +579,7 @@ def dispatch(
     registry_path: str,
     branch: str = "",
     repo_root: str = ".",
-) -> BeadSessionMapping:
+    ) -> BeadSessionMapping:
     """Spawn ai_orch session and register the mapping. Returns the created mapping.
 
     When branch is provided, resolve_worktree_for_branch is called first:
@@ -600,7 +587,11 @@ def dispatch(
     - Remote-only branch → checkout fresh worktree, ai_orch runs there
     - Branch missing everywhere → raises ValueError before spawning
 
-    Without branch, ai_orch creates a new worktree via --worktree (new task).
+    Without branch:
+    - Cross-repo tasks (detected via repo hints or GitHub URLs) create a
+      dedicated worktree inside the target repo. On failure, the worktree
+      is cleaned up automatically.
+    - Same-repo tasks use ai_orch's built-in --worktree flag.
     """
     if slack_trigger_ts and not slack_trigger_channel:
         raise ValueError("slack_trigger_channel is required when slack_trigger_ts is set")
@@ -616,6 +607,8 @@ def dispatch(
     else:
         # Track known worktree path for cross-repo tasks
         known_worktree_path = ""
+        created_worktree_path = ""
+        created_worktree_repo_root = ""
 
         if branch:
             worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
@@ -626,7 +619,7 @@ def dispatch(
         else:
             # For cross-repo tasks, resolve the target repo first
             # NO FALLBACK - if target repo mentioned, must use it
-            target_repo, existing_worktree = _resolve_target_repo(task, repo_root)
+            target_repo_root, existing_worktree = _resolve_target_repo(task, repo_root)
 
             if existing_worktree:
                 # Use existing worktree for target repo
@@ -643,12 +636,15 @@ def dispatch(
                     agent_task = _task_with_push_instruction(task, "", repo_root)
                     cmd = ["ai_orch", "run", "--async", "--worktree", "--agent-cli", agent_cli, agent_task]
                 else:
-                    # Target repo specified - must create worktree for it
+                    if not target_repo_root:
+                        raise ValueError(
+                            f"Target repo '{repo_name}' not found locally. "
+                            "Please clone the target repo first."
+                        )
+
+                    # Target repo specified - create a dedicated worktree
                     worktree_base = os.environ.get("MCTRL_WORKTREE_BASE", _DEFAULT_WORKTREE_BASE)
                     os.makedirs(worktree_base, exist_ok=True)
-
-                    # Try to find the target repo root
-                    target_repo_root = _resolve_repo_root(repo_root, f"in {repo_name} repo")
 
                     if not _looks_like_git_repo(Path(target_repo_root)):
                         raise ValueError(
@@ -673,12 +669,23 @@ def dispatch(
 
                     cwd = target_worktree_path
                     known_worktree_path = target_worktree_path
+                    created_worktree_path = target_worktree_path
+                    created_worktree_repo_root = target_repo_root
                     agent_task = _task_with_push_instruction(task, "", cwd)
                     cmd = ["ai_orch", "run", "--async", "--agent-cli", agent_cli, agent_task]
 
         result, output = _run_ai_orch_with_fallback(cmd, cwd=cwd)
 
         if result.returncode != 0:
+            if created_worktree_path:
+                subprocess.run(
+                    ["git", "worktree", "remove", "--force", created_worktree_path],
+                    cwd=created_worktree_repo_root or repo_root,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False,
+                )
             raise RuntimeError(f"ai_orch failed (exit {result.returncode}):\n{output}")
 
         session_name, worktree_path, parsed_branch = _parse_ai_orch_output(output, known_worktree_path)

@@ -1,34 +1,20 @@
 {
   "meta": {
-    "lastTouchedVersion": "2026.3.2",
-    "lastTouchedAt": "2026-03-08T21:33:12.746Z"
+    "lastTouchedVersion": "2026.3.10",
+    "lastTouchedAt": "2026-03-10T20:30:00Z"
   },
   "env": {
     "GOOGLE_CLOUD_PROJECT": "infinite-zephyr-487405-d0",
     "GOG_KEYRING_PASSWORD": "openclaw-gog-2026",
     "PATH": "/Users/jleechan/.nvm/versions/node/v22.22.0/bin:/Users/jleechan/.local/bin:/usr/local/bin:/usr/bin:/bin",
     "OPENCLAW_RAW_STREAM": "1",
-    "OPENCLAW_RAW_STREAM_PATH": "/tmp/openclaw/raw-stream.jsonl",
-    "XAI_API_KEY": "${XAI_API_KEY}"
+    "OPENCLAW_RAW_STREAM_PATH": "/tmp/openclaw/raw-stream.jsonl"
   },
   "wizard": {
     "lastRunAt": "2026-02-26T07:30:56.102Z",
     "lastRunVersion": "2026.2.12",
     "lastRunCommand": "configure",
     "lastRunMode": "local"
-  },
-  "diagnostics": {
-    "flags": [
-      "agent.*",
-      "gateway.*",
-      "slack.*"
-    ]
-  },
-  "logging": {
-    "level": "debug",
-    "consoleLevel": "info",
-    "consoleStyle": "pretty",
-    "redactSensitive": "tools"
   },
   "auth": {
     "profiles": {
@@ -78,7 +64,6 @@
       "model": {
         "primary": "minimax-portal/MiniMax-M2.5",
         "fallbacks": [
-          "openai-codex/gpt-5.3-codex",
           "openai-codex/gpt-5.3-codex-spark"
         ]
       },
@@ -90,13 +75,14 @@
         "openai-codex/gpt-5.3-codex-spark": {}
       },
       "workspace": "/Users/jleechan/.openclaw/workspace",
-      "bootstrapMaxChars": 50000,
       "memorySearch": {
         "enabled": true,
         "extraPaths": [
           "/Users/jleechan/.openclaw/USER.md",
           "/Users/jleechan/.openclaw/PROJECTS_BEADS.md",
           "/Users/jleechan/.openclaw/GITHUB_REPOS.md",
+          "/Users/jleechan/.openclaw/agents/main/sessions",
+          "/Users/jleechan/.openclaw/sessions",
           "/Users/jleechan/.openclaw/workspace/MEMORY.md",
           "/Users/jleechan/.openclaw/memory",
           "/Users/jleechan/.openclaw/workspace/TOOLS.md",
@@ -127,7 +113,6 @@
       },
       "compaction": {
         "mode": "default",
-        "reserveTokensFloor": 50000,
         "memoryFlush": {
           "enabled": true,
           "softThresholdTokens": 4000,
@@ -141,7 +126,8 @@
       "sandbox": {
         "mode": "off",
         "workspaceAccess": "rw"
-      }
+      },
+      "bootstrapMaxChars": 50000
     }
   },
   "tools": {
@@ -167,20 +153,17 @@
       "memory-server_delete_observations",
       "memory-server_delete_entities",
       "memory-server_delete_relations",
-      "second-opinion-tool_agent_second_opinion",
-      "second-opinion-tool_rate_limit_status",
-      "second-opinion-tool_health-check",
-      "slack-mcp_channels_list",
-      "slack-mcp_conversations_add_message",
-      "slack-mcp_conversations_history",
-      "slack-mcp_conversations_mark",
-      "slack-mcp_conversations_replies",
-      "slack-mcp_usergroups_create",
-      "slack-mcp_usergroups_list",
-      "slack-mcp_usergroups_me",
-      "slack-mcp_usergroups_update",
-      "slack-mcp_usergroups_users_update",
-      "slack-mcp_users_search"
+      "slack_channels_list",
+      "slack_conversations_history",
+      "slack_conversations_replies",
+      "slack_conversations_add_message",
+      "slack_conversations_mark",
+      "slack_users_search",
+      "slack_usergroups_list",
+      "slack_usergroups_me",
+      "slack_usergroups_create",
+      "slack_usergroups_update",
+      "slack_usergroups_users_update"
     ],
     "deny": [
       "browser",
@@ -287,7 +270,6 @@
         "slack": 500
       }
     },
-    "ackReaction": "eyes",
     "ackReactionScope": "all",
     "tts": {
       "auto": "off",
@@ -305,34 +287,31 @@
         "pitch": "+8%",
         "rate": "-5%"
       }
-    }
+    },
+    "ackReaction": "eyes"
   },
   "commands": {
     "native": "auto",
-    "nativeSkills": "auto",
-    "restart": true,
-    "ownerDisplay": "raw"
+    "nativeSkills": "auto"
   },
   "channels": {
     "whatsapp": {
-      "enabled": true,
       "dmPolicy": "allowlist",
       "selfChatMode": true,
       "allowFrom": [
-        "+6502965127"
+        "+15555550123"
       ],
       "groupPolicy": "allowlist",
-      "debounceMs": 0,
-      "mediaMaxMb": 50
+      "mediaMaxMb": 50,
+      "debounceMs": 0
     },
     "discord": {
       "enabled": false,
       "commands": {
         "native": true
       },
-      "token": "",
+      "token": "${DISCORD_BOT_TOKEN}",
       "groupPolicy": "allowlist",
-      "streaming": "off",
       "replyToMode": "off",
       "guilds": {
         "000000000000000000": {
@@ -348,7 +327,6 @@
       "audience": "https://mac-1.tail5eb762.ts.net/",
       "webhookPath": "/googlechat",
       "webhookUrl": "https://mac-1.tail5eb762.ts.net/googlechat",
-      "streamMode": "replace",
       "mediaMaxMb": 20,
       "actions": {
         "reactions": true
@@ -372,8 +350,6 @@
       "groupPolicy": "allowlist",
       "historyLimit": 200,
       "dmHistoryLimit": 200,
-      "streaming": "partial",
-      "nativeStreaming": true,
       "replyToMode": "all",
       "replyToModeByChatType": {
         "direct": "all",
@@ -412,12 +388,6 @@
     "port": 18789,
     "mode": "local",
     "bind": "loopback",
-    "controlUi": {
-      "allowedOrigins": [
-        "http://localhost:18789",
-        "http://127.0.0.1:18789"
-      ]
-    },
     "auth": {
       "mode": "token",
       "token": "${OPENCLAW_GATEWAY_TOKEN}"
@@ -476,19 +446,6 @@
               "url": "${SECOND_OPINION_MCP_URL}",
               "headers": {
                 "Authorization": "Bearer ${SECOND_OPINION_MCP_TOKEN}"
-              }
-            },
-            {
-              "name": "slack-mcp",
-              "transport": "stdio",
-              "command": "npx",
-              "args": [
-                "-y",
-                "@anthropic/slack-mcp"
-              ],
-              "env": {
-                "SLACK_MCP_XOXB_TOKEN": "${OPENCLAW_SLACK_BOT_TOKEN}",
-                "SLACK_MCP_ADD_MESSAGE_TOOL": "true"
               }
             },
             {
@@ -573,6 +530,15 @@
               ]
             },
             {
+              "name": "slack",
+              "transport": "stdio",
+              "command": "bash",
+              "args": [
+                "-lc",
+                "source ~/.profile >/dev/null 2>&1 && SLACK_MCP_XOXB_TOKEN=\"${OPENCLAW_SLACK_BOT_TOKEN:?OPENCLAW_SLACK_BOT_TOKEN must be set}\" SLACK_MCP_ADD_MESSAGE_TOOL=true /Users/jleechan/go/bin/slack-mcp-server"
+              ]
+            },
+            {
               "name": "grok-mcp",
               "transport": "stdio",
               "command": "npx",
@@ -601,5 +567,18 @@
         }
       }
     }
+  },
+  "logging": {
+    "level": "debug",
+    "consoleLevel": "info",
+    "consoleStyle": "pretty",
+    "redactSensitive": "tools"
+  },
+  "diagnostics": {
+    "flags": [
+      "agent.*",
+      "gateway.*",
+      "slack.*"
+    ]
   }
 }

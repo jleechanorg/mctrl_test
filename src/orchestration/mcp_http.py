@@ -262,6 +262,8 @@ class McpRouter:
 
     def _handle_tools_call(self, req: dict[str, Any], req_id: str | int | None) -> dict[str, Any]:
         params = req.get("params") or {}
+        if not isinstance(params, dict):
+            raise JsonRpcError(INVALID_PARAMS, "Invalid params: params must be an object")
         name = params.get("name")
         if not name:
             raise JsonRpcError(INVALID_PARAMS, "Invalid params: missing tool name")
@@ -271,6 +273,8 @@ class McpRouter:
             raise JsonRpcError(INVALID_PARAMS, f"Invalid params: unknown tool '{name}'")
 
         arguments = params.get("arguments") or {}
+        if not isinstance(arguments, dict):
+            raise JsonRpcError(INVALID_PARAMS, "Invalid params: arguments must be an object")
         content = tool.handler(arguments)
         return build_success(req_id, {"content": content})
 

@@ -389,17 +389,22 @@ Think of it like being a tech lead: you decide what to build and who builds it, 
 **Your coding hands are `ai_orch`.** See TOOLS.md for exact commands.
 Priority: codexs → clauded → codex.
 
-## Memory Citations — MANDATORY
+## Memory Retrieval + Citations — MANDATORY
 
-**You MUST end every response with a memory footer. No exceptions.**
+**You MUST call `memory_search` before every user-facing response. No exceptions.**
 
-If memory was retrieved:
-> 📚 _Memory: TOOLS.md (dispatch_task), MEMORY.md (mctrl MVP)_
+Rules:
+- Run `memory_search` once per incoming user message before drafting the final reply.
+- If results are returned, cite the actual files used.
+- If results are empty, you may use `📚 _Memory: none_`.
+- If memory search errors/is disabled, do NOT claim `none`; report the failure in the footer.
 
-If no memory was retrieved:
-> 📚 _Memory: none_
+Footer format (one line, always last):
+- Success with hits: `📚 _Memory: <path1>, <path2>_`
+- Success with no hits: `📚 _Memory: none_`
+- Failure: `📚 _Memory: error (<brief reason>)_`
 
-One line, always last, always present.
+The footer is required on every response.
 
 # backup-dry-run-test
 

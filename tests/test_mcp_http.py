@@ -1,6 +1,4 @@
 """Tests for orchestration.mcp_http — MCP HTTP equivalence (JSON-RPC 2.0 router).
-
-TDD RED phase: all tests written before implementation.
 """
 
 from __future__ import annotations
@@ -97,7 +95,7 @@ class TestJsonRpcParsing:
 
     def test_params_default_to_empty_dict(self):
         parsed = parse_jsonrpc_request(_req("initialize"))
-        assert parsed.get("params") is None or isinstance(parsed.get("params"), dict)
+        assert parsed.get("params") is None
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +254,21 @@ class TestToolsCall:
     def test_missing_name_param_returns_invalid_params(self):
         router = _make_router()
         status, resp = router.dispatch(_req("tools/call", {}))
+        assert status == 200
+        assert resp["error"]["code"] == -32602
+
+    def test_non_object_arguments_return_invalid_params(self):
+        router = _make_router()
+        router.register_tool(ToolDef(
+            name="weather.get_forecast",
+            description="Get forecast",
+            input_schema={"type": "object"},
+            handler=lambda args: [{"type": "text", "text": "ok"}],
+        ))
+        status, resp = router.dispatch(_req("tools/call", {
+            "name": "weather.get_forecast",
+            "arguments": ["bad"],
+        }))
         assert status == 200
         assert resp["error"]["code"] == -32602
 
