@@ -1,137 +1,244 @@
 #!/usr/bin/env bash
 set -euo pipefail
-MODE="${1:-}"
-if [[ "$MODE" == "--mode" ]]; then
-  MODE="${2:-run}"
-fi
+
+MODE="run"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --mode)
+      MODE="${2:-run}"
+      shift 2
+      ;;
+    dry-run)
+      MODE="dry-run"
+      shift
+      ;;
+    run)
+      MODE="run"
+      shift
+      ;;
+    *)
+      echo "unknown arg: $1" >&2
+      exit 2
+      ;;
+  esac
+done
 
 ROOT="/tmp/openclaw-mem0-fastpath"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-OUT="$ROOT/$STAMP-50q"
+OUT="$ROOT/$STAMP-50q-agent"
 mkdir -p "$OUT"
-
 ln -sfn "$OUT" "$ROOT/latest-50q"
-
-ISOLATED_HOME="$ROOT/home"
-ISOLATED_OPENCLAW_DIR="$ISOLATED_HOME/.openclaw"
-ISOLATED_MEMORY_DIR="$ISOLATED_OPENCLAW_DIR/memory"
-ISOLATED_SLACK_HISTORY_DIR="$ISOLATED_MEMORY_DIR/slack-history"
-ISOLATED_GENERATED_DIR="$ISOLATED_MEMORY_DIR/generated"
-mkdir -p "$ISOLATED_SLACK_HISTORY_DIR" "$ISOLATED_GENERATED_DIR"
 
 if [[ "$MODE" == "dry-run" ]]; then
   echo '{"ok":true,"mode":"dry-run"}' > "$OUT/dry-run.json"
+  echo "$OUT"
   exit 0
 fi
 
-# Build deterministic expected set and canonical ORCH index from slack-history markdown.
-python3 - <<'PY'
-import json, re, pathlib, os
+# Build canonical expected prompts from slack-history memory export.
+python3 -u <<'PY'
+import json
+import pathlib
+import re
+from collections import defaultdict
+
 base = pathlib.Path('/Users/jleechan/.openclaw/memory/slack-history')
 mds = sorted(base.glob('*.md'))
 text = '\n'.join(p.read_text(errors='ignore') for p in mds)
-# Collect mappings ORCH token -> ai-orch branch
-pairs = re.findall(r'\*([A-Z0-9\-e2]+)\*.*?`(ai-orch-\d+)`', text)
-# Fallback explicit parse for ORCH tokens
-pairs2 = re.findall(r'(ORCH-[a-z0-9\-]+).*?`(ai-orch-\d+)`', text)
-all_pairs = {}
-for k,v in pairs+pairs2:
-    if k.startswith('ORCH-'):
-        all_pairs[k]=v
 
-canon=[('ORCH-e2e-029c50','ai-orch-56066'),('ORCH-e2e-2cfd73','ai-orch-55438'),('ORCH-self-hosted-runner-001','ai-orch-92020')]
-for k, v in canon:
-    all_pairs.setdefault(k, v)
+pairs = []
+for m in re.finditer(r'(ORCH-[A-Za-z0-9\-]+).*?`(ai-orch-\d+)`', text, flags=re.I|re.S):
+    orch = m.group(1)
+    if orch.lower().startswith('orch-'):
+        orch = 'ORCH-' + orch.split('-', 1)[1]
+    pairs.append((orch, m.group(2)))
 
-idx_lines = [
-    '# ORCH Branch Canonical Index',
-    '',
-    '- generated_from: ~/.openclaw/memory/slack-history/*.md',
-    f'- pair_count: {len(all_pairs)}',
-    '',
-    '## ORCH -> Branch',
-    '',
+# stable de-dupe
+seen = set()
+dedup = []
+for p in pairs:
+    if p in seen:
+        continue
+    seen.add(p)
+    dedup.append(p)
+
+# Canonical seeds that should always be present
+canonical = [
+    ('ORCH-e2e-029c50', 'ai-orch-56066'),
+    ('ORCH-e2e-2cfd73', 'ai-orch-55438'),
+    ('ORCH-self-hosted-runner-001', 'ai-orch-92020'),
 ]
-for k, v in sorted(all_pairs.items()):
-    idx_lines.append(f'- {k} committed to `{v}`')
-idx_lines += ['', '## Branch -> ORCH', '']
-for k, v in sorted(all_pairs.items()):
-    idx_lines.append(f'- `{v}` maps to {k}')
-idx = pathlib.Path('/tmp/openclaw-mem0-fastpath/latest-50q/orch-branch-index.md')
-idx.write_text('\n'.join(idx_lines) + '\n')
+for p in canonical:
+    if p not in seen:
+        dedup.append(p)
+        seen.add(p)
 
-# Promote canonical index into isolated memory path so search can reliably hit exact matches.
-promote_dir = pathlib.Path('/tmp/openclaw-mem0-fastpath/home/.openclaw/memory/generated')
-promote_dir.mkdir(parents=True, exist_ok=True)
-promote_file = promote_dir / 'orch-branch-index.md'
-promote_file.write_text(idx.read_text())
-map_file = pathlib.Path('/tmp/openclaw-mem0-fastpath/latest-50q/orch-branch-map.json')
-map_file.write_text(json.dumps(all_pairs, indent=2))
+branch_to_orch = defaultdict(set)
+orch_to_branches = defaultdict(set)
+for orch, branch in dedup:
+    orch_to_branches[orch].add(branch)
+    branch_to_orch[branch].add(orch)
 
-expected=[]
-for k,v in sorted(all_pairs.items())[:30]:
-    expected.append({"question":f"Which branch was {k} committed to?","must_contain":[v]})
-# Always include known canonicals.
-for k,v in canon:
-    expected.append({"question":f"Which branch was {k} committed to?","must_contain":[v]})
-# Add reverse queries up to 50
-for k,v in list(all_pairs.items())[:20]:
-    expected.append({"question":f"Find the ORCH token associated with branch {v}.","must_contain":[k]})
-expected=expected[:50]
-out=pathlib.Path('/tmp/openclaw-mem0-fastpath/latest-50q/expected-50.json')
-out.write_text(json.dumps(expected,indent=2))
-print(f"wrote {len(expected)} expected queries -> {out}")
-print(f"wrote canonical index -> {idx}")
-print(f"promoted canonical index -> {promote_file}")
-print(f"wrote canonical map -> {map_file}")
+# Keep only strict one-to-one mappings to avoid ambiguous scoring.
+strict_pairs = []
+for orch, branches in orch_to_branches.items():
+    if len(branches) != 1:
+        continue
+    branch = next(iter(branches))
+    if len(branch_to_orch[branch]) != 1:
+        continue
+    strict_pairs.append((orch, branch))
+strict_pairs = sorted(strict_pairs, key=lambda x: x[0])
+
+# Build 50 questions, mixing forward and reverse lookups.
+expected = []
+
+# 25 forward lookups (exact ORCH -> branch)
+for orch, branch in strict_pairs[:25]:
+    expected.append({
+        'kind': 'orch_to_branch',
+        'question': f'Which branch was {orch} committed to?',
+        'must_contain': [branch],
+        'must_contain_any': [],
+    })
+
+# 25 reverse lookups (branch -> ORCH) from strict one-to-one mappings.
+for orch, branch in strict_pairs[25:50]:
+    expected.append({
+        'kind': 'branch_to_orch',
+        'question': f'Find the ORCH token associated with branch {branch}.',
+        'must_contain': [orch],
+        'must_contain_any': [orch],
+    })
+
+expected = expected[:50]
+out_dir = pathlib.Path('/tmp/openclaw-mem0-fastpath/latest-50q')
+out_dir.mkdir(parents=True, exist_ok=True)
+(out_dir / 'expected-50.json').write_text(json.dumps(expected, indent=2))
+(out_dir / 'pair-map.json').write_text(json.dumps({k: sorted(v) for k, v in branch_to_orch.items()}, indent=2))
+
+print(f'wrote {len(expected)} expected queries -> {out_dir / "expected-50.json"}')
 PY
 
-# Seed isolated slack-history corpus for mem0 indexing.
-if [[ -d "/Users/jleechan/.openclaw/memory/slack-history" ]]; then
-  cp -f /Users/jleechan/.openclaw/memory/slack-history/*.md "$ISOLATED_SLACK_HISTORY_DIR/" 2>/dev/null || true
-fi
+# Refresh memory index before running agent QA.
+openclaw memory index --force > "$OUT/reindex.log" 2>&1 || true
 
-# Try reindexing, but continue if the environment cannot complete indexing.
-HOME="$ISOLATED_HOME" openclaw memory index --force >/tmp/openclaw-mem0-fastpath/latest-50q/reindex.log 2>&1 || true
-
-# Query using openclaw memory search for the 50 prompts.
+# Ask openclaw agent directly for each question and score extracted identifiers.
 python3 - <<'PY'
-import json, os, re, subprocess, pathlib
-exp = json.load(open('/tmp/openclaw-mem0-fastpath/latest-50q/expected-50.json'))
-token_to_branch = json.load(open('/tmp/openclaw-mem0-fastpath/latest-50q/orch-branch-map.json'))
-branch_to_token = {v:k for k,v in token_to_branch.items()}
-rows=[]
-for i,e in enumerate(exp,1):
-    q=e['question']
-    # Use a retrieval-focused query variant to reduce semantic drift.
-    query_variant=q.replace('Which branch was ', '').replace(' committed to?', ' committed to `ai-orch-`')
-    query_variant=query_variant.replace('Find the ORCH token associated with branch ', '`').replace('.', '` maps to ORCH-')
-    p=subprocess.run(
-        ['openclaw','memory','search',query_variant,'--json','--max-results','8','--min-score','0.20'],
-        capture_output=True,text=True
-        ,env={**os.environ, "HOME": "/tmp/openclaw-mem0-fastpath/home"}
-    )
-    out=(p.stdout or '') + ('\n'+p.stderr if p.stderr else '')
-    # Extraction fallback: if retrieval missed the exact value but we can map from canonical index.
-    orch_match = re.search(r'(ORCH-[A-Za-z0-9\-]+)', q)
-    branch_match = re.search(r'(ai-orch-\d+)', q)
-    fallback = ""
-    if orch_match:
-        tok = orch_match.group(1)
-        br = token_to_branch.get(tok)
-        if br:
-            fallback = f"\nresolved_from_canonical_index: {tok} -> {br}\n"
-    elif branch_match:
-        br = branch_match.group(1)
-        tok = branch_to_token.get(br)
-        if tok:
-            fallback = f"\nresolved_from_canonical_index: {br} -> {tok}\n"
-    if fallback and fallback.lower() not in out.lower():
-        out = out + fallback
-    rows.append({"n":i,"question":q,"query":query_variant,"answer":out[:12000]})
-path=pathlib.Path('/tmp/openclaw-mem0-fastpath/latest-50q/qa-50.json')
-path.write_text(json.dumps(rows,indent=2))
-print(f"wrote {len(rows)} qa rows -> {path}")
+import json
+import os
+import pathlib
+import re
+import subprocess
+
+out_dir = pathlib.Path('/tmp/openclaw-mem0-fastpath/latest-50q')
+expected = json.loads((out_dir / 'expected-50.json').read_text())
+agent_id = os.environ.get('OPENCLAW_50Q_AGENT', 'memqa')
+
+rows = []
+passed = 0
+run_session_id = f"mem0-qa-run-{pathlib.Path('/tmp/openclaw-mem0-fastpath/latest-50q').resolve().name}"
+
+def extract_identifier(kind: str, text: str) -> str:
+    if kind == 'orch_to_branch':
+        m = re.search(r'ai-orch-\d+', text, flags=re.I)
+        return (m.group(0).lower() if m else '')
+    m = re.search(r'ORCH-[A-Za-z0-9\-]+', text, flags=re.I)
+    if not m:
+        return ''
+    token = m.group(0)
+    return 'ORCH-' + token.split('-', 1)[1]
+
+for i, e in enumerate(expected, 1):
+    q = e['question']
+    kind = e['kind']
+    if kind == 'orch_to_branch':
+        prompt = (
+            'Memory-only recall test.\\n'
+            'Reply with exactly one token in format ai-orch-<digits>.\\n'
+            'If unknown, reply I_DONT_KNOW.\\n'
+            f'Question: {q}'
+        )
+    else:
+        prompt = (
+            'Memory-only recall test.\\n'
+            'Reply with exactly one token in format ORCH-<token>.\\n'
+            'If unknown, reply I_DONT_KNOW.\\n'
+            f'Question: {q}'
+        )
+
+    attempts = []
+    extracted = ''
+    raw_answer = ''
+    for attempt in range(1, 2):
+        session_id = run_session_id
+        try:
+            p = subprocess.run(
+                ['openclaw', '--log-level', 'fatal', 'agent', '--local', '--agent', agent_id, '--session-id', session_id, '--timeout', '120', '--json', '--thinking', 'off', '-m', prompt],
+                capture_output=True,
+                text=True,
+                env=os.environ.copy(),
+                timeout=140,
+            )
+            raw = (p.stdout or '').strip()
+            stderr = (p.stderr or '').strip()
+            answer = ''
+            try:
+                payload = json.loads(raw)
+                payloads = payload.get('payloads') or payload.get('result', {}).get('payloads', [])
+                if payloads:
+                    answer = str(payloads[0].get('text') or '')
+            except Exception:
+                answer = raw
+            if stderr:
+                answer = (answer + '\n' + stderr).strip()
+        except subprocess.TimeoutExpired:
+            answer = 'I_DONT_KNOW'
+
+        token = extract_identifier(kind, answer)
+        attempts.append({'attempt': attempt, 'answer': answer[:2000], 'extracted': token})
+        raw_answer = answer
+        if token:
+            extracted = token
+            break
+
+    expected_primary = [x.lower() for x in e.get('must_contain', [])]
+    expected_any = [x.lower() for x in e.get('must_contain_any', [])]
+
+    ok = False
+    if extracted:
+        if kind == 'orch_to_branch':
+            ok = extracted in expected_primary
+        else:
+            ok = extracted in expected_any if expected_any else extracted in expected_primary
+
+    if ok:
+        passed += 1
+
+    rows.append({
+        'n': i,
+        'question': q,
+        'kind': kind,
+        'expected': e.get('must_contain', []),
+        'expected_any': e.get('must_contain_any', []),
+        'answer': raw_answer[:8000],
+        'extracted': extracted,
+        'passed': ok,
+        'attempts': attempts,
+    })
+
+    status = 'OK' if ok else 'MISS'
+    print(f"{i:02d} {status} {extracted or 'NO_ID'}", flush=True)
+
+score = {
+    'passed': passed,
+    'total': len(expected),
+    'pass_rate': (passed / len(expected)) if expected else 0.0,
+}
+(out_dir / 'qa-50.json').write_text(json.dumps(rows, indent=2))
+(out_dir / 'score.json').write_text(json.dumps(score, indent=2))
+(out_dir / 'failures.json').write_text(json.dumps([r for r in rows if not r['passed']], indent=2))
+print('FINAL', json.dumps(score))
 PY
 
 echo "$OUT"

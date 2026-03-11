@@ -603,7 +603,7 @@
                 "checkCompatibility": false
               }
             },
-            "historyDbPath": "${HOME}/.openclaw/mem0-history.db"
+            "historyDbPath": "/Users/jleechan/.openclaw/mem0-history.db"
           }
         }
       }

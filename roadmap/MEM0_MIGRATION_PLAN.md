@@ -28,11 +28,19 @@ Goal: use the standard mem0 setup path quickly, but require strong proof that me
 
 3. Required Test Pack
 - Run 30-50 known-answer queries spanning `slack`, `session`, and mixed facts.
+- Use fixed corpus: `roadmap/MEM0_50Q_QUESTIONS.md` (50 questions + expected answers).
 - Verify expected fact appears in top-k results for each query.
 - Add 10 negative/safety queries (facts that should not be retrieved).
 - Re-run full pack twice and diff results for stability.
 - Record p50/p95 retrieval latency.
 - Simulate provider interruption and verify explicit failure/fallback behavior.
+
+3a. Runtime Preflight (Required before any 50Q run)
+- Verify `openclaw mem0 stats` succeeds (fails fast on native-module ABI drift).
+- Verify no session lock contention on the main session file; abort run if lock timeout errors appear.
+- Verify at least one provider path is healthy (no `No available auth profile` or immediate timeout loop).
+- Run one smoke query through `openclaw agent` and require a parsable token answer before full batch.
+- Persist preflight diagnostics with timestamps in the same `/tmp/openclaw-mem0-fastpath/<timestamp>/` bundle.
 
 4. Pass Criteria
 - >=90% correct on known-answer queries.
@@ -52,6 +60,12 @@ Goal: use the standard mem0 setup path quickly, but require strong proof that me
 - Run Track 1 in production mode.
 - Schedule validation every 4 hours.
 - Keep deep migration/cutover gates as follow-on work only if needed.
+
+## Known Blockers (Observed March 11, 2026)
+- `openclaw-mem0` can fail hard when `better-sqlite3` ABI is out of sync with runtime Node (`NODE_MODULE_VERSION` mismatch).
+- Agent evaluation can return false failures because of session lock contention on `~/.openclaw/agents/main/sessions/*.jsonl.lock`.
+- Provider cooldown/rate-limit paths can mask memory quality with `NO_ID` outcomes unless preflight checks gate the run.
+- Tracking issue: `rev-x7f`.
 
 ## Migration Phases
 1. Discovery and design
