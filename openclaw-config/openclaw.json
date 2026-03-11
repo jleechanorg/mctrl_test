@@ -81,6 +81,8 @@
           "/Users/jleechan/.openclaw/USER.md",
           "/Users/jleechan/.openclaw/PROJECTS_BEADS.md",
           "/Users/jleechan/.openclaw/GITHUB_REPOS.md",
+          "/Users/jleechan/.openclaw/agents/main/sessions",
+          "/Users/jleechan/.openclaw/sessions",
           "/Users/jleechan/.openclaw/workspace/MEMORY.md",
           "/Users/jleechan/.openclaw/memory",
           "/Users/jleechan/.openclaw/workspace/TOOLS.md",
@@ -150,7 +152,18 @@
       "memory-server_read_graph",
       "memory-server_delete_observations",
       "memory-server_delete_entities",
-      "memory-server_delete_relations"
+      "memory-server_delete_relations",
+      "slack_channels_list",
+      "slack_conversations_history",
+      "slack_conversations_replies",
+      "slack_conversations_add_message",
+      "slack_conversations_mark",
+      "slack_users_search",
+      "slack_usergroups_list",
+      "slack_usergroups_me",
+      "slack_usergroups_create",
+      "slack_usergroups_update",
+      "slack_usergroups_users_update"
     ],
     "deny": [
       "browser",
@@ -514,6 +527,15 @@
               "args": [
                 "-y",
                 "ios-simulator-mcp"
+              ]
+            },
+            {
+              "name": "slack",
+              "transport": "stdio",
+              "command": "bash",
+              "args": [
+                "-lc",
+                "source ~/.profile >/dev/null 2>&1 && SLACK_MCP_XOXB_TOKEN=\"${OPENCLAW_SLACK_BOT_TOKEN:-$SLACK_USER_TOKEN}\" SLACK_MCP_ADD_MESSAGE_TOOL=true /Users/jleechan/go/bin/slack-mcp-server"
               ]
             },
             {
