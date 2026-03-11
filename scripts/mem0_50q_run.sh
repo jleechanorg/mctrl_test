@@ -42,7 +42,7 @@ import pathlib
 import re
 from collections import defaultdict
 
-base = pathlib.Path('/Users/jleechan/.openclaw/memory/slack-history')
+base = pathlib.Path.home() / '.openclaw' / 'memory' / 'slack-history'
 mds = sorted(base.glob('*.md'))
 text = '\n'.join(p.read_text(errors='ignore') for p in mds)
 
@@ -112,6 +112,8 @@ for orch, branch in strict_pairs[25:50]:
     })
 
 expected = expected[:50]
+if len(expected) != 50:
+    raise SystemExit(f'expected exactly 50 prompts, got {len(expected)}')
 out_dir = pathlib.Path('/tmp/openclaw-mem0-fastpath/latest-50q')
 out_dir.mkdir(parents=True, exist_ok=True)
 (out_dir / 'expected-50.json').write_text(json.dumps(expected, indent=2))
@@ -121,7 +123,10 @@ print(f'wrote {len(expected)} expected queries -> {out_dir / "expected-50.json"}
 PY
 
 # Refresh memory index before running agent QA.
-openclaw memory index --force > "$OUT/reindex.log" 2>&1 || true
+if ! openclaw memory index --force > "$OUT/reindex.log" 2>&1; then
+  echo "memory index failed; see $OUT/reindex.log" >&2
+  exit 1
+fi
 
 # Ask openclaw agent directly for each question and score extracted identifiers.
 python3 - <<'PY'
