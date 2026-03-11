@@ -410,7 +410,7 @@ def test_notify_slack_done_reports_local_only_commits(mock_urlopen) -> None:
     assert result is True
     assert mock_urlopen.call_count == 2
     bodies = [json.loads(c.args[0].data) for c in mock_urlopen.call_args_list]
-    assert any("did not push to origin" in body["text"] for body in bodies)
+    assert any("did not push to a configured remote" in body["text"] for body in bodies)
     assert any(body.get("thread_ts") == "1234567890.123456" for body in bodies)
     assert any(body.get("channel") == "C999TRIGGER" for body in bodies)
 

@@ -227,55 +227,71 @@ class TestReconcileRegistryOnce:
 
 
 class TestRemoteBranchExists:
-    def test_returns_false_when_origin_branch_does_not_contain_local_head(
+    def test_returns_false_when_candidate_remote_branch_does_not_contain_local_head(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        calls: list[list[str]] = []
-
         def fake_run(args, **kwargs):
-            calls.append(args)
-            if args[:4] == ["git", "fetch", "--no-tags", "origin"]:
+            if args == ["git", "remote"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="upstream\n", stderr="")
+            if args == ["git", "branch", "--show-current"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="feat/current\n", stderr="")
+            if args == ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="upstream/feat/current\n", stderr="")
+            if args == ["git", "fetch", "--no-tags", "upstream"]:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
-            if args == ["git", "rev-parse", "--verify", "origin/feat/demo"]:
-                return subprocess.CompletedProcess(
-                    args=args, returncode=0, stdout="deadbeef\n", stderr=""
-                )
-            if args == ["git", "merge-base", "--is-ancestor", "HEAD", "origin/feat/demo"]:
+            if args == ["git", "rev-parse", "--verify", "upstream/feat/demo"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="deadbeef\n", stderr="")
+            if args == ["git", "merge-base", "--is-ancestor", "HEAD", "upstream/feat/demo"]:
+                return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="")
+            if args == ["git", "rev-parse", "--verify", "upstream/feat/current"]:
                 return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="")
             raise AssertionError(f"unexpected subprocess call: {args}")
 
         monkeypatch.setattr(subprocess, "run", fake_run)
 
         assert _remote_branch_exists("feat/demo", "/tmp/wt-demo") is False
-        assert calls == [
-            ["git", "fetch", "--no-tags", "origin", "feat/demo"],
-            ["git", "rev-parse", "--verify", "origin/feat/demo"],
-            ["git", "merge-base", "--is-ancestor", "HEAD", "origin/feat/demo"],
-        ]
 
-    def test_returns_true_when_origin_branch_contains_local_head(
+    def test_returns_true_when_upstream_ref_contains_local_head(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def fake_run(args, **kwargs):
-            if args[:4] == ["git", "fetch", "--no-tags", "origin"]:
+            if args == ["git", "remote"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="mctrl_test\norigin\n", stderr="")
+            if args == ["git", "branch", "--show-current"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="leetcode-hard-3\n", stderr="")
+            if args == ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="mctrl_test/leetcode-hard-3\n", stderr="")
+            if args == ["git", "fetch", "--no-tags", "mctrl_test"]:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
-            if args == ["git", "rev-parse", "--verify", "origin/feat/demo"]:
-                return subprocess.CompletedProcess(
-                    args=args, returncode=0, stdout="deadbeef\n", stderr=""
-                )
-            if args == ["git", "merge-base", "--is-ancestor", "HEAD", "origin/feat/demo"]:
+            if args == ["git", "rev-parse", "--verify", "mctrl_test/leetcode-hard-3"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="deadbeef\n", stderr="")
+            if args == ["git", "rev-parse", "--verify", "mctrl_test/ai-orch-4121"]:
+                return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="")
+            if args == ["git", "merge-base", "--is-ancestor", "HEAD", "mctrl_test/leetcode-hard-3"]:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+            if args == ["git", "fetch", "--no-tags", "origin"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+            if args == ["git", "rev-parse", "--verify", "origin/ai-orch-4121"]:
+                return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="")
+            if args == ["git", "rev-parse", "--verify", "origin/leetcode-hard-3"]:
+                return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="")
             raise AssertionError(f"unexpected subprocess call: {args}")
 
         monkeypatch.setattr(subprocess, "run", fake_run)
 
-        assert _remote_branch_exists("feat/demo", "/tmp/wt-demo") is True
+        assert _remote_branch_exists("ai-orch-4121", "/tmp/wt-demo") is True
 
     def test_returns_none_when_remote_verification_fails_transiently(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def fake_run(args, **kwargs):
-            if args[:4] == ["git", "fetch", "--no-tags", "origin"]:
+            if args == ["git", "remote"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="origin\n", stderr="")
+            if args == ["git", "branch", "--show-current"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="feat/demo\n", stderr="")
+            if args == ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]:
+                return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="")
+            if args == ["git", "fetch", "--no-tags", "origin"]:
                 return subprocess.CompletedProcess(
                     args=args, returncode=128, stdout="", stderr="network timeout"
                 )

@@ -425,13 +425,13 @@ def notify_slack_done(payload: dict[str, Any]) -> bool:
         if action_required == "push_or_salvage":
             dm_text = (
                 f":warning: *Task stranded: {bead_id}*\n\n"
-                f"Agent session `{session}` committed locally but did not push to origin.\n"
+                f"Agent session `{session}` committed locally but did not push to a configured remote.\n"
                 f"Branch: `{branch}`\n"
                 f"Worktree: `{worktree}`\n"
                 f"Push or salvage the branch before cleanup."
             )
             thread_text = (
-                f":warning: Agent for *{bead_id}* committed locally but did not push `{branch}`. "
+                f":warning: Agent for *{bead_id}* committed locally but no remote review branch was detected for `{branch}`. "
                 "Human follow-up required."
             )
         else:
