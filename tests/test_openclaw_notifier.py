@@ -477,3 +477,29 @@ def test_notify_openclaw_mcp_fallback_handles_timeout(mock_run, _mock_agent, tmp
     queued = read_outbox(outbox_path=str(outbox))
     assert len(queued) == 1
     assert queued[0]["bead_id"] == "ORCH-timeout"
+
+
+@patch.dict(
+    "os.environ",
+    {
+        "OPENCLAW_PROJECT_KEY": "project-x",
+        "OPENCLAW_SENDER_NAME": "sender-x",
+        "OPENCLAW_TO": "receiver-x",
+    },
+    clear=False,
+)
+@patch("orchestration.openclaw_notifier._send_via_openclaw_agent")
+@patch("orchestration.openclaw_notifier.subprocess.run")
+def test_notify_openclaw_mcp_fallback_runs_when_agent_call_raises(
+    mock_run, mock_agent_call, tmp_path: Path
+) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    payload = {"event": "task_finished", "bead_id": "ORCH-agent-exc"}
+    mock_agent_call.side_effect = FileNotFoundError("openclaw")
+    mock_run.return_value = CompletedProcess(args=["openclaw", "mcp"], returncode=0)
+
+    delivered = notify_openclaw(payload, outbox_path=str(outbox))
+
+    assert delivered is True
+    assert mock_run.called
+    assert read_outbox(outbox_path=str(outbox)) == []

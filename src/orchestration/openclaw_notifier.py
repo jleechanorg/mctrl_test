@@ -489,8 +489,12 @@ def _send_via_mcp_agent_mail(payload: dict[str, Any]) -> bool:
     We try the live OpenClaw agent route first because current OpenClaw CLI
     builds do not expose an `mcp` subcommand consistently.
     """
-    if _send_via_openclaw_agent(payload):
-        return True
+    try:
+        if _send_via_openclaw_agent(payload):
+            return True
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        # Preserve MCP agent-mail fallback even when the direct agent CLI path fails hard.
+        pass
 
     project_key = os.environ.get("OPENCLAW_PROJECT_KEY", "").strip()
     sender_name = os.environ.get("OPENCLAW_SENDER_NAME", "").strip()
