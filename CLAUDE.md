@@ -23,6 +23,20 @@ Full details: `~/.claude/skills/minimax.md` and `~/.claude/skills/minimax-cli-fi
 
 ---
 
+## Root/Workspace Parity Rule
+
+Repo root policy markdown is the source of truth for runtime behavior. Keep these files byte-for-byte aligned with `~/.openclaw/workspace/`:
+- `AGENTS.md`
+- `SOUL.md`
+- `TOOLS.md`
+- `USER.md`
+- `IDENTITY.md`
+- `HEARTBEAT.md`
+
+If any of these differ, sync repo root -> `~/.openclaw/workspace/*` immediately.
+
+---
+
 ## OpenClaw Config: Live Files vs This Repo
 
 **The real OpenClaw config lives in `~/.openclaw/` — `openclaw-config/` in this repo is a BACKUP only.**

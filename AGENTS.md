@@ -5,6 +5,18 @@
 
 Before concluding that a Claude command, workflow, or helper is missing, check both repo-local `.claude/` and home `~/.claude/`; prefer repo-local assets for repo-specific work.
 
+## Root/Workspace Parity Rule
+
+Repo root policy markdown is the source of truth for runtime behavior. Keep these files byte-for-byte aligned with `~/.openclaw/workspace/`:
+- `AGENTS.md`
+- `SOUL.md`
+- `TOOLS.md`
+- `USER.md`
+- `IDENTITY.md`
+- `HEARTBEAT.md`
+
+If any of these differ, sync repo root -> `~/.openclaw/workspace/*` immediately.
+
 ## MiniMax Agent — No Separate Binary
 
 `minimax` is NOT a standalone binary. It uses the `claude` CLI with `ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic`.
