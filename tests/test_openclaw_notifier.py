@@ -11,13 +11,15 @@ from orchestration.openclaw_notifier import (
     DEFAULT_DEAD_LETTER_PATH,
     SLACK_DM_CHANNEL,
     SLACK_TRIGGER_CHANNEL,
-    outbox_health_snapshot,
-    enqueue_outbox,
     drain_outbox,
+    enqueue_dead_letter,
+    enqueue_outbox,
     notify_openclaw,
+    openclaw_notification_max_runtime_seconds,
+    outbox_health_snapshot,
     read_dead_letter,
-    notify_slack_done,
     notify_slack_started,
+    notify_slack_done,
     read_outbox,
 )
 
@@ -205,9 +207,9 @@ def test_outbox_health_snapshot_reports_pending_dead_letter_and_histogram(tmp_pa
         },
         outbox_path=str(outbox),
     )
-    enqueue_outbox(
+    enqueue_dead_letter(
         {"event": "task_finished", "bead_id": "ORCH-dead"},
-        outbox_path=str(dead_letter),
+        dead_letter_path=str(dead_letter),
     )
 
     snapshot = outbox_health_snapshot(
@@ -220,6 +222,10 @@ def test_outbox_health_snapshot_reports_pending_dead_letter_and_histogram(tmp_pa
     assert snapshot["oldest_age_seconds"] is not None
     assert snapshot["retry_histogram"]["0"] == 1
     assert snapshot["retry_histogram"]["2"] == 1
+
+
+def test_openclaw_notification_max_runtime_seconds_matches_single_attempt_budget() -> None:
+    assert openclaw_notification_max_runtime_seconds() == 60
 
 
 def _make_urlopen_mock(ok: bool = True):

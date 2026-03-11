@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,9 +18,8 @@ EventSender = Callable[[dict[str, Any]], bool]
 DEFAULT_OUTBOX_PATH = ".messages/outbox.jsonl"
 DEFAULT_DEAD_LETTER_PATH = ".messages/outbox_dead_letter.jsonl"
 DEFAULT_RETRY_LIMIT = 3
-_OPENCLAW_AGENT_TIMEOUT_SECONDS = 60
+_OPENCLAW_AGENT_TIMEOUT_SECONDS = 30
 _OPENCLAW_MCP_TIMEOUT_SECONDS = 30
-_RETRY_DELAYS_SECONDS = (1, 3)
 
 
 def default_outbox_path() -> str:
@@ -33,9 +31,9 @@ def default_outbox_path() -> str:
 
 
 def openclaw_notification_max_runtime_seconds() -> int:
-    attempts = len(_RETRY_DELAYS_SECONDS) + 1
-    per_attempt_timeout = _OPENCLAW_AGENT_TIMEOUT_SECONDS + _OPENCLAW_MCP_TIMEOUT_SECONDS
-    return (per_attempt_timeout * attempts) + sum(_RETRY_DELAYS_SECONDS)
+    # notify_openclaw performs a single delivery attempt per call:
+    # OpenClaw agent path + MCP fallback path.
+    return _OPENCLAW_AGENT_TIMEOUT_SECONDS + _OPENCLAW_MCP_TIMEOUT_SECONDS
 
 
 def _resolve_outbox_path(outbox_path: str | None) -> str:
@@ -213,7 +211,7 @@ def _coerce_retry_count(value: Any) -> int:
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
 
 
 def _age_seconds_from_iso(value: Any) -> int | None:
@@ -526,7 +524,7 @@ def _send_via_mcp_agent_mail(payload: dict[str, Any]) -> bool:
             ],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=_OPENCLAW_MCP_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
         return False
@@ -561,7 +559,7 @@ def _send_via_openclaw_agent(payload: dict[str, Any]) -> bool:
             ],
             capture_output=True,
             text=True,
-            timeout=30,  # Prevent indefinite hang on OpenClaw CLI issues
+            timeout=_OPENCLAW_AGENT_TIMEOUT_SECONDS,  # Prevent indefinite hang on OpenClaw CLI issues
         )
     except subprocess.TimeoutExpired:
         return False
