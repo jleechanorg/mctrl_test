@@ -6,13 +6,21 @@ import threading
 from typing import Any
 
 from orchestration.openclaw_notifier import (
+    completion_notification_max_runtime_seconds,
     drain_outbox,
     notify_openclaw,
-    openclaw_notification_max_runtime_seconds,
+    notify_slack_done,
 )
 from orchestration.session_registry import list_mappings, update_mapping_status
 
 logger = logging.getLogger(__name__)
+
+
+def _notify_completion(payload: dict[str, Any], outbox_path: str) -> None:
+    # Slack thread closure is the primary user-visible completion signal.
+    # OpenClaw delivery remains a secondary system-to-system channel.
+    notify_slack_done(payload)
+    notify_openclaw(payload, outbox_path=outbox_path)
 
 
 def run_tmux_sessions() -> set[str]:
@@ -252,13 +260,12 @@ def reconcile_registry_once(
         }
         # Emit a single channel-agnostic notification to OpenClaw.
         t_openclaw = threading.Thread(
-            target=notify_openclaw,
-            args=(payload,),
-            kwargs={"outbox_path": outbox_path},
+            target=_notify_completion,
+            args=(payload, outbox_path),
             daemon=True,
         )
         t_openclaw.start()
-        t_openclaw.join(timeout=openclaw_notification_max_runtime_seconds())
+        t_openclaw.join(timeout=completion_notification_max_runtime_seconds())
         emitted.append(payload)
 
     # Attempt to drain any previously failed notifications now that we're in a live code path

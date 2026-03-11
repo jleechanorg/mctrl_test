@@ -1,16 +1,16 @@
 ---
 name: agento
 version: 1.0.0
-description: Delegate coding tasks to Agent-Orchestrator (AO) via the "agento" keyword.
+description: Delegate coding change tasks to Agent-Orchestrator (AO); default lane unless mctrl is explicitly requested.
 ---
 
 # agento
 
-Use this skill when the user's message contains the word **agento**.
+Use this skill by default for coding change requests.
 
 ## When to use
 
-The user says "agento" to explicitly route a task through Agent-Orchestrator instead of mctrl.
+Route coding change requests through Agent-Orchestrator unless the user explicitly asks for mctrl.
 Examples:
 - "agento spawn worldai-claw-agento fix the login bug"
 - "agento status"

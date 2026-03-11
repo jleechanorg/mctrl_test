@@ -41,15 +41,30 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 **All coding tasks go through `ai_orch`.** Never write code yourself when asked to implement something — always delegate to an agent via `ai_orch run`.
 
-### Agent Priority (try in order)
+### Default Routing
 
-1. **codexs** — Codex with Spark model + high reasoning. Best for most tasks.
-2. **clauded** — Claude Sonnet with full permissions. Use if codexs fails or is unavailable.
-3. **codex** — Vanilla Codex. Final fallback.
+- **Default for change requests:** use **agento** first.
+- Use **mctrl/dispatch_task** only when explicitly requested (`mctrl`) or when thread-tied start/done supervisor notifications are required.
+- If Jeffrey explicitly asks for a specific agent/CLI, honor that override.
+
+### Layer Model
+
+- **Orchestrator layer:** choose execution lane (`agento` default, `mctrl` when explicitly requested or when thread lifecycle tracking is required).
+- **Direct-agent layer:** only used inside an orchestrator lane when selecting the worker CLI.
+
+### Direct-Agent Priority (inside ai_orch/mctrl lanes)
+
+1. **codexs** — Codex with Spark model + high reasoning.
+2. **clauded** — Claude Sonnet with full permissions.
+3. **codex** — Vanilla Codex.
 
 ### Commands
 
 ```bash
+# default lane for code changes (agento)
+~/bin/ao spawn <project-key> <issue-or-pr>
+
+# direct-agent fallback choices inside ai_orch/mctrl lanes
 # 1st choice: codexs (Codex Spark, high reasoning effort)
 CODEX_MODEL=gpt-5.3-codex-spark ai_orch run --agent-cli codex "task description"
 
@@ -90,6 +105,8 @@ Add whatever helps you do your job. This is your cheat sheet.
 ## mctrl — Async Dispatch & Supervisor
 
 **mctrl** is the local async task dispatch system at `~/project_jleechanclaw/mctrl`. It is NOT Mission Control and does NOT need MC env vars.
+
+**Routing rule:** mctrl is opt-in, not default. Use it when Jeffrey asks for `mctrl` or when deterministic Slack thread lifecycle notifications are required.
 
 **RULE: NEVER call `ai_orch run --async --worktree` directly for coding tasks. Always use `dispatch_task`.** Direct ai_orch bypasses the registry and supervisor — Jeffrey gets no start/done notifications.
 

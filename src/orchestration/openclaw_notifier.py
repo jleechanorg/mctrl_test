@@ -20,6 +20,8 @@ DEFAULT_DEAD_LETTER_PATH = ".messages/outbox_dead_letter.jsonl"
 DEFAULT_RETRY_LIMIT = 3
 _OPENCLAW_AGENT_TIMEOUT_SECONDS = 30
 _OPENCLAW_MCP_TIMEOUT_SECONDS = 30
+_SLACK_POST_TIMEOUT_SECONDS = 5
+_MAX_SLACK_COMPLETION_POSTS = 2
 
 
 def default_outbox_path() -> str:
@@ -34,6 +36,13 @@ def openclaw_notification_max_runtime_seconds() -> int:
     # notify_openclaw performs a single delivery attempt per call:
     # OpenClaw agent path + MCP fallback path.
     return _OPENCLAW_AGENT_TIMEOUT_SECONDS + _OPENCLAW_MCP_TIMEOUT_SECONDS
+
+
+def completion_notification_max_runtime_seconds() -> int:
+    # _notify_completion first calls notify_slack_done (DM + thread posts),
+    # then notify_openclaw. Budget for both paths.
+    slack_budget = _SLACK_POST_TIMEOUT_SECONDS * _MAX_SLACK_COMPLETION_POSTS
+    return slack_budget + openclaw_notification_max_runtime_seconds()
 
 
 def _resolve_outbox_path(outbox_path: str | None) -> str:
@@ -537,7 +546,8 @@ def _send_via_mcp_agent_mail(payload: dict[str, Any]) -> bool:
 
 def _send_via_openclaw_agent(payload: dict[str, Any]) -> bool:
     """Deliver the notification to a configured OpenClaw agent."""
-    agent_name = os.environ.get("OPENCLAW_NOTIFY_AGENT", "").strip()
+    # Default to the main OpenClaw agent so delivery works without extra env wiring.
+    agent_name = os.environ.get("OPENCLAW_NOTIFY_AGENT", "main").strip()
     if not agent_name:
         return False
 
