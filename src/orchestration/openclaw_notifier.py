@@ -492,7 +492,7 @@ def _send_via_mcp_agent_mail(payload: dict[str, Any]) -> bool:
     try:
         if _send_via_openclaw_agent(payload):
             return True
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+    except Exception:
         # Preserve MCP agent-mail fallback even when the direct agent CLI path fails hard.
         pass
 

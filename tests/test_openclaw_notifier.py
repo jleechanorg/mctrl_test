@@ -503,3 +503,29 @@ def test_notify_openclaw_mcp_fallback_runs_when_agent_call_raises(
     assert delivered is True
     assert mock_run.called
     assert read_outbox(outbox_path=str(outbox)) == []
+
+
+@patch.dict(
+    "os.environ",
+    {
+        "OPENCLAW_PROJECT_KEY": "project-x",
+        "OPENCLAW_SENDER_NAME": "sender-x",
+        "OPENCLAW_TO": "receiver-x",
+    },
+    clear=False,
+)
+@patch("orchestration.openclaw_notifier._send_via_openclaw_agent")
+@patch("orchestration.openclaw_notifier.subprocess.run")
+def test_notify_openclaw_mcp_fallback_runs_when_agent_call_raises_runtime_error(
+    mock_run, mock_agent_call, tmp_path: Path
+) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    payload = {"event": "task_finished", "bead_id": "ORCH-agent-runtime-exc"}
+    mock_agent_call.side_effect = RuntimeError("agent parse failure")
+    mock_run.return_value = CompletedProcess(args=["openclaw", "mcp"], returncode=0)
+
+    delivered = notify_openclaw(payload, outbox_path=str(outbox))
+
+    assert delivered is True
+    assert mock_run.called
+    assert read_outbox(outbox_path=str(outbox)) == []
