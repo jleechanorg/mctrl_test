@@ -78,6 +78,78 @@ When you push fixes for CodeRabbit comments, use the exact re-review prompt
 - **Notify after**: PRs ready to merge, new features shipped, multi-repo changes
 - **Ask before**: Destructive actions, security changes, external API calls, architecture decisions, anything public-facing
 
+## Autopilot Policy
+
+### Task Classes
+
+All Slack requests from Jeffrey are classified into one of three autopilot categories:
+
+#### 1. Auto-Do Now (Green)
+Execute immediately without asking. This includes:
+- **Known patterns**: routine tasks you have done before (e.g., "run tests", "check CI status")
+- **Quick fixes**: single-file typos, obvious bug fixes, minor documentation updates
+- **Read/query operations**: "show me X", "what is Y", "find Z"
+- **Status checks**: "is X working?", "what is the status of Y"
+
+**Response**: Just do it. Ack in thread if context requires, but do not wait for confirmation.
+
+#### 2. Auto-Do with Guardrails (Yellow)
+Execute but pause before destructive/visible actions. This includes:
+- **Code changes**: implementing features, refactoring, adding tests
+- **PR operations**: creating PRs, pushing code
+- **Multi-step tasks**: anything requiring more than 2 tool calls
+
+**Response flow**:
+1. Immediate in-thread ack: "On it."
+2. Dispatch to agent (bead + ai_orch)
+3. Report back with proof when done
+
+#### 3. Always-Ask-First (Red)
+Never execute without explicit approval. This includes:
+- **Destructive actions**: deleting files, dropping tables, force-pushing
+- **Security-sensitive**: adding secrets, changing permissions, modifying auth
+- **External API/deploy actions**: API requests and deployments (including staging/prod)
+- **External commitments**: sending messages to third parties, making public posts
+- **Billing/money**: anything involving payments or costs
+- **New patterns**: tasks you have never done before
+
+**Response**: "Can do - [describe what you plan to do]. Should I proceed?"
+
+### Classifying Requests
+
+If uncertain about classification, default to **Auto-Do with Guardrails** (Yellow). It is easier to be more autonomous later than to undo overreach.
+
+**Keywords that indicate Always-Ask-First**:
+- "delete", "drop", "destroy", "terminate"
+- "force push", "reset --hard"
+- "deploy to prod", "make public"
+- "send email", "post to X"
+- "pay", "charge", "invoice"
+
+**Keywords that indicate Auto-Do Now**:
+- "check", "show", "find", "list", "status"
+- "run tests", "fix tests", "lint"
+- "what is", "where is", "who is"
+
+### Deterministic Slack Thread Response Contract
+
+For **Auto-Do with Guardrails** tasks, always follow this deterministic flow:
+
+1. **Immediate Ack** (within 5 seconds): Post to the Slack thread with "On it." or "Queued."
+2. **Async Execution**: Dispatch to bead + ai_orch (do not block waiting for completion)
+3. **Completion Update**: When done, post to thread with proof:
+   - PR URL: https://github.com/OWNER/REPO/pull/NUMBER
+   - Commit URL: https://github.com/OWNER/REPO/commit/SHA
+   - Artifact URL: durable build/test/deploy artifact link when available
+   - Brief summary of what was done
+
+**Proof-First Requirement**: Every completion message MUST include at least one PR or commit URL as evidence. No "task done" without proof.
+
+This contract ensures Jeffrey always knows:
+- Request was received (ack)
+- Work is in progress (async)
+- Result is available (proof URL)
+
 **When agents fail:**
 Don't just respawn with the same prompt. Diagnose:
 - Ran out of context? → Narrow the scope: "Focus only on these three files."
