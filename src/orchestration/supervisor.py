@@ -59,6 +59,7 @@ OUTBOX_ALERT_COOLDOWN_SECONDS = _get_int_env("MCTRL_OUTBOX_ALERT_COOLDOWN_SECOND
 
 
 ARCHIVE_AFTER_DAYS = _get_int_env("MCTRL_ARCHIVE_AFTER_DAYS", 7)
+DEFAULT_REGISTRY_PATH = ".tracking/bead_session_registry.jsonl"
 
 _running = True
 _last_outbox_alert_at: float | None = None
@@ -115,7 +116,7 @@ def _registry_paths_to_reconcile(
     resolved: list[Path] = [primary]
     if registry_paths_env.strip():
         resolved.extend(_expand_path(path) for path in _parse_registry_paths(registry_paths_env))
-    elif registry_path == ".tracking/bead_session_registry.jsonl":
+    elif primary == _expand_path(DEFAULT_REGISTRY_PATH):
         resolved.extend(
             _discover_sibling_registry_paths(
                 current_registry=primary,
@@ -177,13 +178,16 @@ def run_once() -> list[dict]:
     )
     emitted: list[dict] = []
     for registry_path in registry_paths:
-        emitted.extend(
-            reconcile_registry_once(
-                registry_path=registry_path,
-                outbox_path=OUTBOX_PATH,
-                dead_letter_path=DEAD_LETTER_PATH,
+        try:
+            emitted.extend(
+                reconcile_registry_once(
+                    registry_path=registry_path,
+                    outbox_path=OUTBOX_PATH,
+                    dead_letter_path=DEAD_LETTER_PATH,
+                )
             )
-        )
+        except Exception as exc:
+            logger.error("Reconcile failed for registry %s: %s", registry_path, exc, exc_info=True)
     snapshot = outbox_health_snapshot(
         outbox_path=OUTBOX_PATH,
         dead_letter_path=DEAD_LETTER_PATH,
@@ -201,10 +205,13 @@ def run_once() -> list[dict]:
     )
     archived = 0
     for registry_path in registry_paths:
-        archived += archive_terminal_mappings(
-            registry_path=registry_path,
-            archive_after_days=ARCHIVE_AFTER_DAYS,
-        )
+        try:
+            archived += archive_terminal_mappings(
+                registry_path=registry_path,
+                archive_after_days=ARCHIVE_AFTER_DAYS,
+            )
+        except Exception as exc:
+            logger.error("Archive failed for registry %s: %s", registry_path, exc, exc_info=True)
     if archived:
         logger.info(
             "Archived %d terminal mapping(s) across %d registry file(s)",

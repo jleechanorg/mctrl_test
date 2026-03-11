@@ -180,7 +180,6 @@ Don't just respawn with the same prompt. Diagnose:
 
 Default lane for code changes is **agento**. Use mctrl async dispatch when **any** of these are true:
 - Jeffrey explicitly asks for **"mctrl"**
-Use async dispatch when **any** of these are true:
 - Task is expected to produce a PR with **>100 lines** of changes
 - Task touches **multiple repos or files** across the codebase
 - Task requires agent to run for **>60 seconds** (benchmarks, large refactors, multi-repo work)
