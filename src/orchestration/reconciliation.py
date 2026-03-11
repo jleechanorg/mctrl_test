@@ -59,53 +59,113 @@ def _remote_branch_exists(branch: str, worktree_path: str | None) -> bool | None
     """Return remote verification state for the local HEAD.
 
     Returns:
-    - True: origin/<branch> contains local HEAD
-    - False: remote branch is reachable and does not contain local HEAD
+    - True: at least one configured remote ref contains local HEAD
+    - False: remote verification succeeded and no remote ref contains local HEAD
     - None: remote verification could not be completed (transient failure)
     """
-    if not branch or not worktree_path:
+    if not worktree_path:
         return False
-    try:
-        fetch_result = subprocess.run(
-            ["git", "fetch", "--no-tags", "origin", branch],
-            cwd=worktree_path,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if fetch_result.returncode != 0:
-            stderr = (fetch_result.stderr or "").strip()
-            # "couldn't find remote ref" is a definitive answer: branch was never pushed.
-            # Only return None for genuine transient failures (network errors, timeouts).
-            if "couldn't find remote ref" in stderr or "not found" in stderr.lower():
-                return False
-            logger.warning(
-                "Could not verify remote branch %s in %s: %s",
-                branch,
-                worktree_path,
-                stderr,
-            )
-            return None
 
-        remote_ref = f"origin/{branch}"
-        remote_result = subprocess.run(
-            ["git", "rev-parse", "--verify", remote_ref],
+    def _git(args: list[str], timeout: int = 10) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            args,
             cwd=worktree_path,
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=timeout,
         )
-        if remote_result.returncode != 0:
+
+    def _is_transient_fetch_error(stderr: str) -> bool:
+        lowered = (stderr or "").lower()
+        transient_markers = (
+            "timed out",
+            "timeout",
+            "temporary failure",
+            "could not resolve host",
+            "network",
+            "connection",
+            "service unavailable",
+            "internal server error",
+            "remote end hung up unexpectedly",
+            "tls",
+        )
+        return any(marker in lowered for marker in transient_markers)
+
+    try:
+        remotes_result = _git(["git", "remote"])
+        remotes = [r.strip() for r in remotes_result.stdout.splitlines() if r.strip()]
+        if remotes_result.returncode != 0 or not remotes:
             return False
 
-        ancestry_result = subprocess.run(
-            ["git", "merge-base", "--is-ancestor", "HEAD", remote_ref],
-            cwd=worktree_path,
-            capture_output=True,
-            text=True,
-            timeout=10,
+        current_branch = ""
+        current_branch_result = _git(["git", "branch", "--show-current"])
+        if current_branch_result.returncode == 0:
+            current_branch = current_branch_result.stdout.strip()
+
+        upstream_ref = ""
+        upstream_result = _git(
+            ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]
         )
-        return ancestry_result.returncode == 0
+        if upstream_result.returncode == 0:
+            upstream_ref = upstream_result.stdout.strip()
+
+        candidate_refs: set[str] = set()
+        if branch:
+            for remote in remotes:
+                candidate_refs.add(f"{remote}/{branch}")
+        if current_branch:
+            for remote in remotes:
+                candidate_refs.add(f"{remote}/{current_branch}")
+        if upstream_ref and "/" in upstream_ref:
+            candidate_refs.add(upstream_ref)
+
+        deterministic_failure_seen = False
+        transient_fetch_failure_seen = False
+        for remote in remotes:
+            fetch_result = _git(
+                ["git", "fetch", "--no-tags", "--prune", remote], timeout=15
+            )
+            if fetch_result.returncode != 0:
+                stderr = (fetch_result.stderr or "").strip()
+                if _is_transient_fetch_error(stderr):
+                    transient_fetch_failure_seen = True
+                    logger.warning(
+                        "Transient fetch failure for remote %s in %s: %s",
+                        remote,
+                        worktree_path,
+                        stderr,
+                    )
+                    continue
+                logger.warning(
+                    "Non-transient fetch failure for remote %s in %s: %s",
+                    remote,
+                    worktree_path,
+                    stderr,
+                )
+                deterministic_failure_seen = True
+                continue
+
+            for remote_ref in sorted(candidate_refs):
+                if not remote_ref.startswith(f"{remote}/"):
+                    continue
+                remote_result = _git(["git", "rev-parse", "--verify", remote_ref])
+                if remote_result.returncode != 0:
+                    continue
+                ancestry_result = _git(
+                    ["git", "merge-base", "--is-ancestor", "HEAD", remote_ref]
+                )
+                if ancestry_result.returncode == 0:
+                    return True
+                if ancestry_result.returncode == 1:
+                    deterministic_failure_seen = True
+                    continue
+                transient_fetch_failure_seen = True
+
+        if transient_fetch_failure_seen:
+            return None
+        if deterministic_failure_seen:
+            return False
+        return False
     except Exception as exc:
         logger.warning(
             "Remote verification failed for %s in %s: %s",
@@ -156,12 +216,12 @@ def reconcile_registry_once(
         if finished:
             new_status = "finished"
             event_type = "task_finished"
-            summary = "ai_orch session completed — branch is reviewable on origin"
+            summary = "ai_orch session completed — branch is reviewable on a configured remote"
             action = "review_and_merge"
         elif has_commits:
             new_status = "needs_human"
             event_type = "task_needs_human"
-            summary = "ai_orch session committed locally but did not push the branch to origin"
+            summary = "ai_orch session committed locally but did not push a reviewable branch to a configured remote"
             action = "push_or_salvage"
         else:
             new_status = "needs_human"

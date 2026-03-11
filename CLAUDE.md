@@ -265,11 +265,7 @@ Port: 18789 (loopback only)
 - Known Limitations
 
 ### CodeRabbit Review Protocol
-After pushing fixes that address review comments authored by `coderabbitai`:
-1. Post a PR comment: `@coderabbitai all good?`
-2. This triggers CodeRabbit to re-review and verify the fixes are resolved.
-
-Do NOT ping CodeRabbit on a timer or without a preceding push. Only trigger after a fresh commit lands on the PR branch.
+After pushing to remote, post exactly: `@coderabbit all good?`
 
 ### Commit Guidelines
 
