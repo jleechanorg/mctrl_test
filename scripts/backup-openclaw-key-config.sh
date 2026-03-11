@@ -65,6 +65,51 @@ copy_if_exists "$SRC_DIR/workspace-monitor/.openclaw/workspace-state.json" "$DES
 # Do not keep accidental VCS internals from workspace snapshots
 rm -rf "$DEST_DIR/workspaces/monitor/.git" 2>/dev/null || true
 
+# Redact secrets and machine-specific values in committed backup config files.
+python3 - <<'PY'
+import json
+import re
+from pathlib import Path
+
+dest = Path("openclaw-config")
+cfg_path = dest / "openclaw.json"
+if cfg_path.exists():
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+
+    # Normalize mem0 history DB path to portable HOME placeholder.
+    try:
+        cfg["plugins"]["entries"]["openclaw-mem0"]["config"]["oss"]["historyDbPath"] = "${HOME}/.openclaw/mem0-history.db"
+    except Exception:
+        pass
+    try:
+        cfg["plugins"]["config"]["openclaw-mem0"]["config"]["oss"]["historyDbPath"] = "${HOME}/.openclaw/mem0-history.db"
+    except Exception:
+        pass
+
+    def walk(node):
+        if isinstance(node, dict):
+            for k, v in list(node.items()):
+                if isinstance(v, str):
+                    if re.search(r"xoxb-[A-Za-z0-9-]+", v):
+                        node[k] = "${OPENCLAW_SLACK_BOT_TOKEN}"
+                    elif re.search(r"xai-[A-Za-z0-9_-]+", v):
+                        node[k] = "${XAI_API_KEY}"
+                else:
+                    walk(v)
+        elif isinstance(node, list):
+            for i in node:
+                walk(i)
+
+    walk(cfg)
+    cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+
+for plist in (dest / "launchd").glob("*.plist"):
+    text = plist.read_text(encoding="utf-8", errors="ignore")
+    text = re.sub(r"xoxb-[A-Za-z0-9-]+", "${OPENCLAW_SLACK_BOT_TOKEN}", text)
+    text = re.sub(r"xai-[A-Za-z0-9_-]+", "${XAI_API_KEY}", text)
+    plist.write_text(text, encoding="utf-8")
+PY
+
 # Store redacted auth profile snapshots for repo tracking.
 if command -v jq >/dev/null 2>&1; then
   for agent in main monitor; do

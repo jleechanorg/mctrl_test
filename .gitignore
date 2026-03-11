@@ -136,3 +136,7 @@ openclaw/
 worktree_*
 worldarchitect
 .claude/scheduled_tasks.lock
+memory.db
+vector_store.db
+ralph/metrics.json
+ralph/progress.txt

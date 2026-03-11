@@ -37,7 +37,7 @@
 		<key>OPENCLAW_SERVICE_VERSION</key>
 		<string>2026.3.8</string>
 		<key>OPENCLAW_SLACK_BOT_TOKEN</key>
-		<string>xoxb-9541820692839-10509415881058-L1ZGmeXYa5B9OxbmRj7pgi9K</string>
+		<string>${OPENCLAW_SLACK_BOT_TOKEN}</string>
 		<key>OPENCLAW_SYSTEMD_UNIT</key>
 		<string>openclaw-gateway.service</string>
 		<key>OPENCLAW_WINDOWS_TASK_NAME</key>
@@ -47,7 +47,7 @@
 		<key>TMPDIR</key>
 		<string>/var/folders/j0/byd1z6px50v88lf679bgt0h00000gn/T/</string>
 		<key>XAI_API_KEY</key>
-		<string>xai-ZAMQ6HDNby4CM0fbrtT3cZH6mkMa6o5RKjMDZsJQRVYipRF4pQtJ1pVNsWgRiFMvZ9C7Tbyi2HJXAwah</string>
+		<string>${XAI_API_KEY}</string>
 	</dict>
 	<key>KeepAlive</key>
 	<true/>
