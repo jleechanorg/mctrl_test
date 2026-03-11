@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_CONFIG="$REPO_ROOT/openclaw-config"
 LIVE_DIR="${HOME}/.openclaw"
+BACKUP_SCRIPT="$REPO_ROOT/scripts/backup-openclaw-key-config.sh"
 
 # Directories to sync (from repo to live)
 SYNC_DIRS="${SYNC_DIRS:-skills}"
@@ -23,6 +24,15 @@ echo "Repo:   $REPO_CONFIG"
 echo "Live:   $LIVE_DIR"
 echo "Sync:   $SYNC_DIRS"
 echo ""
+
+echo "--- Pre-sync Backup Refresh ---"
+if [ -x "$BACKUP_SCRIPT" ]; then
+  "$BACKUP_SCRIPT"
+  echo ""
+else
+  echo -e "  ${YELLOW}WARN:${NC} backup script not executable/missing: $BACKUP_SCRIPT"
+  echo ""
+fi
 
 # Check for skills in repo that aren't installed in live
 echo "--- Skills Check ---"
