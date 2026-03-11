@@ -13,6 +13,46 @@ Migrate from current OpenClaw built-in memory indexing to a mem0-first architect
 - OpenClaw uses mem0 tools for add/search/update/delete memory operations.
 - Slack/message history ingestion writes directly to mem0 (or to canonical files + mem0 sync with strict verification).
 
+## Track 1 (Now): Simple mem0 Setup + Extensive Validation
+Goal: use the standard mem0 setup path quickly, but require strong proof that memory retrieval actually works before broader migration work.
+
+1. Setup
+- Install/enable mem0 integration with default plugin flow.
+- Configure embedding provider and credentials for mem0.
+- Keep built-in memory enabled as fallback during validation.
+
+2. Ingest
+- Ingest Slack history memory exports and recent session history into mem0.
+- Use stable IDs for idempotency (`channel_id + ts`, `session_id + turn_id`).
+- Emit source-level ingestion counts.
+
+3. Required Test Pack
+- Run 30-50 known-answer queries spanning `slack`, `session`, and mixed facts.
+- Verify expected fact appears in top-k results for each query.
+- Add 10 negative/safety queries (facts that should not be retrieved).
+- Re-run full pack twice and diff results for stability.
+- Record p50/p95 retrieval latency.
+- Simulate provider interruption and verify explicit failure/fallback behavior.
+
+4. Pass Criteria
+- >=90% correct on known-answer queries.
+- 0 critical misses on high-priority personal-context questions.
+- Ingested counts match source manifests within tolerance.
+- No silent failure path (non-zero exit + written failure report).
+
+5. Evidence Artifacts
+- Save each run under `/tmp/openclaw-mem0-fastpath/<timestamp>/`:
+- `ingest-summary.json`
+- `query-results.json`
+- `parity-report.json`
+- `latency-report.json`
+- `failures.json` (empty when green)
+
+6. Operating Mode After Pass
+- Run Track 1 in production mode.
+- Schedule validation every 4 hours.
+- Keep deep migration/cutover gates as follow-on work only if needed.
+
 ## Migration Phases
 1. Discovery and design
 - Confirm mem0 deployment mode (local process vs hosted).
