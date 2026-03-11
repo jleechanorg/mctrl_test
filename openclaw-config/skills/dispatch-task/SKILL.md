@@ -105,7 +105,7 @@ bd update ORCH-xxx --append-notes "Dispatched to session ai-claude-xxxxxx. Super
 
 The mctrl supervisor loop (`ai.mctrl.supervisor` launchd agent) runs every 30s and:
 1. Checks if the tmux session is still alive
-2. When session ends: checks `git log start_sha..HEAD` for commits and verifies the branch is reachable on `origin`
+2. When session ends: checks `git log start_sha..HEAD` for commits and verifies the branch is reachable on a configured remote
 3. Posts DM to jleechan + thread reply under the original Slack message
 4. Sends MCP Agent Mail notification to OpenClaw
 
@@ -116,6 +116,6 @@ The mctrl supervisor loop (`ai.mctrl.supervisor` launchd agent) runs every 30s a
 - `SLACK_TRIGGER_TS` is the Slack `ts` field from jleechan's message (e.g. `1772857900.668299`)
 - `SLACK_TRIGGER_CHANNEL` is the Slack channel ID for that same message (e.g. `C0AH3RY3DK6`)
 - Always use `--async --worktree` flags so each task gets an isolated git worktree
-- Finished means remote-reviewable, not merely committed locally inside the worktree
+- Finished means remote-reviewable on a configured remote, not merely committed locally inside the worktree
 - The registry is at `.tracking/bead_session_registry.jsonl` in the mctrl repo
 - If dispatch_task fails, check that `ai_orch` is on PATH and the mctrl repo is at `~/project_jleechanclaw/mctrl`

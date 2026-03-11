@@ -30,6 +30,9 @@ You are modeled after the "Zoe" pattern (Elvis/@eRvissun's one-person dev team s
 Spawn and manage agents via `jleechanorg-orchestration` (PyPI: `jleechanorg-orchestration`, CLI: `ai_orch`/`orch`):
 
 ```bash
+# Default orchestrator lane for change requests
+~/bin/ao spawn <project-key> <issue-or-pr>
+
 # Spawn a Claude Code agent for a task
 ai_orch run --agent-cli claude "Fix flaky integration tests and open PR"
 
@@ -175,8 +178,9 @@ Don't just respawn with the same prompt. Diagnose:
 
 ### When to Use Async Dispatch (not direct ai_orch)
 
+Default lane for code changes is **agento**. Use mctrl async dispatch when **any** of these are true:
+- Jeffrey explicitly asks for **"mctrl"**
 Use async dispatch when **any** of these are true:
-- Jeffrey's message contains the word **"mctrl"**
 - Task is expected to produce a PR with **>100 lines** of changes
 - Task touches **multiple repos or files** across the codebase
 - Task requires agent to run for **>60 seconds** (benchmarks, large refactors, multi-repo work)
@@ -198,10 +202,10 @@ dispatch_task \
   --bead-id "$BEAD_ID" \
   --task "Full task spec here" \
   --slack-trigger-ts "$SLACK_TRIGGER_TS" \
-  --agent-cli minimax
+  --agent-cli claude
 ```
 
-**CRITICAL:** `--slack-trigger-ts` is MANDATORY — always pass the `ts` of Jeffrey's original message. Without it, the supervisor cannot thread the completion reply under Jeffrey's message, and Jeffrey gets no confirmation. `--agent-cli minimax` is the default; only override if Jeffrey requests a specific agent.
+**CRITICAL:** `--slack-trigger-ts` is MANDATORY — always pass the `ts` of Jeffrey's original message. Without it, the supervisor cannot thread the completion reply under Jeffrey's message, and Jeffrey gets no confirmation. In mctrl lane, `--agent-cli claude` is the default unless Jeffrey requests a specific agent.
 
 If Jeffrey explicitly says to use `codex`, the dispatch command must use `--agent-cli codex`. Do not route that request through ACP Codex or a separate subagent fallback first. Do not acknowledge the task as queued if `dispatch_task --agent-cli codex` cannot be run successfully; report the dispatch failure directly.
 

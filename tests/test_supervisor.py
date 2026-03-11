@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import sys
 from unittest.mock import MagicMock
+from pathlib import Path
 
 
 def test_invalid_archive_after_days_falls_back_to_default(monkeypatch) -> None:
@@ -129,3 +130,90 @@ def test_outbox_alert_payload_uses_passed_paths(monkeypatch) -> None:
     assert len(payloads) == 1
     assert payloads[0]["outbox_path"] == "/tmp/custom-outbox.jsonl"
     assert payloads[0]["dead_letter_path"] == "/tmp/custom-dead.jsonl"
+
+
+def test_registry_paths_to_reconcile_uses_env_paths(monkeypatch, tmp_path: Path) -> None:
+    sys.modules.pop("orchestration.supervisor", None)
+    supervisor = importlib.import_module("orchestration.supervisor")
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+
+    paths = supervisor._registry_paths_to_reconcile(
+        registry_path=".tracking/bead_session_registry.jsonl",
+        registry_paths_env=" /tmp/a.jsonl, /tmp/b.jsonl ",
+        outbox_path="/tmp/messages/outbox.jsonl",
+    )
+
+    assert paths[0] == str((workspace / ".tracking" / "bead_session_registry.jsonl").resolve())
+    assert str(Path("/tmp/a.jsonl").resolve()) in paths
+    assert str(Path("/tmp/b.jsonl").resolve()) in paths
+
+
+def test_registry_paths_to_reconcile_auto_discovers_sibling_registry(
+    monkeypatch, tmp_path: Path
+) -> None:
+    sys.modules.pop("orchestration.supervisor", None)
+    supervisor = importlib.import_module("orchestration.supervisor")
+
+    workspace_root = tmp_path / "project"
+    mctrl_repo = workspace_root / "mctrl"
+    app_repo = workspace_root / "jleechanclaw"
+    messages = tmp_path / "shared" / "messages"
+    messages.mkdir(parents=True)
+
+    for repo in (mctrl_repo, app_repo):
+        (repo / ".tracking").mkdir(parents=True)
+        (repo / ".tracking" / "bead_session_registry.jsonl").write_text("", encoding="utf-8")
+        (repo / ".messages").symlink_to(messages, target_is_directory=True)
+
+    monkeypatch.chdir(mctrl_repo)
+
+    paths = supervisor._registry_paths_to_reconcile(
+        registry_path=".tracking/bead_session_registry.jsonl",
+        registry_paths_env="",
+        outbox_path=str(messages / "outbox.jsonl"),
+    )
+
+    assert str((mctrl_repo / ".tracking" / "bead_session_registry.jsonl").resolve()) in paths
+    assert str((app_repo / ".tracking" / "bead_session_registry.jsonl").resolve()) in paths
+
+
+def test_run_once_reconciles_each_registry(monkeypatch) -> None:
+    sys.modules.pop("orchestration.supervisor", None)
+    supervisor = importlib.import_module("orchestration.supervisor")
+
+    monkeypatch.setattr(
+        supervisor,
+        "_registry_paths_to_reconcile",
+        lambda **_: ["/tmp/reg-a.jsonl", "/tmp/reg-b.jsonl"],
+    )
+
+    reconcile_calls: list[str] = []
+    archive_calls: list[str] = []
+
+    def _reconcile(*, registry_path: str, outbox_path: str, dead_letter_path: str):
+        reconcile_calls.append(registry_path)
+        return [{"event": "task_finished", "bead_id": f"b-{len(reconcile_calls)}"}]
+
+    def _archive(*, registry_path: str, archive_after_days: int):
+        archive_calls.append(registry_path)
+        return 1
+
+    monkeypatch.setattr("orchestration.reconciliation.reconcile_registry_once", _reconcile)
+    monkeypatch.setattr("orchestration.session_registry.archive_terminal_mappings", _archive)
+    monkeypatch.setattr(
+        "orchestration.openclaw_notifier.outbox_health_snapshot",
+        lambda **_: {"pending_count": 0, "dead_letter_count": 0, "oldest_age_seconds": None},
+    )
+    monkeypatch.setattr(
+        "orchestration.openclaw_notifier.notify_slack_outbox_alert",
+        lambda payload: True,
+    )
+
+    emitted = supervisor.run_once()
+
+    assert reconcile_calls == ["/tmp/reg-a.jsonl", "/tmp/reg-b.jsonl"]
+    assert archive_calls == ["/tmp/reg-a.jsonl", "/tmp/reg-b.jsonl"]
+    assert len(emitted) == 2

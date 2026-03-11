@@ -20,6 +20,7 @@ import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Callable
 
 from orchestration.openclaw_notifier import default_outbox_path
@@ -34,6 +35,7 @@ logger = logging.getLogger("mctrl.supervisor")
 REGISTRY_PATH = os.environ.get(
     "MCTRL_REGISTRY_PATH", ".tracking/bead_session_registry.jsonl"
 )
+REGISTRY_PATHS = os.environ.get("MCTRL_REGISTRY_PATHS", "")
 OUTBOX_PATH = os.environ.get(
     "MCTRL_OUTBOX_PATH", default_outbox_path()
 )
@@ -60,6 +62,76 @@ ARCHIVE_AFTER_DAYS = _get_int_env("MCTRL_ARCHIVE_AFTER_DAYS", 7)
 
 _running = True
 _last_outbox_alert_at: float | None = None
+
+
+def _expand_path(path: str) -> Path:
+    p = Path(path).expanduser()
+    if p.is_absolute():
+        return p.resolve()
+    return (Path.cwd() / p).resolve()
+
+
+def _parse_registry_paths(raw: str) -> list[str]:
+    normalized = raw.replace(";", ",").replace(":", ",")
+    return [part.strip() for part in normalized.split(",") if part.strip()]
+
+
+def _discover_sibling_registry_paths(
+    *,
+    current_registry: Path,
+    outbox_path: str,
+) -> list[Path]:
+    # Discover sibling repo registries that share the same .messages target.
+    outbox_parent = _expand_path(outbox_path).parent
+    root_parent = Path.cwd().resolve().parent
+    discovered: list[Path] = []
+    for child in root_parent.iterdir():
+        if not child.is_dir():
+            continue
+        candidate_registry = child / ".tracking" / "bead_session_registry.jsonl"
+        if not candidate_registry.exists():
+            continue
+        candidate_messages = child / ".messages"
+        if not candidate_messages.exists():
+            continue
+        try:
+            if candidate_messages.resolve() != outbox_parent:
+                continue
+        except OSError:
+            continue
+        resolved_candidate = candidate_registry.resolve()
+        if resolved_candidate != current_registry:
+            discovered.append(resolved_candidate)
+    return discovered
+
+
+def _registry_paths_to_reconcile(
+    *,
+    registry_path: str,
+    registry_paths_env: str,
+    outbox_path: str,
+) -> list[str]:
+    primary = _expand_path(registry_path)
+    resolved: list[Path] = [primary]
+    if registry_paths_env.strip():
+        resolved.extend(_expand_path(path) for path in _parse_registry_paths(registry_paths_env))
+    elif registry_path == ".tracking/bead_session_registry.jsonl":
+        resolved.extend(
+            _discover_sibling_registry_paths(
+                current_registry=primary,
+                outbox_path=outbox_path,
+            )
+        )
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for path in resolved:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(key)
+    return deduped
 
 
 def _handle_signal(sig: int, _frame: object) -> None:
@@ -98,11 +170,20 @@ def run_once() -> list[dict]:
     from orchestration.session_registry import archive_terminal_mappings
     from orchestration.openclaw_notifier import notify_slack_outbox_alert, outbox_health_snapshot
 
-    emitted = reconcile_registry_once(
+    registry_paths = _registry_paths_to_reconcile(
         registry_path=REGISTRY_PATH,
+        registry_paths_env=REGISTRY_PATHS,
         outbox_path=OUTBOX_PATH,
-        dead_letter_path=DEAD_LETTER_PATH,
     )
+    emitted: list[dict] = []
+    for registry_path in registry_paths:
+        emitted.extend(
+            reconcile_registry_once(
+                registry_path=registry_path,
+                outbox_path=OUTBOX_PATH,
+                dead_letter_path=DEAD_LETTER_PATH,
+            )
+        )
     snapshot = outbox_health_snapshot(
         outbox_path=OUTBOX_PATH,
         dead_letter_path=DEAD_LETTER_PATH,
@@ -118,12 +199,18 @@ def run_once() -> list[dict]:
         outbox_path=OUTBOX_PATH,
         dead_letter_path=DEAD_LETTER_PATH,
     )
-    archived = archive_terminal_mappings(
-        registry_path=REGISTRY_PATH,
-        archive_after_days=ARCHIVE_AFTER_DAYS,
-    )
+    archived = 0
+    for registry_path in registry_paths:
+        archived += archive_terminal_mappings(
+            registry_path=registry_path,
+            archive_after_days=ARCHIVE_AFTER_DAYS,
+        )
     if archived:
-        logger.info("Archived %d terminal mapping(s)", archived)
+        logger.info(
+            "Archived %d terminal mapping(s) across %d registry file(s)",
+            archived,
+            len(registry_paths),
+        )
     return emitted
 
 
@@ -187,8 +274,11 @@ def main() -> None:
     _ensure_slack_token()
 
     logger.info(
-        "mctrl supervisor starting (interval=%ds, registry=%s, outbox=%s)",
-        args.interval, REGISTRY_PATH, OUTBOX_PATH,
+        "mctrl supervisor starting (interval=%ds, registry=%s, registry_paths=%s, outbox=%s)",
+        args.interval,
+        REGISTRY_PATH,
+        REGISTRY_PATHS or "<auto>",
+        OUTBOX_PATH,
     )
 
     while _running:
