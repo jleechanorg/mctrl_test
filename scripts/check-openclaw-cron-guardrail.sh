@@ -3,7 +3,8 @@ set -euo pipefail
 
 # Guardrail:
 # - Forbidden: system crontab usage for OpenClaw reminder/scheduling/automation jobs.
-# - Required: OpenClaw gateway cron workflow for reminders/schedules.
+# - Forbidden: OpenClaw in-app cron workflow (`openclaw cron ...`) for repo-managed recurring jobs.
+# - Required: launchd workflow (`openclaw-config/ai.openclaw.schedule.*.plist` + install scripts).
 
 # Check for required tools
 if ! command -v rg &> /dev/null; then
@@ -22,7 +23,7 @@ had_violations=0
 # Check if a file contains guardrail context (words that indicate the file is talking about policy/forbidden items)
 file_has_guardrail_context() {
   local file="$1"
-  if rg -i -q 'forbidden|never use system crontab|do not use.*crontab|must not.*crontab|prohibit.*crontab|no system crontab|use launchd|use gateway cron|openclaw cron' "$file"; then
+  if rg -i -q 'forbidden|never use system crontab|do not use.*crontab|must not.*crontab|prohibit.*crontab|no system crontab|use launchd|launchd scheduler|openclaw.*cron|legacy cron|fallback crontab|migrated off system crontab' "$file"; then
     return 0
   else
     return 1
@@ -61,7 +62,7 @@ check_file_for_violation() {
 
 while IFS= read -r file; do
   case "$file" in
-    .openclaw-backups/*|openclaw/.openclaw-backups/*|openclaw-config/agents/*|openclaw-config/credentials/*|scripts/check-openclaw-cron-guardrail.sh)
+    .openclaw-backups/*|openclaw/.openclaw-backups/*|openclaw-config/agents/*|openclaw-config/credentials/*|scripts/check-openclaw-cron-guardrail.sh|scripts/install-openclaw-backup-jobs.sh|scripts/setup-openclaw-full.sh|BACKUP_AND_RESTORE.md|CLAUDE.md|testing_llm/MEMORY_QUALITY_TEST.md)
       continue
       ;;
   esac
@@ -74,8 +75,8 @@ done <<< "$FILES"
 if [[ "$had_violations" -ne 0 ]]; then
   echo
   echo "OpenClaw cron guardrail failed."
-  echo "Use OpenClaw gateway cron subcommands ('openclaw cron ...') for reminders/schedules."
-  echo "Do not add system crontab entries for OpenClaw automation."
+  echo "Use launchd for recurring OpenClaw automation in this repo."
+  echo "Do not add system crontab entries or new openclaw in-app cron schedules for repo-managed jobs."
   exit 1
 fi
 

@@ -6,7 +6,7 @@ This repository includes a recurring backup workflow for `~/.openclaw` that runs
 
 Guardrail:
 - Forbidden: system `crontab` edits for OpenClaw jobs.
-- Required: OpenClaw gateway cron subcommands for reminders/schedules (`openclaw cron ...`).
+- Required: launchd scheduling for repo-managed recurring jobs.
 
 Backups are written into this repository as redacted snapshots under:
 
@@ -44,9 +44,6 @@ This creates:
 ```bash
 # launchd status
 launchctl print gui/$(id -u)/com.openclaw.backup
-# OpenClaw reminder scheduler
-openclaw cron status
-openclaw cron list
 # run once now
 ./scripts/run-openclaw-backup.sh
 ```

@@ -64,7 +64,8 @@ Real mctrl test checklist:
 ## Scheduling Guardrail (jleechanclaw-specific)
 
 - Forbidden: editing system `crontab` for OpenClaw reminder, scheduling, or automation jobs.
-- Required: use OpenClaw gateway cron workflow only (`openclaw cron ...` subcommands and `openclaw-config/cron/` config).
+- Required: use `launchd` workflow for repo-managed recurring jobs (`openclaw-config/ai.openclaw.schedule.*.plist` + installer scripts).
+- Required: keep repo-managed OpenClaw in-app cron entries disabled in `~/.openclaw/cron/jobs.json` after migration.
 
 **The test:** if the change could be expressed as a sentence in SOUL.md, it belongs in SOUL.md.
 

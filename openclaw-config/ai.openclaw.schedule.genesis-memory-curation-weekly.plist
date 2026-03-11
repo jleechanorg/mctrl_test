@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>ai.openclaw.schedule.genesis-memory-curation-weekly</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/bash</string>
+      <string>@HOME@/.openclaw/run-scheduled-job.sh</string>
+      <string>genesis-memory-curation-weekly</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+      <key>Weekday</key>
+      <integer>0</integer>
+      <key>Hour</key>
+      <integer>22</integer>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>@HOME@/.openclaw/logs/scheduled-jobs/genesis-memory-curation-weekly.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>@HOME@/.openclaw/logs/scheduled-jobs/genesis-memory-curation-weekly.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>@HOME@/.bun/bin:@HOME@/.local/bin:@HOME@/bin:@HOME@/Library/pnpm:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <key>HOME</key>
+      <string>@HOME@</string>
+    </dict>
+  </dict>
+</plist>

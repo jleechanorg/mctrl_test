@@ -21,6 +21,16 @@ LAUNCHD_DIR="$HOME/Library/LaunchAgents"
 OPENCLAW_HOME="$HOME/.openclaw"
 ENV_FILE="$REPO_DIR/.env"
 
+detect_local_timezone() {
+  local target
+  target="$(readlink /etc/localtime 2>/dev/null || true)"
+  if [[ "$target" == *"/zoneinfo/"* ]]; then
+    echo "${target##*/zoneinfo/}"
+    return 0
+  fi
+  echo "${TZ:-unknown}"
+}
+
 is_valid_mc_token() {
   local token="${1:-}"
   [[ -n "$token" ]] && [[ ${#token} -ge 50 ]] && [[ "$token" != "your-local-auth-token-here" ]]
@@ -119,7 +129,10 @@ install_startup_check_script() {
   install -d "$OPENCLAW_HOME"
   mkdir -p "$OPENCLAW_HOME/logs"
   install -m 755 "$CONFIG_DIR/startup-check.sh" "$OPENCLAW_HOME/startup-check.sh"
+  install -m 755 "$CONFIG_DIR/run-scheduled-job.sh" "$OPENCLAW_HOME/run-scheduled-job.sh"
+  mkdir -p "$OPENCLAW_HOME/logs/scheduled-jobs"
   echo "  ✓ startup-check.sh installed"
+  echo "  ✓ run-scheduled-job.sh installed"
 }
 
 _esc_sed() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/&/\\&/g; s/|/\\|/g'; }
@@ -167,6 +180,18 @@ else
 fi
 install_startup_check_script
 install_plist "$CONFIG_DIR/ai.openclaw.startup-check.plist"
+SCHEDULE_INSTALLER="$REPO_DIR/scripts/install-openclaw-scheduled-jobs.sh"
+if [[ -x "$SCHEDULE_INSTALLER" ]]; then
+  LOCAL_TZ="$(detect_local_timezone)"
+  if [[ "$LOCAL_TZ" != "America/Los_Angeles" && "${OPENCLAW_ALLOW_NON_PT_SCHEDULE:-0}" != "1" ]]; then
+    echo "  • skipping scheduled job migration: local timezone '$LOCAL_TZ' differs from America/Los_Angeles"
+    echo "    set OPENCLAW_ALLOW_NON_PT_SCHEDULE=1 to override"
+  else
+    "$SCHEDULE_INSTALLER"
+  fi
+else
+  echo "  • skipping scheduled job migration (installer not found: $SCHEDULE_INSTALLER)"
+fi
 MC_BACKEND_PLIST="$CONFIG_DIR/ai.openclaw.mission-control.plist"
 MC_FRONTEND_PLIST="$CONFIG_DIR/ai.openclaw.mission-control-frontend.plist"
 if [[ -f "$MC_BACKEND_PLIST" ]]; then

@@ -54,7 +54,9 @@ for dir in $SYNC_DIRS; do
     continue
   fi
 
-  mkdir -p "$LIVE_SUBDIR"
+  if [ "${1:-}" = "--execute" ]; then
+    mkdir -p "$LIVE_SUBDIR"
+  fi
 
   # Find new or modified files in repo
   echo "  Checking $dir/ for new/modified files..."
