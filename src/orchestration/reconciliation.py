@@ -6,10 +6,10 @@ import threading
 from typing import Any
 
 from orchestration.openclaw_notifier import (
+    completion_notification_max_runtime_seconds,
     drain_outbox,
     notify_openclaw,
     notify_slack_done,
-    openclaw_notification_max_runtime_seconds,
 )
 from orchestration.session_registry import list_mappings, update_mapping_status
 
@@ -265,7 +265,7 @@ def reconcile_registry_once(
             daemon=True,
         )
         t_openclaw.start()
-        t_openclaw.join(timeout=openclaw_notification_max_runtime_seconds())
+        t_openclaw.join(timeout=completion_notification_max_runtime_seconds())
         emitted.append(payload)
 
     # Attempt to drain any previously failed notifications now that we're in a live code path

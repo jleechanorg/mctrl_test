@@ -8,6 +8,7 @@ from subprocess import CompletedProcess, TimeoutExpired
 from unittest.mock import MagicMock, patch
 
 from orchestration.openclaw_notifier import (
+    completion_notification_max_runtime_seconds,
     DEFAULT_DEAD_LETTER_PATH,
     SLACK_DM_CHANNEL,
     SLACK_TRIGGER_CHANNEL,
@@ -226,6 +227,10 @@ def test_outbox_health_snapshot_reports_pending_dead_letter_and_histogram(tmp_pa
 
 def test_openclaw_notification_max_runtime_seconds_matches_single_attempt_budget() -> None:
     assert openclaw_notification_max_runtime_seconds() == 60
+
+
+def test_completion_notification_max_runtime_seconds_includes_slack_and_openclaw() -> None:
+    assert completion_notification_max_runtime_seconds() == 70
 
 
 def _make_urlopen_mock(ok: bool = True):
