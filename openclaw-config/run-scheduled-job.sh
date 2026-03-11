@@ -42,7 +42,7 @@ fi
 job_enabled=$(jq -r --arg id "$JOB_ID" '.jobs[]? | select(.id == $id) | .enabled // false' "$LIVE_JOBS" | head -n1)
 job_name=$(jq -r --arg id "$JOB_ID" '.jobs[]? | select(.id == $id) | .name // empty' "$LIVE_JOBS" | head -n1)
 job_kind=$(jq -r --arg id "$JOB_ID" '.jobs[]? | select(.id == $id) | .payload.kind // empty' "$LIVE_JOBS" | head -n1)
-job_message=$(jq -r --arg id "$JOB_ID" '.jobs[]? | select(.id == $id) | .payload.message // empty' "$LIVE_JOBS" | head -n1)
+job_message=$(jq -r --arg id "$JOB_ID" '.jobs[]? | select(.id == $id) | .payload.message // empty' "$LIVE_JOBS")
 
 if [[ -z "$job_name" ]]; then
   printf '[%s] fail: job id not found in %s: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$LIVE_JOBS" "$JOB_ID" >>"$LOG_FILE"

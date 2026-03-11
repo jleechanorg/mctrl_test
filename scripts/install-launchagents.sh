@@ -118,13 +118,6 @@ fi
 
 echo "MC token: ${MC_TOKEN:0:8}... (${#MC_TOKEN} chars)"
 
-LOCAL_TZ="$(detect_local_timezone)"
-if [[ "$LOCAL_TZ" != "America/Los_Angeles" && "${OPENCLAW_ALLOW_NON_PT_SCHEDULE:-0}" != "1" ]]; then
-  echo "Error: local timezone is '$LOCAL_TZ' but migrated schedules are defined for America/Los_Angeles." >&2
-  echo "Set OPENCLAW_ALLOW_NON_PT_SCHEDULE=1 to override." >&2
-  exit 1
-fi
-
 # --- preserve existing gateway token if available ---
 if [[ -z "$GATEWAY_TOKEN" && -f "$LAUNCHD_DIR/ai.openclaw.gateway.plist" ]]; then
   GATEWAY_TOKEN=$(plutil -extract EnvironmentVariables.OPENCLAW_GATEWAY_TOKEN raw \
@@ -189,7 +182,13 @@ install_startup_check_script
 install_plist "$CONFIG_DIR/ai.openclaw.startup-check.plist"
 SCHEDULE_INSTALLER="$REPO_DIR/scripts/install-openclaw-scheduled-jobs.sh"
 if [[ -x "$SCHEDULE_INSTALLER" ]]; then
-  "$SCHEDULE_INSTALLER"
+  LOCAL_TZ="$(detect_local_timezone)"
+  if [[ "$LOCAL_TZ" != "America/Los_Angeles" && "${OPENCLAW_ALLOW_NON_PT_SCHEDULE:-0}" != "1" ]]; then
+    echo "  • skipping scheduled job migration: local timezone '$LOCAL_TZ' differs from America/Los_Angeles"
+    echo "    set OPENCLAW_ALLOW_NON_PT_SCHEDULE=1 to override"
+  else
+    "$SCHEDULE_INSTALLER"
+  fi
 else
   echo "  • skipping scheduled job migration (installer not found: $SCHEDULE_INSTALLER)"
 fi
