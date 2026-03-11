@@ -29,7 +29,7 @@ OpenClaw can read Slack history during a turn, but it is bounded by `historyLimi
 
 ## Launchd Scheduling Plan
 1. Add a launchd job (hourly or every 4 hours) that runs:
-   - `/bin/bash -lc 'source ~/.profile && python3 <repo>/scripts/slack_history_to_memory.py --stage-dir /tmp/openclaw-slack-memory-staging --promote'`
+   - `/bin/bash -lc 'python3 <repo>/scripts/slack_history_to_memory.py --stage-dir /tmp/openclaw-slack-memory-staging --promote'`
 2. Log stdout/stderr to `~/.openclaw/logs/scheduled-jobs/`.
 3. Keep schedule disabled by default until first staging validation passes.
 

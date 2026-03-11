@@ -34,7 +34,8 @@ TOKEN_PATTERNS = [
     re.compile(r"xox[baprs]-[A-Za-z0-9-]{20,}"),
     re.compile(r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*['\"]?[^\s'\"]+"),
     re.compile(r"\b[A-Fa-f0-9]{32,}\b"),
-    re.compile(r"[A-Za-z0-9_-]{40,}"),
+    # Only redact long mixed-case/digit-like secrets; avoid nuking normal long context strings.
+    re.compile(r"\b(?=[A-Za-z0-9_-]{40,}\b)(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z0-9_-]+\b"),
 ]
 EMAIL_PATTERN = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 ENV_SECRET_NAME_PATTERN = re.compile(r"\b[A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD)\b")
@@ -187,7 +188,8 @@ def collect_history(
         if not thread_ts:
             continue
         replies_cursor: str | None = None
-        while True:
+        reply_pages = 0
+        while reply_pages < max_pages:
             replies_data = client.api(
                 "conversations.replies",
                 {
@@ -208,6 +210,7 @@ def collect_history(
                     newest_ts = ts
             messages.extend(replies)
             replies_cursor = replies_data.get("response_metadata", {}).get("next_cursor")
+            reply_pages += 1
             if not replies_cursor:
                 break
 
