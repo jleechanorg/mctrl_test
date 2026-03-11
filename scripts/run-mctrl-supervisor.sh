@@ -5,21 +5,43 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-# Load Slack bot token if not already in env
-if [[ -z "${SLACK_BOT_TOKEN:-}" && -z "${OPENCLAW_SLACK_BOT_TOKEN:-}" ]]; then
-  if [[ -f "$HOME/.openclaw/set-slack-env.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "$HOME/.openclaw/set-slack-env.sh" 2>/dev/null || true
+_source_optional() {
+  local script_path="$1"
+  if [[ ! -f "$script_path" ]]; then
+    return 0
   fi
-fi
+  # Don't let non-critical profile/setup script errors crash launchd service startup.
+  set +e
+  # shellcheck disable=SC1090
+  source "$script_path" >/dev/null 2>&1
+  local rc=$?
+  set -e
+  if [[ $rc -ne 0 ]]; then
+    echo "warning: sourcing $script_path returned $rc; continuing" >&2
+  fi
+}
 
-# Source ~/.profile to pick up user-scoped Slack/env values that are not part of
-# the launchd environment, primarily SLACK_USER_TOKEN and any related shell
-# exports used by local OpenClaw tooling.
-if [[ -f "$HOME/.profile" ]]; then
-  # shellcheck disable=SC1091
-  source "$HOME/.profile" 2>/dev/null || true
-fi
+# Import OPENCLAW_SLACK_BOT_TOKEN via a subshell so any `exit` in helper
+# scripts cannot terminate this launchd wrapper.
+_import_openclaw_slack_token() {
+  if [[ -n "${OPENCLAW_SLACK_BOT_TOKEN:-}" ]]; then
+    return 0
+  fi
+  local script_path="$HOME/.openclaw/set-slack-env.sh"
+  if [[ ! -f "$script_path" ]]; then
+    return 0
+  fi
+  local token
+  token="$(bash -lc "source \"$script_path\" >/dev/null 2>&1; printf '%s' \"\${OPENCLAW_SLACK_BOT_TOKEN:-}\"" 2>/dev/null || true)"
+  if [[ -n "$token" ]]; then
+    export OPENCLAW_SLACK_BOT_TOKEN="$token"
+  fi
+}
+
+_import_openclaw_slack_token
+
+# Load user-scoped environment values that may be absent in launchd.
+_source_optional "$HOME/.profile"
 
 export PYTHONPATH="$REPO_DIR/src"
 export MCTRL_REGISTRY_PATH="$REPO_DIR/.tracking/bead_session_registry.jsonl"

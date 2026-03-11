@@ -142,25 +142,42 @@ def _handle_signal(sig: int, _frame: object) -> None:
 
 
 def _ensure_slack_token() -> None:
-    """Load SLACK_BOT_TOKEN from set-slack-env.sh if not already set."""
-    if os.environ.get("SLACK_BOT_TOKEN") or os.environ.get("OPENCLAW_SLACK_BOT_TOKEN"):
+    """Load Slack bot tokens from set-slack-env.sh when needed.
+
+    Prefer OPENCLAW_SLACK_BOT_TOKEN (used by notifier). If only the legacy
+    SLACK_BOT_TOKEN is present, still source set-slack-env.sh so we can pick up
+    OPENCLAW_SLACK_BOT_TOKEN when available.
+    """
+    has_openclaw_token = bool(os.environ.get("OPENCLAW_SLACK_BOT_TOKEN"))
+    has_legacy_token = bool(os.environ.get("SLACK_BOT_TOKEN"))
+    if has_openclaw_token:
         return
     script = os.path.expanduser("~/.openclaw/set-slack-env.sh")
     if not os.path.exists(script):
-        logger.warning("No SLACK_BOT_TOKEN and %s not found — Slack notifications disabled", script)
+        if not has_legacy_token:
+            logger.warning(
+                "No OPENCLAW_SLACK_BOT_TOKEN/SLACK_BOT_TOKEN and %s not found — Slack notifications disabled",
+                script,
+            )
         return
     try:
         result = subprocess.run(
             ["bash", "-c", f"source {script} && env"],
             capture_output=True, text=True, timeout=5,
         )
+        loaded_openclaw = False
+        loaded_legacy = False
         for line in result.stdout.splitlines():
             if line.startswith("SLACK_BOT_TOKEN="):
                 os.environ["SLACK_BOT_TOKEN"] = line.split("=", 1)[1]
-                logger.info("Loaded SLACK_BOT_TOKEN from set-slack-env.sh")
+                loaded_legacy = True
             elif line.startswith("OPENCLAW_SLACK_BOT_TOKEN="):
                 os.environ["OPENCLAW_SLACK_BOT_TOKEN"] = line.split("=", 1)[1]
-                logger.info("Loaded OPENCLAW_SLACK_BOT_TOKEN from set-slack-env.sh")
+                loaded_openclaw = True
+        if loaded_openclaw:
+            logger.info("Loaded OPENCLAW_SLACK_BOT_TOKEN from set-slack-env.sh")
+        elif loaded_legacy:
+            logger.info("Loaded SLACK_BOT_TOKEN from set-slack-env.sh")
     except Exception as exc:
         logger.warning("Could not load SLACK_BOT_TOKEN: %s", exc)
 
