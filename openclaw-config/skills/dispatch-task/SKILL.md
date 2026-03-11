@@ -36,11 +36,11 @@ Reply to jleechan's original Slack message in the same thread:
 
 Record the `ts` of jleechan's original message as `SLACK_TRIGGER_TS`.
 
-**Proof-First Requirement**: When the supervisor posts completion, it MUST include:
+**Proof-First Requirement**: When the supervisor posts completion, it MUST include at least one reviewable proof URL:
 - PR URL: `https://github.com/OWNER/REPO/pull/NUMBER`
 - Commit URL: `https://github.com/OWNER/REPO/commit/SHA`
 
-No "task done" without proof URLs. See SOUL.md "Autopilot Policy" for the full contract.
+It SHOULD include both when available. No "task done" without proof URLs. See SOUL.md "Autopilot Policy" for the full contract.
 
 ### 3. Before dispatching: Search memories
 
