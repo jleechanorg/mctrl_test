@@ -1,10 +1,1 @@
-from __future__ import annotations
-
-
-def hello(name: str = "world") -> str:
-    """Return a hello greeting."""
-    return f"Hello, {name}!"
-
-
-if __name__ == "__main__":
-    print(hello())
+print('Hello from mctrl test!')
