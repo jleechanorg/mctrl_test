@@ -370,6 +370,7 @@ async def _test_mcp_dispatch_roundtrip(tmp_path: Path) -> None:
         reconcile_registry_once,
         registry_path=str(registry),
         outbox_path=str(outbox),
+        dead_letter_path=str(tmp_path / "outbox_dead_letter.jsonl"),
     )
     assert len(emitted) == 1, f"Expected 1 event, got {len(emitted)}: {emitted}"
     assert emitted[0]["event"] == "task_finished", (

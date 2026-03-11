@@ -24,6 +24,7 @@ fi
 export PYTHONPATH="$REPO_DIR/src"
 export MCTRL_REGISTRY_PATH="$REPO_DIR/.tracking/bead_session_registry.jsonl"
 export MCTRL_OUTBOX_PATH="$REPO_DIR/.messages/outbox.jsonl"
+export MCTRL_DEAD_LETTER_PATH="$REPO_DIR/.messages/outbox_dead_letter.jsonl"
 # Notification defaults for jleechanclaw mctrl loopback.
 export OPENCLAW_NOTIFY_AGENT="${OPENCLAW_NOTIFY_AGENT:-main}"
 export OPENCLAW_NOTIFY_CHANNEL="${OPENCLAW_NOTIFY_CHANNEL:-slack}"

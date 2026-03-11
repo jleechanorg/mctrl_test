@@ -120,6 +120,7 @@ def reconcile_registry_once(
     *,
     registry_path: str,
     outbox_path: str,
+    dead_letter_path: str | None = None,
 ) -> list[dict[str, Any]]:
     """Reconcile bead/session mappings when session is gone.
 
@@ -128,7 +129,7 @@ def reconcile_registry_once(
     - task_needs_human: no commits found → agent stalled, crashed, or timed out
     """
     # Retry any previously failed notifications before emitting new ones.
-    drain_outbox(outbox_path=outbox_path)
+    drain_outbox(outbox_path=outbox_path, dead_letter_path=dead_letter_path)
 
     active = run_tmux_sessions()
     emitted: list[dict[str, Any]] = []
@@ -201,6 +202,6 @@ def reconcile_registry_once(
         emitted.append(payload)
 
     # Attempt to drain any previously failed notifications now that we're in a live code path
-    drain_outbox(outbox_path=outbox_path)
+    drain_outbox(outbox_path=outbox_path, dead_letter_path=dead_letter_path)
 
     return emitted

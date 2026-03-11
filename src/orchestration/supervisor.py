@@ -20,6 +20,7 @@ import signal
 import subprocess
 import sys
 import time
+from typing import Callable
 
 from orchestration.openclaw_notifier import default_outbox_path
 
@@ -36,24 +37,29 @@ REGISTRY_PATH = os.environ.get(
 OUTBOX_PATH = os.environ.get(
     "MCTRL_OUTBOX_PATH", default_outbox_path()
 )
+DEAD_LETTER_PATH = os.environ.get(
+    "MCTRL_DEAD_LETTER_PATH", ".messages/outbox_dead_letter.jsonl"
+)
 
 
-def _get_archive_after_days(default: int = 7) -> int:
-    raw = os.environ.get("MCTRL_ARCHIVE_AFTER_DAYS", str(default))
+def _get_int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name, str(default))
     try:
         return int(raw)
     except ValueError:
-        logger.warning(
-            "Invalid MCTRL_ARCHIVE_AFTER_DAYS value %r; falling back to %d",
-            raw,
-            default,
-        )
+        logger.warning("Invalid %s value %r; falling back to %d", name, raw, default)
         return default
 
 
-ARCHIVE_AFTER_DAYS = _get_archive_after_days()
+OUTBOX_ALERT_THRESHOLD = _get_int_env("MCTRL_OUTBOX_ALERT_THRESHOLD", 10)
+OUTBOX_AGE_ALERT_SECONDS = _get_int_env("MCTRL_OUTBOX_AGE_ALERT_SECONDS", 3600)
+OUTBOX_ALERT_COOLDOWN_SECONDS = _get_int_env("MCTRL_OUTBOX_ALERT_COOLDOWN_SECONDS", 3600)
+
+
+ARCHIVE_AFTER_DAYS = _get_int_env("MCTRL_ARCHIVE_AFTER_DAYS", 7)
 
 _running = True
+_last_outbox_alert_at: float | None = None
 
 
 def _handle_signal(sig: int, _frame: object) -> None:
@@ -90,10 +96,27 @@ def run_once() -> list[dict]:
     # Import here so PYTHONPATH is resolved at runtime
     from orchestration.reconciliation import reconcile_registry_once
     from orchestration.session_registry import archive_terminal_mappings
+    from orchestration.openclaw_notifier import notify_slack_outbox_alert, outbox_health_snapshot
 
     emitted = reconcile_registry_once(
         registry_path=REGISTRY_PATH,
         outbox_path=OUTBOX_PATH,
+        dead_letter_path=DEAD_LETTER_PATH,
+    )
+    snapshot = outbox_health_snapshot(
+        outbox_path=OUTBOX_PATH,
+        dead_letter_path=DEAD_LETTER_PATH,
+    )
+    maybe_alert_outbox_health(
+        pending_count=int(snapshot["pending_count"]),
+        dead_letter_count=int(snapshot["dead_letter_count"]),
+        oldest_age_seconds=snapshot.get("oldest_age_seconds"),
+        notify_fn=notify_slack_outbox_alert,
+        threshold=OUTBOX_ALERT_THRESHOLD,
+        age_threshold=OUTBOX_AGE_ALERT_SECONDS,
+        cooldown_seconds=OUTBOX_ALERT_COOLDOWN_SECONDS,
+        outbox_path=OUTBOX_PATH,
+        dead_letter_path=DEAD_LETTER_PATH,
     )
     archived = archive_terminal_mappings(
         registry_path=REGISTRY_PATH,
@@ -102,6 +125,52 @@ def run_once() -> list[dict]:
     if archived:
         logger.info("Archived %d terminal mapping(s)", archived)
     return emitted
+
+
+def maybe_alert_outbox_health(
+    *,
+    pending_count: int,
+    dead_letter_count: int,
+    oldest_age_seconds: int | None,
+    notify_fn: Callable[[dict], bool],
+    threshold: int,
+    age_threshold: int,
+    cooldown_seconds: int,
+    outbox_path: str | None = None,
+    dead_letter_path: str | None = None,
+) -> bool:
+    global _last_outbox_alert_at
+
+    exceeds_backlog = pending_count >= max(0, threshold)
+    exceeds_age = oldest_age_seconds is not None and oldest_age_seconds >= max(0, age_threshold)
+    has_dead_letter = dead_letter_count > 0
+    if not (exceeds_backlog or exceeds_age or has_dead_letter):
+        return False
+
+    now = time.monotonic()
+    if _last_outbox_alert_at is not None and (now - _last_outbox_alert_at) < max(0, cooldown_seconds):
+        return False
+
+    payload = {
+        "event": "outbox_backlog_alert",
+        "pending_count": pending_count,
+        "dead_letter_count": dead_letter_count,
+        "oldest_age_seconds": oldest_age_seconds,
+        "threshold": threshold,
+        "age_threshold": age_threshold,
+        "outbox_path": outbox_path or OUTBOX_PATH,
+        "dead_letter_path": dead_letter_path or DEAD_LETTER_PATH,
+    }
+    if notify_fn(payload):
+        _last_outbox_alert_at = now
+        logger.warning(
+            "Outbox alert fired: pending=%d dead_letter=%d oldest_age=%s",
+            pending_count,
+            dead_letter_count,
+            oldest_age_seconds,
+        )
+        return True
+    return False
 
 
 def main() -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import subprocess
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -11,7 +11,6 @@ from orchestration.reconciliation import (
     reconcile_registry_once,
     run_tmux_sessions,
 )
-from orchestration.openclaw_notifier import openclaw_notification_max_runtime_seconds
 from orchestration.session_registry import BeadSessionMapping, get_mapping, upsert_mapping
 
 
@@ -89,6 +88,7 @@ class TestReconcileRegistryOnce:
         emitted = reconcile_registry_once(
             registry_path=str(registry),
             outbox_path=str(outbox),
+            dead_letter_path=str(tmp_path / "dead_letter.jsonl"),
         )
 
         assert len(emitted) == 1
@@ -124,6 +124,7 @@ class TestReconcileRegistryOnce:
         emitted = reconcile_registry_once(
             registry_path=str(registry),
             outbox_path=str(outbox),
+            dead_letter_path=str(tmp_path / "dead_letter.jsonl"),
         )
 
         assert emitted == []
@@ -131,75 +132,201 @@ class TestReconcileRegistryOnce:
         assert found is not None
         assert found.status == "in_progress"
 
-    def test_missing_session_uses_openclaw_join_budget_derived_from_notifier(
+    def test_missing_session_with_local_only_commits_transitions_to_needs_human(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         registry = tmp_path / "registry.jsonl"
         outbox = tmp_path / "outbox.jsonl"
-        join_timeouts: list[float | None] = []
-
-        class FakeThread:
-            def __init__(self, *, target, args=(), kwargs=None, daemon=None) -> None:
-                self._target = target
-                self._args = args
-                self._kwargs = kwargs or {}
-
-            def start(self) -> None:
-                self._target(*self._args, **self._kwargs)
-
-            def join(self, timeout=None) -> None:
-                join_timeouts.append(timeout)
 
         upsert_mapping(
             BeadSessionMapping.create(
-                bead_id="ORCH-789",
-                session_name="session-789",
-                worktree_path="/tmp/wt-789",
-                branch="feat/orch-789",
+                bead_id="ORCH-local-only",
+                session_name="session-local-only",
+                worktree_path="/tmp/wt-local-only",
+                branch="feat/local-only",
                 agent_cli="codex",
                 status="in_progress",
+                start_sha="abc123",
             ),
             registry_path=str(registry),
         )
-        monkeypatch.setattr("orchestration.reconciliation.run_tmux_sessions", lambda: set())
-        monkeypatch.setattr("orchestration.reconciliation.threading.Thread", FakeThread)
-        monkeypatch.setattr("orchestration.reconciliation.drain_outbox", lambda *, outbox_path: 0)
+        monkeypatch.setattr(
+            "orchestration.reconciliation.run_tmux_sessions",
+            lambda: set(),
+        )
+        monkeypatch.setattr(
+            "orchestration.reconciliation._worktree_has_commits",
+            lambda *_args, **_kwargs: True,
+        )
+        monkeypatch.setattr(
+            "orchestration.reconciliation._remote_branch_exists",
+            lambda *_args, **_kwargs: False,
+        )
         monkeypatch.setattr("orchestration.reconciliation.notify_openclaw", lambda p, *, outbox_path: True)
 
-        reconcile_registry_once(
+        emitted = reconcile_registry_once(
             registry_path=str(registry),
             outbox_path=str(outbox),
+            dead_letter_path=str(tmp_path / "dead_letter.jsonl"),
         )
 
-        assert join_timeouts[0] == openclaw_notification_max_runtime_seconds()
+        assert len(emitted) == 1
+        assert emitted[0]["event"] == "task_needs_human"
+        assert emitted[0]["action_required"] == "push_or_salvage"
+        assert "did not push" in emitted[0]["summary"]
+
+        found = get_mapping("ORCH-local-only", registry_path=str(registry))
+        assert found is not None
+        assert found.status == "needs_human"
+
+    def test_missing_session_with_remote_branch_transitions_to_finished(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        registry = tmp_path / "registry.jsonl"
+        outbox = tmp_path / "outbox.jsonl"
+
+        upsert_mapping(
+            BeadSessionMapping.create(
+                bead_id="ORCH-remote-ok",
+                session_name="session-remote-ok",
+                worktree_path="/tmp/wt-remote-ok",
+                branch="feat/remote-ok",
+                agent_cli="claude",
+                status="in_progress",
+                start_sha="abc123",
+            ),
+            registry_path=str(registry),
+        )
+        monkeypatch.setattr(
+            "orchestration.reconciliation.run_tmux_sessions",
+            lambda: set(),
+        )
+        monkeypatch.setattr(
+            "orchestration.reconciliation._worktree_has_commits",
+            lambda *_args, **_kwargs: True,
+        )
+        monkeypatch.setattr(
+            "orchestration.reconciliation._remote_branch_exists",
+            lambda *_args, **_kwargs: True,
+        )
+        monkeypatch.setattr("orchestration.reconciliation.notify_openclaw", lambda p, *, outbox_path: True)
+
+        emitted = reconcile_registry_once(
+            registry_path=str(registry),
+            outbox_path=str(outbox),
+            dead_letter_path=str(tmp_path / "dead_letter.jsonl"),
+        )
+
+        assert len(emitted) == 1
+        assert emitted[0]["event"] == "task_finished"
+        assert emitted[0]["action_required"] == "review_and_merge"
+
+        found = get_mapping("ORCH-remote-ok", registry_path=str(registry))
+        assert found is not None
+        assert found.status == "finished"
+
 
 class TestRemoteBranchExists:
-    def test_branch_not_found_returns_false(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        """'couldn't find remote ref' must return False, not None (not treated as transient)."""
-        def fake_run(cmd, *args, **kwargs):
-            if "fetch" in cmd:
+    def test_returns_false_when_origin_branch_does_not_contain_local_head(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[list[str]] = []
+
+        def fake_run(args, **kwargs):
+            calls.append(args)
+            if args[:4] == ["git", "fetch", "--no-tags", "origin"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+            if args == ["git", "rev-parse", "--verify", "origin/feat/demo"]:
                 return subprocess.CompletedProcess(
-                    args=cmd, returncode=1,
-                    stdout="",
-                    stderr="fatal: couldn't find remote ref feat/missing-branch",
+                    args=args, returncode=0, stdout="deadbeef\n", stderr=""
                 )
-            raise AssertionError(f"Unexpected command: {cmd}")
+            if args == ["git", "merge-base", "--is-ancestor", "HEAD", "origin/feat/demo"]:
+                return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="")
+            raise AssertionError(f"unexpected subprocess call: {args}")
 
         monkeypatch.setattr(subprocess, "run", fake_run)
-        result = _remote_branch_exists("feat/missing-branch", str(tmp_path))
-        assert result is False, f"Expected False, got {result!r}"
 
-    def test_network_error_returns_none(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        """Generic fetch failure (network error) must return None (transient)."""
-        def fake_run(cmd, *args, **kwargs):
-            if "fetch" in cmd:
+        assert _remote_branch_exists("feat/demo", "/tmp/wt-demo") is False
+        assert calls == [
+            ["git", "fetch", "--no-tags", "origin", "feat/demo"],
+            ["git", "rev-parse", "--verify", "origin/feat/demo"],
+            ["git", "merge-base", "--is-ancestor", "HEAD", "origin/feat/demo"],
+        ]
+
+    def test_returns_true_when_origin_branch_contains_local_head(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_run(args, **kwargs):
+            if args[:4] == ["git", "fetch", "--no-tags", "origin"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+            if args == ["git", "rev-parse", "--verify", "origin/feat/demo"]:
                 return subprocess.CompletedProcess(
-                    args=cmd, returncode=1,
-                    stdout="",
-                    stderr="error: Could not connect to server",
+                    args=args, returncode=0, stdout="deadbeef\n", stderr=""
                 )
-            raise AssertionError(f"Unexpected command: {cmd}")
+            if args == ["git", "merge-base", "--is-ancestor", "HEAD", "origin/feat/demo"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+            raise AssertionError(f"unexpected subprocess call: {args}")
 
         monkeypatch.setattr(subprocess, "run", fake_run)
-        result = _remote_branch_exists("feat/some-branch", str(tmp_path))
-        assert result is None, f"Expected None, got {result!r}"
+
+        assert _remote_branch_exists("feat/demo", "/tmp/wt-demo") is True
+
+    def test_returns_none_when_remote_verification_fails_transiently(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_run(args, **kwargs):
+            if args[:4] == ["git", "fetch", "--no-tags", "origin"]:
+                return subprocess.CompletedProcess(
+                    args=args, returncode=128, stdout="", stderr="network timeout"
+                )
+            raise AssertionError(f"unexpected subprocess call: {args}")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        assert _remote_branch_exists("feat/demo", "/tmp/wt-demo") is None
+
+
+def test_reconcile_leaves_in_progress_when_remote_check_is_transient_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = tmp_path / "registry.jsonl"
+    outbox = tmp_path / "outbox.jsonl"
+    mapping = BeadSessionMapping.create(
+        bead_id="ORCH-remote-unknown",
+        session_name="ai-test-missing",
+        worktree_path="/tmp/wt-demo",
+        branch="feat/demo",
+        agent_cli="claude",
+        status="in_progress",
+        start_sha="abc123",
+        slack_trigger_ts="",
+    )
+    upsert_mapping(mapping, registry_path=str(registry))
+
+    monkeypatch.setattr(
+        "orchestration.reconciliation.run_tmux_sessions",
+        lambda: set(),
+    )
+    monkeypatch.setattr(
+        "orchestration.reconciliation._worktree_has_commits",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        "orchestration.reconciliation._remote_branch_exists",
+        lambda *_args, **_kwargs: None,
+    )
+    notify_openclaw = MagicMock(return_value=True)
+    monkeypatch.setattr("orchestration.reconciliation.notify_openclaw", notify_openclaw)
+
+    emitted = reconcile_registry_once(
+        registry_path=str(registry),
+        outbox_path=str(outbox),
+        dead_letter_path=str(tmp_path / "dead_letter.jsonl"),
+    )
+
+    assert emitted == []
+    found = get_mapping("ORCH-remote-unknown", registry_path=str(registry))
+    assert found is not None
+    assert found.status == "in_progress"
+    notify_openclaw.assert_not_called()

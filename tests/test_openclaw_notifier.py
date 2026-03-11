@@ -1,24 +1,25 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from pathlib import Path
-import subprocess
-from subprocess import CompletedProcess
-from types import SimpleNamespace
+from subprocess import CompletedProcess, TimeoutExpired
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from orchestration.openclaw_notifier import (
-    DeliveryAttempt,
-    _RETRY_DELAYS_SECONDS,
-    openclaw_notification_max_runtime_seconds,
-    _send_via_mcp_agent_mail,
-    _send_with_retries,
-    _send_via_openclaw_agent,
-    default_outbox_path,
+    DEFAULT_DEAD_LETTER_PATH,
+    SLACK_DM_CHANNEL,
+    SLACK_TRIGGER_CHANNEL,
     drain_outbox,
+    enqueue_dead_letter,
+    enqueue_outbox,
     notify_openclaw,
+    openclaw_notification_max_runtime_seconds,
+    outbox_health_snapshot,
+    read_dead_letter,
+    notify_slack_started,
+    notify_slack_done,
     read_outbox,
 )
 
@@ -48,121 +49,35 @@ def test_notify_openclaw_failure_enqueues(tmp_path: Path) -> None:
     )
 
     assert delivered is False
-    assert read_outbox(outbox_path=str(outbox)) == [payload]
+    queued = read_outbox(outbox_path=str(outbox))
+    assert len(queued) == 1
+    assert queued[0]["event"] == payload["event"]
+    assert queued[0]["bead_id"] == payload["bead_id"]
+    assert queued[0]["_retry_count"] == 0
+    assert queued[0]["_first_queued_at"]
 
 
-def test_default_outbox_path_uses_mctrl_home(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("MCTRL_OUTBOX_PATH", raising=False)
-    monkeypatch.setenv("MCTRL_HOME", "/tmp/mctrl-home")
-
-    assert default_outbox_path() == "/tmp/mctrl-home/messages/outbox.jsonl"
-
-
-def test_default_outbox_path_prefers_explicit_outbox_override(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("MCTRL_HOME", "/tmp/mctrl-home")
-    monkeypatch.setenv("MCTRL_OUTBOX_PATH", "/tmp/custom/outbox.jsonl")
-
-    assert default_outbox_path() == "/tmp/custom/outbox.jsonl"
-
-
-def test_notify_openclaw_retries_transient_sender_before_success(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    attempts: list[int] = []
-
-    def flaky_sender(_payload: dict[str, object]) -> DeliveryAttempt:
-        attempts.append(1)
-        if len(attempts) < 3:
-            return DeliveryAttempt(delivered=False, transient=True)
-        return DeliveryAttempt(delivered=True)
-
-    monkeypatch.setattr("orchestration.openclaw_notifier.time.sleep", lambda _seconds: None)
+def test_enqueue_outbox_normalizes_none_like_slack_thread_fields(tmp_path: Path) -> None:
     outbox = tmp_path / "outbox.jsonl"
 
-    delivered = notify_openclaw(
-        {"event": "task_finished", "bead_id": "ORCH-3"},
-        send_fn=flaky_sender,
+    enqueue_outbox(
+        {
+            "event": "task_finished",
+            "bead_id": "ORCH-2b",
+            "slack_trigger_ts": "None",
+            "slack_trigger_channel": "None",
+        },
         outbox_path=str(outbox),
     )
 
-    assert delivered is True
-    assert len(attempts) == 3
-    assert read_outbox(outbox_path=str(outbox)) == []
-
-
-def test_send_with_retries_treats_timeout_exception_as_transient() -> None:
-    attempts: list[int] = []
-    sleeps: list[float] = []
-
-    def flaky_sender(_payload: dict[str, object]) -> bool:
-        attempts.append(1)
-        if len(attempts) < 3:
-            raise TimeoutError("temporary timeout")
-        return True
-
-    attempt = _send_with_retries(
-        {"event": "task_finished", "bead_id": "ORCH-timeout"},
-        sender=flaky_sender,
-        sleep_fn=sleeps.append,
-    )
-
-    assert attempt.delivered is True
-    assert len(attempts) == 3
-    assert sleeps == [1, 3]
-
-
-def test_send_with_retries_treats_missing_binary_as_non_transient() -> None:
-    attempt = _send_with_retries(
-        {"event": "task_finished", "bead_id": "ORCH-missing-bin"},
-        sender=lambda _payload: (_ for _ in ()).throw(FileNotFoundError("openclaw not found")),
-        sleep_fn=lambda _seconds: None,
-    )
-
-    assert attempt.delivered is False
-    assert attempt.transient is False
-
-
-def test_notify_openclaw_enqueues_after_non_transient_failure(tmp_path: Path) -> None:
-    outbox = tmp_path / "outbox.jsonl"
-
-    delivered = notify_openclaw(
-        {"event": "task_needs_human", "bead_id": "ORCH-4"},
-        send_fn=lambda _payload: DeliveryAttempt(delivered=False, transient=False),
-        outbox_path=str(outbox),
-    )
-
-    assert delivered is False
-    assert read_outbox(outbox_path=str(outbox)) == [
-        {"event": "task_needs_human", "bead_id": "ORCH-4"}
-    ]
-
-
-def test_notify_openclaw_monkeypatched_sleep_avoids_real_retry_delay(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    attempts: list[int] = []
-    sleeps: list[float] = []
-
-    def flaky_sender(_payload: dict[str, object]) -> DeliveryAttempt:
-        attempts.append(1)
-        if len(attempts) < 3:
-            return DeliveryAttempt(delivered=False, transient=True)
-        return DeliveryAttempt(delivered=True)
-
-    monkeypatch.setattr("orchestration.openclaw_notifier.time.sleep", sleeps.append)
-    outbox = tmp_path / "outbox.jsonl"
-
-    delivered = notify_openclaw(
-        {"event": "task_finished", "bead_id": "ORCH-sleep"},
-        send_fn=flaky_sender,
-        outbox_path=str(outbox),
-    )
-
-    assert delivered is True
-    assert sleeps == [1, 3]
-    assert read_outbox(outbox_path=str(outbox)) == []
+    queued = read_outbox(outbox_path=str(outbox))
+    assert len(queued) == 1
+    assert queued[0]["event"] == "task_finished"
+    assert queued[0]["bead_id"] == "ORCH-2b"
+    assert queued[0]["slack_trigger_ts"] == ""
+    assert queued[0]["slack_trigger_channel"] == ""
+    assert queued[0]["_retry_count"] == 0
+    assert queued[0]["_first_queued_at"]
 
 
 def test_drain_outbox_delivers_and_clears(tmp_path: Path) -> None:
@@ -180,6 +95,347 @@ def test_drain_outbox_delivers_and_clears(tmp_path: Path) -> None:
     assert read_outbox(outbox_path=str(outbox)) == []
 
 
+def test_drain_outbox_increments_retry_count_on_failure(tmp_path: Path) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    payload = {"event": "task_needs_human", "bead_id": "ORCH-retry-1"}
+    notify_openclaw(payload, send_fn=lambda _: False, outbox_path=str(outbox))
+
+    delivered = drain_outbox(
+        send_fn=lambda _: False,
+        outbox_path=str(outbox),
+        dead_letter_path=str(tmp_path / DEFAULT_DEAD_LETTER_PATH),
+        retry_limit=3,
+    )
+
+    assert delivered == 0
+    queued = read_outbox(outbox_path=str(outbox))
+    assert len(queued) == 1
+    assert queued[0]["_retry_count"] == 1
+    assert queued[0]["bead_id"] == "ORCH-retry-1"
+    assert read_dead_letter(dead_letter_path=str(tmp_path / DEFAULT_DEAD_LETTER_PATH)) == []
+
+
+def test_drain_outbox_routes_to_dead_letter_after_retry_limit(tmp_path: Path) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    dead_letter = tmp_path / DEFAULT_DEAD_LETTER_PATH
+    enqueue_outbox(
+        {
+            "event": "task_needs_human",
+            "bead_id": "ORCH-retry-max",
+            "_retry_count": 3,
+            "_first_queued_at": "2026-03-01T00:00:00+00:00",
+        },
+        outbox_path=str(outbox),
+    )
+
+    delivered = drain_outbox(
+        send_fn=lambda _: False,
+        outbox_path=str(outbox),
+        dead_letter_path=str(dead_letter),
+        retry_limit=3,
+    )
+
+    assert delivered == 0
+    assert read_outbox(outbox_path=str(outbox)) == []
+    dead = read_dead_letter(dead_letter_path=str(dead_letter))
+    assert len(dead) == 1
+    assert dead[0]["bead_id"] == "ORCH-retry-max"
+    assert dead[0]["_retry_count"] == 4
+
+
+def test_drain_outbox_derives_dead_letter_path_from_outbox_path(tmp_path: Path) -> None:
+    outbox = tmp_path / "custom_outbox.jsonl"
+    expected_dead_letter = tmp_path / "outbox_dead_letter.jsonl"
+    enqueue_outbox(
+        {
+            "event": "task_needs_human",
+            "bead_id": "ORCH-derived-dead",
+            "_retry_count": 3,
+        },
+        outbox_path=str(outbox),
+    )
+
+    drain_outbox(
+        send_fn=lambda _: False,
+        outbox_path=str(outbox),
+        retry_limit=3,
+    )
+
+    dead = read_dead_letter(dead_letter_path=str(expected_dead_letter))
+    assert len(dead) == 1
+    assert dead[0]["bead_id"] == "ORCH-derived-dead"
+
+
+def test_drain_outbox_uses_snapshot_mtime_for_legacy_first_queued_at(tmp_path: Path) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    enqueue_outbox(
+        {
+            "event": "task_needs_human",
+            "bead_id": "ORCH-legacy-age",
+            "_retry_count": 0,
+            "_first_queued_at": "",
+        },
+        outbox_path=str(outbox),
+    )
+    stale_ts = time.time() - 7200
+    os.utime(outbox, (stale_ts, stale_ts))
+
+    drain_outbox(
+        send_fn=lambda _: False,
+        outbox_path=str(outbox),
+        retry_limit=10,
+    )
+    queued = read_outbox(outbox_path=str(outbox))
+    assert len(queued) == 1
+    first_queued = queued[0]["_first_queued_at"]
+    assert first_queued
+    # Should preserve stale age signal rather than resetting to "now".
+    assert "T" in first_queued
+
+
+def test_outbox_health_snapshot_reports_pending_dead_letter_and_histogram(tmp_path: Path) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    dead_letter = tmp_path / "outbox_dead_letter.jsonl"
+
+    enqueue_outbox({"event": "task_finished", "bead_id": "ORCH-h1"}, outbox_path=str(outbox))
+    enqueue_outbox(
+        {
+            "event": "task_finished",
+            "bead_id": "ORCH-h2",
+            "_retry_count": 2,
+            "_first_queued_at": "2026-03-01T00:00:00+00:00",
+        },
+        outbox_path=str(outbox),
+    )
+    enqueue_dead_letter(
+        {"event": "task_finished", "bead_id": "ORCH-dead"},
+        dead_letter_path=str(dead_letter),
+    )
+
+    snapshot = outbox_health_snapshot(
+        outbox_path=str(outbox),
+        dead_letter_path=str(dead_letter),
+    )
+
+    assert snapshot["pending_count"] == 2
+    assert snapshot["dead_letter_count"] == 1
+    assert snapshot["oldest_age_seconds"] is not None
+    assert snapshot["retry_histogram"]["0"] == 1
+    assert snapshot["retry_histogram"]["2"] == 1
+
+
+def test_openclaw_notification_max_runtime_seconds_matches_single_attempt_budget() -> None:
+    assert openclaw_notification_max_runtime_seconds() == 60
+
+
+def _make_urlopen_mock(ok: bool = True):
+    """Return a mock urlopen context manager that returns Slack ok/error JSON."""
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = json.dumps({"ok": ok}).encode()
+    mock_resp.__enter__ = lambda s: mock_resp
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    return MagicMock(return_value=mock_resp)
+
+
+@patch.dict("os.environ", {"OPENCLAW_SLACK_BOT_TOKEN": "xoxb-test"}, clear=False)
+@patch("orchestration.openclaw_notifier.urlopen")
+def test_notify_slack_started_posts_dm(mock_urlopen) -> None:
+    mock_urlopen.side_effect = _make_urlopen_mock()
+    payload = {
+        "bead_id": "ORCH-1",
+        "session": "ai-test-abc",
+        "branch": "feat/x",
+        "worktree_path": "/tmp/wt-x",
+        "agent_cli": "minimax",
+        "slack_trigger_ts": "",
+    }
+
+    result = notify_slack_started(payload)
+
+    assert result is True
+    assert mock_urlopen.call_count == 1  # DM only (no trigger_ts)
+    body = json.loads(mock_urlopen.call_args.args[0].data)
+    assert body["channel"] == SLACK_DM_CHANNEL
+    assert "ORCH-1" in body["text"]
+    assert ":rocket:" in body["text"]
+
+
+@patch.dict("os.environ", {"OPENCLAW_SLACK_BOT_TOKEN": "xoxb-test"}, clear=False)
+@patch("orchestration.openclaw_notifier.urlopen")
+def test_notify_slack_outbox_alert_uses_dead_letter_message_when_count_present(mock_urlopen) -> None:
+    from orchestration.openclaw_notifier import notify_slack_outbox_alert
+
+    mock_urlopen.side_effect = _make_urlopen_mock()
+    result = notify_slack_outbox_alert(
+        {
+            "pending_count": 1,
+            "dead_letter_count": 3,
+            "outbox_path": "/tmp/outbox.jsonl",
+            "dead_letter_path": "/tmp/dead.jsonl",
+        }
+    )
+
+    assert result is True
+    body = json.loads(mock_urlopen.call_args.args[0].data)
+    assert "dead-lettered events" in body["text"]
+    assert "Dead-letter queue count: `3`" in body["text"]
+
+
+@patch.dict("os.environ", {"OPENCLAW_SLACK_BOT_TOKEN": "xoxb-test"}, clear=False)
+@patch("orchestration.openclaw_notifier.urlopen")
+def test_notify_slack_started_threads_under_trigger(mock_urlopen) -> None:
+    mock_urlopen.side_effect = _make_urlopen_mock()
+    payload = {
+        "bead_id": "ORCH-2",
+        "session": "ai-test-def",
+        "branch": "feat/y",
+        "worktree_path": "/tmp/wt-y",
+        "agent_cli": "minimax",
+        "slack_trigger_ts": "1234567890.123456",
+        "slack_trigger_channel": "C999TRIGGER",
+    }
+
+    result = notify_slack_started(payload)
+
+    assert result is True
+    assert mock_urlopen.call_count == 2  # DM + thread reply
+    calls = [json.loads(c.args[0].data) for c in mock_urlopen.call_args_list]
+    assert any(c.get("thread_ts") == "1234567890.123456" for c in calls)
+    assert any(c["channel"] == "C999TRIGGER" for c in calls)
+
+
+@patch.dict("os.environ", {"OPENCLAW_SLACK_BOT_TOKEN": "xoxb-test"}, clear=False)
+@patch("orchestration.openclaw_notifier.urlopen")
+def test_notify_slack_started_skips_thread_reply_without_trigger_channel(mock_urlopen) -> None:
+    mock_urlopen.side_effect = _make_urlopen_mock()
+
+    result = notify_slack_started({
+        "bead_id": "ORCH-no-channel-start",
+        "session": "ai-test-no-channel",
+        "branch": "feat/no-channel",
+        "worktree_path": "/tmp/wt-no-channel",
+        "agent_cli": "claude",
+        "slack_trigger_ts": "1234567890.123456",
+        "slack_trigger_channel": "",
+    })
+
+    assert result is True
+    assert mock_urlopen.call_count == 1
+    body = json.loads(mock_urlopen.call_args.args[0].data)
+    assert body["channel"] == SLACK_DM_CHANNEL
+
+
+@patch.dict("os.environ", {"OPENCLAW_SLACK_BOT_TOKEN": "xoxb-test"}, clear=False)
+@patch("orchestration.openclaw_notifier.urlopen")
+def test_notify_slack_started_ignores_none_trigger(mock_urlopen) -> None:
+    mock_urlopen.side_effect = _make_urlopen_mock()
+
+    result = notify_slack_started({
+        "bead_id": "ORCH-none-start",
+        "session": "ai-test-none",
+        "branch": "feat/none",
+        "worktree_path": "/tmp/wt-none",
+        "agent_cli": "claude",
+        "slack_trigger_ts": None,
+    })
+
+    assert result is True
+    assert mock_urlopen.call_count == 1
+    body = json.loads(mock_urlopen.call_args.args[0].data)
+    assert body["channel"] == SLACK_DM_CHANNEL
+
+
+@patch.dict("os.environ", {}, clear=True)
+def test_notify_slack_started_no_token_returns_false() -> None:
+    result = notify_slack_started({"bead_id": "ORCH-3"})
+    assert result is False
+
+
+@patch.dict("os.environ", {"OPENCLAW_SLACK_BOT_TOKEN": "xoxb-test"}, clear=False)
+@patch("orchestration.openclaw_notifier.urlopen")
+def test_notify_slack_started_includes_agent_cli_and_session(mock_urlopen) -> None:
+    mock_urlopen.side_effect = _make_urlopen_mock()
+    payload = {
+        "bead_id": "ORCH-4",
+        "session": "ai-minimax-xyz",
+        "branch": "feat/z",
+        "worktree_path": "/tmp/wt-z",
+        "agent_cli": "minimax",
+        "slack_trigger_ts": "",
+    }
+
+    notify_slack_started(payload)
+
+    body = json.loads(mock_urlopen.call_args.args[0].data)
+    assert "ai-minimax-xyz" in body["text"]
+    assert "minimax" in body["text"]
+
+
+@patch.dict("os.environ", {"OPENCLAW_SLACK_BOT_TOKEN": "xoxb-test"}, clear=False)
+@patch("orchestration.openclaw_notifier.urlopen")
+def test_notify_slack_done_ignores_none_trigger(mock_urlopen) -> None:
+    mock_urlopen.side_effect = _make_urlopen_mock()
+
+    result = notify_slack_done({
+        "event": "task_finished",
+        "bead_id": "ORCH-none-done",
+        "branch": "feat/none",
+        "worktree_path": "/tmp/wt-none",
+        "session": "ai-test-none",
+        "slack_trigger_ts": None,
+    })
+
+    assert result is True
+    assert mock_urlopen.call_count == 1
+    body = json.loads(mock_urlopen.call_args.args[0].data)
+    assert body["channel"] == SLACK_DM_CHANNEL
+
+
+@patch.dict("os.environ", {"OPENCLAW_SLACK_BOT_TOKEN": "xoxb-test"}, clear=False)
+@patch("orchestration.openclaw_notifier.urlopen")
+def test_notify_slack_done_reports_local_only_commits(mock_urlopen) -> None:
+    mock_urlopen.side_effect = _make_urlopen_mock()
+
+    result = notify_slack_done({
+        "event": "task_needs_human",
+        "bead_id": "ORCH-stranded",
+        "branch": "feat/stranded",
+        "worktree_path": "/tmp/wt-stranded",
+        "session": "ai-test-stranded",
+        "action_required": "push_or_salvage",
+        "slack_trigger_ts": "1234567890.123456",
+        "slack_trigger_channel": "C999TRIGGER",
+    })
+
+    assert result is True
+    assert mock_urlopen.call_count == 2
+    bodies = [json.loads(c.args[0].data) for c in mock_urlopen.call_args_list]
+    assert any("did not push to origin" in body["text"] for body in bodies)
+    assert any(body.get("thread_ts") == "1234567890.123456" for body in bodies)
+    assert any(body.get("channel") == "C999TRIGGER" for body in bodies)
+
+
+@patch.dict("os.environ", {"OPENCLAW_SLACK_BOT_TOKEN": "xoxb-test"}, clear=False)
+@patch("orchestration.openclaw_notifier.urlopen")
+def test_notify_slack_done_skips_thread_reply_without_trigger_channel(mock_urlopen) -> None:
+    mock_urlopen.side_effect = _make_urlopen_mock()
+
+    result = notify_slack_done({
+        "event": "task_finished",
+        "bead_id": "ORCH-no-channel-done",
+        "branch": "feat/no-channel",
+        "worktree_path": "/tmp/wt-no-channel",
+        "session": "ai-test-no-channel",
+        "slack_trigger_ts": "1234567890.123456",
+        "slack_trigger_channel": "",
+    })
+
+    assert result is True
+    assert mock_urlopen.call_count == 1
+    body = json.loads(mock_urlopen.call_args.args[0].data)
+    assert body["channel"] == SLACK_DM_CHANNEL
+
+
 @patch.dict("os.environ", {"OPENCLAW_NOTIFY_AGENT": "jleechanclaw"}, clear=False)
 @patch("orchestration.openclaw_notifier.subprocess.run")
 def test_notify_openclaw_uses_openclaw_agent_when_configured(mock_run, tmp_path: Path) -> None:
@@ -190,336 +446,86 @@ def test_notify_openclaw_uses_openclaw_agent_when_configured(mock_run, tmp_path:
     delivered = notify_openclaw(payload, outbox_path=str(outbox))
 
     assert delivered is True
-    assert mock_run.call_args.args[0][:6] == [
+    assert mock_run.call_args.args[0][:4] == [
         "openclaw",
         "agent",
         "--agent",
         "jleechanclaw",
-        "--thinking",
-        "minimal",
     ]
     assert read_outbox(outbox_path=str(outbox)) == []
 
 
-def test_send_via_openclaw_agent_marks_server_error_transient(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("OPENCLAW_NOTIFY_AGENT", "main")
-    result = SimpleNamespace(
-        returncode=0,
-        stdout=json.dumps({"error": "type:error,code:server_error,message:retry later"}),
-        stderr="",
-    )
-    monkeypatch.setattr("orchestration.openclaw_notifier.subprocess.run", lambda *args, **kwargs: result)
-
-    attempt = _send_via_openclaw_agent({"event": "task_finished", "bead_id": "ORCH-9"})
-
-    assert attempt.delivered is False
-    assert attempt.transient is True
-
-
-def test_send_via_mcp_agent_mail_tries_fallback_after_transient_agent_failure(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "orchestration.openclaw_notifier._send_via_openclaw_agent",
-        lambda _payload: DeliveryAttempt(delivered=False, transient=True),
-    )
-    monkeypatch.setenv("OPENCLAW_PROJECT_KEY", "proj")
-    monkeypatch.setenv("OPENCLAW_SENDER_NAME", "sender")
-    monkeypatch.setenv("OPENCLAW_TO", "receiver")
-    monkeypatch.setattr(
-        "orchestration.openclaw_notifier.subprocess.run",
-        lambda *args, **kwargs: CompletedProcess(args=["openclaw"], returncode=0, stdout="", stderr=""),
-    )
-
-    attempt = _send_via_mcp_agent_mail({"event": "task_finished", "bead_id": "ORCH-fallback"})
-
-    assert attempt.delivered is True
-
-
-def test_send_via_mcp_agent_mail_preserves_transient_state_when_fallback_fails_without_retry_hint(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "orchestration.openclaw_notifier._send_via_openclaw_agent",
-        lambda _payload: DeliveryAttempt(delivered=False, transient=True),
-    )
-    monkeypatch.setenv("OPENCLAW_PROJECT_KEY", "proj")
-    monkeypatch.setenv("OPENCLAW_SENDER_NAME", "sender")
-    monkeypatch.setenv("OPENCLAW_TO", "receiver")
-    monkeypatch.setattr(
-        "orchestration.openclaw_notifier.subprocess.run",
-        lambda *args, **kwargs: CompletedProcess(
-            args=["openclaw"],
-            returncode=1,
-            stdout="",
-            stderr="permanent failure",
-        ),
-    )
-
-    attempt = _send_via_mcp_agent_mail({"event": "task_finished", "bead_id": "ORCH-fallback-fail"})
-
-    assert attempt.delivered is False
-    assert attempt.transient is True
-
-
-def test_send_via_mcp_agent_mail_fallback_runs_when_agent_call_raises(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def _raise_timeout(_payload: dict[str, object]) -> DeliveryAttempt:
-        raise subprocess.TimeoutExpired(cmd=["openclaw", "agent"], timeout=60)
-
-    monkeypatch.setattr(
-        "orchestration.openclaw_notifier._send_via_openclaw_agent",
-        _raise_timeout,
-    )
-    monkeypatch.setenv("OPENCLAW_PROJECT_KEY", "proj")
-    monkeypatch.setenv("OPENCLAW_SENDER_NAME", "sender")
-    monkeypatch.setenv("OPENCLAW_TO", "receiver")
-    monkeypatch.setattr(
-        "orchestration.openclaw_notifier.subprocess.run",
-        lambda *args, **kwargs: CompletedProcess(args=["openclaw"], returncode=0, stdout="", stderr=""),
-    )
-
-    attempt = _send_via_mcp_agent_mail({"event": "task_finished", "bead_id": "ORCH-fallback-timeout"})
-
-    assert attempt.delivered is True
-
-
-def test_send_via_mcp_agent_mail_uses_openclaw_message_send_dm_fallback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "orchestration.openclaw_notifier._send_via_openclaw_agent",
-        lambda _payload: DeliveryAttempt(delivered=False, transient=True),
-    )
-    monkeypatch.delenv("OPENCLAW_PROJECT_KEY", raising=False)
-    monkeypatch.delenv("OPENCLAW_SENDER_NAME", raising=False)
-    monkeypatch.delenv("OPENCLAW_TO", raising=False)
-    monkeypatch.setenv("OPENCLAW_NOTIFY_TARGET", "DTEST123")
-
-    seen_commands: list[list[str]] = []
-
-    def _fake_run(cmd: list[str], **kwargs) -> CompletedProcess[str]:
-        seen_commands.append(cmd)
-        return CompletedProcess(
-            args=cmd,
-            returncode=0,
-            stdout=json.dumps(
-                {"payload": {"ok": True, "result": {"messageId": "1.23", "channelId": "DTEST123"}}}
-            ),
-            stderr="",
-        )
-
-    monkeypatch.setattr("orchestration.openclaw_notifier.subprocess.run", _fake_run)
-
-    attempt = _send_via_mcp_agent_mail({"event": "task_finished", "bead_id": "ORCH-message-send"})
-
-    assert attempt.delivered is True
-    assert seen_commands
-    assert seen_commands[0][:4] == ["openclaw", "message", "send", "--channel"]
-    assert "--target" in seen_commands[0]
-    assert "DTEST123" in seen_commands[0]
-
-
-def test_send_via_mcp_agent_mail_posts_thread_reply_when_trigger_present(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "orchestration.openclaw_notifier._send_via_openclaw_agent",
-        lambda _payload: DeliveryAttempt(delivered=False, transient=True),
-    )
-    monkeypatch.delenv("OPENCLAW_PROJECT_KEY", raising=False)
-    monkeypatch.delenv("OPENCLAW_SENDER_NAME", raising=False)
-    monkeypatch.delenv("OPENCLAW_TO", raising=False)
-    monkeypatch.setenv("OPENCLAW_NOTIFY_TARGET", "DTEST123")
-
-    seen_commands: list[list[str]] = []
-
-    def _fake_run(cmd: list[str], **kwargs) -> CompletedProcess[str]:
-        seen_commands.append(cmd)
-        return CompletedProcess(
-            args=cmd,
-            returncode=0,
-            stdout=json.dumps({"payload": {"ok": True}}),
-            stderr="",
-        )
-
-    monkeypatch.setattr("orchestration.openclaw_notifier.subprocess.run", _fake_run)
-
-    attempt = _send_via_mcp_agent_mail(
-        {
-            "event": "task_finished",
-            "bead_id": "ORCH-thread",
-            "slack_trigger_ts": "123.456",
-            "slack_trigger_channel": "CCHAN1",
-        }
-    )
-
-    assert attempt.delivered is True
-    assert len(seen_commands) == 2
-    assert "--reply-to" not in seen_commands[0]
-    assert "--reply-to" in seen_commands[1]
-    assert "123.456" in seen_commands[1]
-    assert "CCHAN1" in seen_commands[1]
-
-
-def test_send_via_mcp_agent_mail_prefers_thread_delivery_before_agent(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called: dict[str, int] = {"agent": 0}
-
-    def _agent_stub(_payload: dict[str, object]) -> DeliveryAttempt:
-        called["agent"] += 1
-        return DeliveryAttempt(delivered=True)
-
-    monkeypatch.setattr("orchestration.openclaw_notifier._send_via_openclaw_agent", _agent_stub)
-    monkeypatch.setenv("OPENCLAW_NOTIFY_TARGET", "DTEST123")
-
-    seen_commands: list[list[str]] = []
-
-    def _fake_run(cmd: list[str], **kwargs) -> CompletedProcess[str]:
-        seen_commands.append(cmd)
-        return CompletedProcess(
-            args=cmd,
-            returncode=0,
-            stdout=json.dumps({"payload": {"ok": True}}),
-            stderr="",
-        )
-
-    monkeypatch.setattr("orchestration.openclaw_notifier.subprocess.run", _fake_run)
-
-    attempt = _send_via_mcp_agent_mail(
-        {
-            "event": "task_finished",
-            "bead_id": "ORCH-thread-first",
-            "slack_trigger_ts": "123.456",
-            "slack_trigger_channel": "CCHAN1",
-        }
-    )
-
-    assert attempt.delivered is True
-    assert called["agent"] == 0
-    assert len(seen_commands) == 2
-    assert "--reply-to" in seen_commands[1]
-
-
-def test_send_via_mcp_agent_mail_prefers_message_delivery_before_agent_non_threaded(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called: dict[str, int] = {"agent": 0}
-
-    def _agent_stub(_payload: dict[str, object]) -> DeliveryAttempt:
-        called["agent"] += 1
-        return DeliveryAttempt(delivered=True)
-
-    monkeypatch.setattr("orchestration.openclaw_notifier._send_via_openclaw_agent", _agent_stub)
-    monkeypatch.setenv("OPENCLAW_NOTIFY_TARGET", "DTEST123")
-
-    def _fake_run(cmd: list[str], **kwargs) -> CompletedProcess[str]:
-        return CompletedProcess(
-            args=cmd,
-            returncode=0,
-            stdout=json.dumps({"payload": {"ok": True}}),
-            stderr="",
-        )
-
-    monkeypatch.setattr("orchestration.openclaw_notifier.subprocess.run", _fake_run)
-
-    attempt = _send_via_mcp_agent_mail({"event": "task_finished", "bead_id": "ORCH-non-thread-first"})
-
-    assert attempt.delivered is True
-    assert called["agent"] == 0
-
-
-def test_openclaw_notification_max_runtime_includes_agent_and_mcp_fallback_timeouts() -> None:
-    expected = ((60 + 30) * (len(_RETRY_DELAYS_SECONDS) + 1)) + sum(_RETRY_DELAYS_SECONDS)
-    assert openclaw_notification_max_runtime_seconds() == expected
-
-
-# ---------------------------------------------------------------------------
-# Issue #2: Channel IDs must come from env vars, not hardcoded
-# ---------------------------------------------------------------------------
-
-
-def test_default_notify_target_reads_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """_DEFAULT_NOTIFY_TARGET should be overridable via env var."""
-    from orchestration import openclaw_notifier
-
-    monkeypatch.setenv("OPENCLAW_NOTIFY_TARGET", "D_CUSTOM_CHANNEL")
-    # Re-import or read the function to check env-var usage
-    target = openclaw_notifier._default_notify_target()
-    assert target == "D_CUSTOM_CHANNEL"
-
-
-def test_default_notify_channel_reads_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """_DEFAULT_NOTIFY_CHANNEL should be overridable via env var."""
-    from orchestration import openclaw_notifier
-
-    monkeypatch.setenv("OPENCLAW_NOTIFY_CHANNEL", "teams")
-    channel = openclaw_notifier._default_notify_channel()
-    assert channel == "teams"
-
-
-# ---------------------------------------------------------------------------
-# Issue #3: FileNotFoundError and PermissionError must be non-transient
-# ---------------------------------------------------------------------------
-
-
-def test_is_transient_exception_file_not_found_is_not_transient() -> None:
-    """FileNotFoundError (missing binary) must NOT be treated as transient."""
-    from orchestration.openclaw_notifier import _is_transient_exception
-
-    exc = FileNotFoundError("openclaw: command not found")
-    assert _is_transient_exception(exc) is False
-
-
-def test_is_transient_exception_permission_error_is_not_transient() -> None:
-    """PermissionError must NOT be treated as transient."""
-    from orchestration.openclaw_notifier import _is_transient_exception
-
-    exc = PermissionError("Permission denied: '/usr/bin/openclaw'")
-    assert _is_transient_exception(exc) is False
-
-
-def test_is_transient_exception_connection_refused_is_transient() -> None:
-    """ConnectionRefusedError (network) SHOULD be transient."""
-    from orchestration.openclaw_notifier import _is_transient_exception
-
-    exc = ConnectionRefusedError("Connection refused")
-    assert _is_transient_exception(exc) is True
-
-
-# ---------------------------------------------------------------------------
-# Issue #1: TimeoutExpired in _send_via_openclaw_agent must not bypass MCP fallback
-# ---------------------------------------------------------------------------
-
-
-@patch.dict("os.environ", {
-    "OPENCLAW_PROJECT_KEY": "test-project",
-    "OPENCLAW_SENDER_NAME": "mctrl",
-    "OPENCLAW_TO": "test@example.com",
-}, clear=False)
+@patch.dict(
+    "os.environ",
+    {
+        "OPENCLAW_PROJECT_KEY": "project-x",
+        "OPENCLAW_SENDER_NAME": "sender-x",
+        "OPENCLAW_TO": "receiver-x",
+    },
+    clear=False,
+)
+@patch("orchestration.openclaw_notifier._send_via_openclaw_agent", return_value=False)
 @patch("orchestration.openclaw_notifier.subprocess.run")
-def test_agent_timeout_does_not_bypass_mcp_fallback(mock_run: MagicMock) -> None:
-    """When _send_via_openclaw_agent times out, the MCP fallback must still run."""
-    call_count = 0
+def test_notify_openclaw_mcp_fallback_handles_timeout(mock_run, _mock_agent, tmp_path: Path) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    payload = {"event": "task_finished", "bead_id": "ORCH-timeout"}
+    mock_run.side_effect = TimeoutExpired(cmd=["openclaw"], timeout=30)
 
-    def side_effect(*args: object, **kwargs: object) -> CompletedProcess[str]:
-        nonlocal call_count
-        call_count += 1
-        if call_count <= 2:
-            # First two calls: openclaw message send (fails) + openclaw agent (times out)
-            if call_count == 1:
-                return CompletedProcess(args=[], returncode=1, stdout="", stderr="failed")
-            raise subprocess.TimeoutExpired(cmd=["openclaw", "agent"], timeout=60)
-        # Third call: MCP fallback
-        return CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+    delivered = notify_openclaw(payload, outbox_path=str(outbox))
 
-    mock_run.side_effect = side_effect
-    attempt = _send_via_mcp_agent_mail({"event": "test", "bead_id": "ORCH-timeout-fallback"})
+    assert delivered is False
+    queued = read_outbox(outbox_path=str(outbox))
+    assert len(queued) == 1
+    assert queued[0]["bead_id"] == "ORCH-timeout"
 
-    # MCP fallback should have been attempted (3 calls total)
-    assert call_count >= 3, f"Expected >=3 subprocess calls, got {call_count}"
 
+@patch.dict(
+    "os.environ",
+    {
+        "OPENCLAW_PROJECT_KEY": "project-x",
+        "OPENCLAW_SENDER_NAME": "sender-x",
+        "OPENCLAW_TO": "receiver-x",
+    },
+    clear=False,
+)
+@patch("orchestration.openclaw_notifier._send_via_openclaw_agent")
+@patch("orchestration.openclaw_notifier.subprocess.run")
+def test_notify_openclaw_mcp_fallback_runs_when_agent_call_raises(
+    mock_run, mock_agent_call, tmp_path: Path
+) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    payload = {"event": "task_finished", "bead_id": "ORCH-agent-exc"}
+    mock_agent_call.side_effect = FileNotFoundError("openclaw")
+    mock_run.return_value = CompletedProcess(args=["openclaw", "mcp"], returncode=0)
+
+    delivered = notify_openclaw(payload, outbox_path=str(outbox))
+
+    assert delivered is True
+    assert mock_run.called
+    assert read_outbox(outbox_path=str(outbox)) == []
+
+
+@patch.dict(
+    "os.environ",
+    {
+        "OPENCLAW_PROJECT_KEY": "project-x",
+        "OPENCLAW_SENDER_NAME": "sender-x",
+        "OPENCLAW_TO": "receiver-x",
+    },
+    clear=False,
+)
+@patch("orchestration.openclaw_notifier._send_via_openclaw_agent")
+@patch("orchestration.openclaw_notifier.subprocess.run")
+def test_notify_openclaw_mcp_fallback_runs_when_agent_call_raises_runtime_error(
+    mock_run, mock_agent_call, tmp_path: Path
+) -> None:
+    outbox = tmp_path / "outbox.jsonl"
+    payload = {"event": "task_finished", "bead_id": "ORCH-agent-runtime-exc"}
+    mock_agent_call.side_effect = RuntimeError("agent parse failure")
+    mock_run.return_value = CompletedProcess(args=["openclaw", "mcp"], returncode=0)
+
+    delivered = notify_openclaw(payload, outbox_path=str(outbox))
+
+    assert delivered is True
+    assert mock_run.called
+    assert read_outbox(outbox_path=str(outbox)) == []

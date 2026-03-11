@@ -186,6 +186,7 @@ def test_e2e_registry_to_outbox_to_delivery(monkeypatch: pytest.MonkeyPatch, tmp
     emitted = reconcile_registry_once(
         registry_path=str(registry),
         outbox_path=str(outbox),
+        dead_letter_path=str(tmp_path / "outbox_dead_letter.jsonl"),
     )
 
     assert len(emitted) == 1
@@ -276,6 +277,7 @@ def test_slack_loopback_roundtrip(tmp_path: Path) -> None:
     emitted = reconcile_registry_once(
         registry_path=str(registry),
         outbox_path=str(outbox),
+        dead_letter_path=str(tmp_path / "outbox_dead_letter.jsonl"),
     )
 
     assert len(emitted) == 1, f"Expected 1 event, got {len(emitted)}: {emitted}"
