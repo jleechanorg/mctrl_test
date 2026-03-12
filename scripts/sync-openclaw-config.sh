@@ -25,12 +25,19 @@ echo "Live:   $LIVE_DIR"
 echo "Sync:   $SYNC_DIRS"
 echo ""
 
-echo "--- Pre-sync Backup Refresh ---"
-if [ -x "$BACKUP_SCRIPT" ]; then
-  "$BACKUP_SCRIPT"
-  echo ""
+REFRESH_BACKUP="${OPENCLAW_SYNC_REFRESH_BACKUP:-1}"
+if [ "$REFRESH_BACKUP" = "1" ]; then
+  echo "--- Pre-sync Backup Refresh ---"
+  if [ -x "$BACKUP_SCRIPT" ]; then
+    "$BACKUP_SCRIPT"
+    echo ""
+  else
+    echo -e "  ${YELLOW}WARN:${NC} backup script not executable/missing: $BACKUP_SCRIPT"
+    echo ""
+  fi
 else
-  echo -e "  ${YELLOW}WARN:${NC} backup script not executable/missing: $BACKUP_SCRIPT"
+  echo "--- Pre-sync Backup Refresh ---"
+  echo "  Skipped (OPENCLAW_SYNC_REFRESH_BACKUP=$REFRESH_BACKUP)"
   echo ""
 fi
 

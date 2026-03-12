@@ -308,6 +308,8 @@ if [[ "$IS_DARWIN" -eq 1 ]]; then
 
     if ! is_placeholder_token "$plist_token"; then
       pass 'gateway token present in launchd EnvironmentVariables'
+    elif ! is_placeholder_token "$live_token"; then
+      pass 'gateway token sourced from ~/.openclaw/openclaw.json'
     else
       warn 'gateway token missing/placeholder in launchd EnvironmentVariables (may still work via openclaw.json token)'
     fi
@@ -318,7 +320,7 @@ fi
 
 printf '\n'
 if [[ -x "$REPO_ROOT/scripts/sync-openclaw-config.sh" ]]; then
-  sync_output="$($REPO_ROOT/scripts/sync-openclaw-config.sh 2>&1)"
+  sync_output="$(OPENCLAW_SYNC_REFRESH_BACKUP=0 "$REPO_ROOT/scripts/sync-openclaw-config.sh" 2>&1)"
   sync_rc=$?
   if [[ "$sync_rc" -ne 0 ]]; then
     fail "sync-openclaw-config dry run failed (exit=$sync_rc)"

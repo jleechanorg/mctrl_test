@@ -86,6 +86,46 @@ if cfg_path.exists():
     except Exception:
         pass
 
+    # Keep regression-guarded tool allowlist entries present even if live
+    # config drifted (for Slack MCP + second-opinion integrations).
+    tools = cfg.setdefault("tools", {})
+    also_allow = tools.setdefault("alsoAllow", [])
+    required_tools = [
+        "second-opinion-tool_agent_second_opinion",
+        "second-opinion-tool_rate_limit_status",
+        "second-opinion-tool_health-check",
+        "slack-mcp_channels_list",
+        "slack-mcp_conversations_add_message",
+        "slack-mcp_conversations_history",
+        "slack-mcp_conversations_mark",
+        "slack-mcp_conversations_replies",
+        "slack-mcp_usergroups_create",
+        "slack-mcp_usergroups_list",
+        "slack-mcp_usergroups_me",
+        "slack-mcp_usergroups_update",
+        "slack-mcp_usergroups_users_update",
+        "slack-mcp_users_search",
+    ]
+    for tool in required_tools:
+        if tool not in also_allow:
+            also_allow.append(tool)
+
+    # Normalize MCP adapter placeholders and server IDs.
+    servers = (
+        cfg.setdefault("plugins", {})
+        .setdefault("entries", {})
+        .setdefault("openclaw-mcp-adapter", {})
+        .setdefault("config", {})
+        .setdefault("servers", [])
+    )
+    for server in servers:
+        if server.get("name") == "mcp-agent-mail" and str(server.get("transport", "http")).lower() == "http":
+            server["url"] = "${MCP_AGENT_MAIL_URL}"
+            headers = server.setdefault("headers", {})
+            headers["Authorization"] = "Bearer ${MCP_AGENT_MAIL_TOKEN}"
+        if server.get("name") == "slack":
+            server["name"] = "slack-mcp"
+
     def walk(node):
         if isinstance(node, dict):
             for k, v in list(node.items()):
