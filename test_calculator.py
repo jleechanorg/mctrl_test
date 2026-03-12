@@ -23,8 +23,7 @@ class TestCalculator:
 
     def test_subtract_basic(self):
         """Test basic subtraction."""
-        # Intentional bug: expects wrong result
-        assert subtract(10, 3) == 5
+        assert subtract(10, 3) == 7
 
     def test_subtract_negative(self):
         """Test subtraction resulting in negative."""
