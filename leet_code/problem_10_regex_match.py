@@ -34,7 +34,7 @@ def is_match(s: str, p: str) -> bool:
     dp[m][n] = True
 
     # Handle patterns ending with '*' at the start (empty string case)
-    for j in range(n - 1):
+    for j in range(n - 2, -1, -1):
         if p[j + 1] == '*':
             dp[m][j] = dp[m][j + 2]
 
