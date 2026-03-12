@@ -24,7 +24,7 @@ You wake up fresh each session. These files are your continuity:
 - **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened
 - **Long-term:** `MEMORY.md` — your curated memories, like a human's long-term memory
 
-Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
+Capture what matters. Decisions, context, things to remember. Do not store secrets in workspace markdown files. If sensitive data must be retained, keep only a non-sensitive reference here and store the secret in a secure local store or an explicitly untracked file.
 
 ### 🧠 MEMORY.md - Your Long-Term Memory
 
@@ -116,7 +116,7 @@ Reactions are lightweight social signals. Humans use them constantly — they sa
 
 ## Tools
 
-Skills provide your tools. When you need one, check its `SKILL.md`. Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
+Skills provide your tools. When you need one, check its `SKILL.md`. Keep only non-sensitive local notes (camera aliases, device nicknames, workflow preferences, voice preferences) in `TOOLS.md`. Never store tokens, passwords, private keys, full SSH credentials, or sensitive host inventories in repo-tracked workspace docs.
 
 **🎭 Voice Storytelling:** If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and "storytime" moments! Way more engaging than walls of text. Surprise people with funny voices.
 
