@@ -45,3 +45,13 @@ scripts/sym-send-5-swebench-verified.sh
 2. Run `scripts/sym-dispatch.sh` with that task.
 3. Reply with a concrete dispatch result (plugin, issue count, queue status).
 4. If daemon metadata is missing, install daemon first via `scripts/install-symphony-daemon.sh`.
+
+## Post-merge
+
+After editing this `openclaw-config` file, sync it to `~/.openclaw/` and reload the gateway:
+
+```bash
+kill -HUP $(pgrep -f openclaw-gateway)
+```
+
+This is required for live routing changes used by `scripts/install-symphony-daemon.sh` and `scripts/sym-dispatch.sh`.

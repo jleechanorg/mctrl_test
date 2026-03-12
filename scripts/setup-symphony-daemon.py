@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import plistlib
+import secrets
 import socket
 import stat
 import subprocess
@@ -40,12 +41,10 @@ def pick_port(preferred_port: int, attempts: int = 32) -> int:
 
 
 def main() -> None:
-    repo_root = Path(__file__).resolve().parent.parent
     uid = os.getuid()
 
     label = os.environ.get("SYMPHONY_DAEMON_LABEL", "ai.symphony.daemon")
     node_name = os.environ.get("SYMPHONY_DAEMON_NODE", "symphonyd")
-    cookie = os.environ.get("SYMPHONY_DAEMON_COOKIE", "jleechanclaw_symphony_cookie")
     requested_port = int(os.environ.get("SYMPHONY_DAEMON_PORT", "19191"))
     port = pick_port(requested_port)
     mise_bin = os.environ.get("MISE_BIN", "/opt/homebrew/bin/mise")
@@ -55,16 +54,14 @@ def main() -> None:
     ).expanduser().resolve()
 
     plugin_name = os.environ.get("SYMPHONY_TASK_PLUGIN", "generic_tasks")
-    plugin_input_path = Path(
-        os.environ.get(
-            "SYMPHONY_TASK_PLUGIN_INPUT",
-            str(repo_root / "tests" / "fixtures" / "generic_tasks_fixture.json"),
-        )
-    ).resolve()
+    plugin_input_env = os.environ.get("SYMPHONY_TASK_PLUGIN_INPUT")
 
     runtime_root = Path(
-        os.environ.get("SYMPHONY_DAEMON_RUNTIME", "/tmp/jleechanclaw/symphony_daemon")
-    ).resolve()
+        os.environ.get(
+            "SYMPHONY_DAEMON_RUNTIME",
+            str(Path.home() / "Library" / "Application Support" / "jleechanclaw" / "symphony_daemon"),
+        )
+    ).expanduser().resolve()
     workspace_root = runtime_root / "workspaces"
     workflow_path = runtime_root / "WORKFLOW.md"
     runner_path = runtime_root / "run_symphony_daemon.sh"
@@ -79,6 +76,29 @@ def main() -> None:
     runtime_root.mkdir(parents=True, exist_ok=True)
     workspace_root.mkdir(parents=True, exist_ok=True)
     launch_agents_dir.mkdir(parents=True, exist_ok=True)
+    runtime_root.chmod(0o700)
+    workspace_root.chmod(0o700)
+
+    existing_cookie: str | None = None
+    if metadata_path.exists():
+        try:
+            existing_cookie = json.loads(metadata_path.read_text(encoding="utf-8")).get("cookie")
+        except (json.JSONDecodeError, OSError):
+            existing_cookie = None
+
+    cookie = os.environ.get("SYMPHONY_DAEMON_COOKIE") or existing_cookie or secrets.token_hex(16)
+
+    if plugin_input_env:
+        plugin_input_path = Path(plugin_input_env).expanduser().resolve()
+    elif plugin_name == "generic_tasks":
+        plugin_input_path = runtime_root / "generic_tasks.json"
+        if not plugin_input_path.exists():
+            plugin_input_path.write_text(json.dumps({"tasks": []}, indent=2), encoding="utf-8")
+            plugin_input_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    else:
+        raise RuntimeError(
+            f"SYMPHONY_TASK_PLUGIN_INPUT is required for plugin '{plugin_name}'"
+        )
 
     plugin = load_plugin(plugin_name)
     workflow_spec = plugin.build_workflow_spec()
@@ -129,7 +149,7 @@ def main() -> None:
         ),
         encoding="utf-8",
     )
-    runner_path.chmod(runner_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    runner_path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
 
     plist_data = build_launch_agent(
         label=label,
@@ -145,6 +165,7 @@ def main() -> None:
         "node_name": node_name,
         "cookie": cookie,
         "port": port,
+        "mise_bin": mise_bin,
         "workflow_path": str(workflow_path),
         "workspace_root": str(workspace_root),
         "runner_path": str(runner_path),
@@ -156,6 +177,7 @@ def main() -> None:
         "runtime_root": str(runtime_root),
     }
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    metadata_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
     domain_target = f"gui/{uid}/{label}"
 

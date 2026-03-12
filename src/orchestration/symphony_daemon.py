@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Any, Iterable
 
 
 def build_workflow(
@@ -12,6 +12,8 @@ def build_workflow(
     task_lines: Iterable[str],
     requirements: Iterable[str],
 ) -> str:
+    # Intentionally pin this workflow to `codex app-server` for Symphony compatibility.
+    # This is an explicit override of broader default-lane guidance.
     tasks = "\n".join(task_lines)
     req_lines = "\n".join(f"{idx}. {line}" for idx, line in enumerate(requirements, start=1))
 
@@ -80,7 +82,7 @@ def build_launch_agent(
     runner_path: str,
     stdout_path: str,
     stderr_path: str,
-) -> dict:
+) -> dict[str, Any]:
     return {
         "Label": label,
         "ProgramArguments": ["/bin/bash", runner_path],

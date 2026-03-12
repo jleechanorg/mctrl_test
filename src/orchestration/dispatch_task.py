@@ -221,6 +221,23 @@ def _get_start_sha(worktree_path: str) -> str:
     return ""
 
 
+def _get_current_branch(worktree_path: str) -> str:
+    """Return current branch name for the given worktree, or empty on failure."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", worktree_path, "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        return ""
+    return ""
+
+
 _DEFAULT_WORKTREE_BASE = os.path.expanduser("~/.mctrl/worktrees")
 
 
@@ -694,7 +711,7 @@ def dispatch(
 
     session_name = _rename_tmux_session(session_name, bead_id)
 
-    effective_branch = branch or parsed_branch
+    effective_branch = branch or parsed_branch or _get_current_branch(worktree_path)
     start_sha = _get_start_sha(worktree_path)
 
     mapping = BeadSessionMapping.create(

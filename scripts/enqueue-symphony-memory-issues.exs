@@ -48,6 +48,13 @@ issues_payload =
 
 incoming_issues =
   Enum.map(issues_payload["issues"], fn item ->
+    assigned_to_worker =
+      case Map.fetch(item, "assigned_to_worker") do
+        {:ok, value} when is_boolean(value) -> value
+        {:ok, _value} -> true
+        :error -> true
+      end
+
     %Issue{
       id: item["id"],
       identifier: item["identifier"],
@@ -55,7 +62,7 @@ incoming_issues =
       state: item["state"] || "Todo",
       description: item["description"] || "",
       labels: item["labels"] || [],
-      assigned_to_worker: item["assigned_to_worker"] || true
+      assigned_to_worker: assigned_to_worker
     }
   end)
 
@@ -65,11 +72,30 @@ existing_issues =
     _ -> []
   end
 
-merged_by_id =
-  (existing_issues ++ incoming_issues)
-  |> Enum.reduce(%{}, fn issue, acc -> Map.put(acc, issue.id, issue) end)
+existing_tagged = Enum.map(existing_issues, &{:existing, &1})
+incoming_tagged = Enum.map(incoming_issues, &{:incoming, &1})
 
-merged_issues = Map.values(merged_by_id)
+merged_by_id =
+  (existing_tagged ++ incoming_tagged)
+  |> Enum.reduce(%{}, fn {source, issue}, acc ->
+    case Map.get(acc, issue.id) do
+      nil ->
+        :ok
+
+      {prev_source, _prev_issue} ->
+        IO.puts(
+          :stderr,
+          "overwriting_issue id=#{issue.id} previous_source=#{prev_source} new_source=#{source}"
+        )
+    end
+
+    Map.put(acc, issue.id, {source, issue})
+  end)
+
+merged_issues =
+  merged_by_id
+  |> Map.values()
+  |> Enum.map(fn {_source, issue} -> issue end)
 
 :ok =
   :rpc.call(target_node, Application, :put_env, [

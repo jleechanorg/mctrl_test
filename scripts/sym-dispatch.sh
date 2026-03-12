@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUNTIME_ROOT="${SYMPHONY_DAEMON_RUNTIME:-/tmp/jleechanclaw/symphony_daemon}"
+RUNTIME_ROOT="${SYMPHONY_DAEMON_RUNTIME:-$HOME/Library/Application Support/jleechanclaw/symphony_daemon}"
 METADATA="$RUNTIME_ROOT/daemon_metadata.json"
 
 ensure_daemon() {
@@ -21,6 +21,7 @@ build_generic_input() {
   python3 - "$input_path" "$task_text" <<'PY'
 import json
 import sys
+import uuid
 from pathlib import Path
 
 out = Path(sys.argv[1])
@@ -30,12 +31,13 @@ if not task:
 
 words = task.split()
 summary = " ".join(words[:8])
+task_id = uuid.uuid4().hex[:12]
 out.write_text(
     json.dumps(
         {
             "tasks": [
                 {
-                    "id": "1",
+                    "id": task_id,
                     "title": summary,
                     "description": task,
                     "labels": ["adhoc"],
