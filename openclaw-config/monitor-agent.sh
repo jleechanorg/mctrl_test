@@ -61,15 +61,15 @@ if [ "$AGENT_RC" -ne 0 ]; then
   exit "$AGENT_RC"
 fi
 
-if grep -q "STATUS=GOOD" <<<"$REPORT"; then
+if grep -q "STATUS=PROBLEM" <<<"$REPORT"; then
   if "$OPENCLAW_BIN" message send --channel slack --target "$ALERT_SLACK_TARGET" --message "$REPORT" >> "$LOG_FILE" 2>&1; then
-    log "Monitoring agent reported STATUS=GOOD and delivered to Slack target ${ALERT_SLACK_TARGET}."
+    log "Monitoring agent reported STATUS=PROBLEM and delivered to Slack target ${ALERT_SLACK_TARGET}."
   else
-    log "Monitoring agent reported STATUS=GOOD but Slack delivery failed."
+    log "Monitoring agent reported STATUS=PROBLEM but Slack delivery failed."
     exit 1
   fi
 else
-  log "Monitoring agent reported non-GOOD status; Slack delivery suppressed."
+  log "Monitoring agent reported non-PROBLEM status; Slack delivery suppressed."
   printf '%s\n' "$REPORT" >> "$LOG_FILE"
 fi
 
