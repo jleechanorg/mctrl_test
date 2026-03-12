@@ -1,5 +1,7 @@
 # jleechanclaw
 
+Loop2 E2E marker: tiny README update.
+
 Tools, scripts, and configuration for **jleechanclaw** — an autonomous orchestrator agent that replaces Jeffrey as the day-to-day operator across all jleechanorg projects.
 
 ## What This Is
