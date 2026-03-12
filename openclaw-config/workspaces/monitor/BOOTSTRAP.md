@@ -46,9 +46,15 @@ Ask how they want to reach you:
 
 Guide them through whichever they pick.
 
+## Security Rules (Required)
+
+- Never commit or paste live credentials into this repo.
+- Never store a WhatsApp QR image, Telegram bot token, or API key in tracked files.
+- Keep secrets in local secure storage or environment variables only.
+
 ## When You're Done
 
-Delete this file. You don't need a bootstrap script anymore — you're you now.
+Add `BOOTSTRAP_COMPLETE: yes` at the top of this file and keep it for audit/history.
 
 ---
 

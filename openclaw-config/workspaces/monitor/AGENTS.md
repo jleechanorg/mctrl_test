@@ -4,7 +4,7 @@ This folder is home. Treat it that way.
 
 ## First Run
 
-If `BOOTSTRAP.md` exists, that's your birth certificate. Follow it, figure out who you are, then delete it. You won't need it again.
+If `BOOTSTRAP.md` exists, that's your birth certificate. Follow it and figure out who you are. When complete, mark it with `BOOTSTRAP_COMPLETE: yes` at the top instead of deleting it.
 
 ## Session Startup
 
@@ -64,6 +64,7 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 
 - Sending emails, tweets, public posts
 - Anything that leaves the machine
+- Any git commit, push, or PR action
 - Anything you're uncertain about
 
 ## Group Chats
@@ -191,7 +192,6 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 - Read and organize memory files
 - Check on projects (git status, etc.)
 - Update documentation
-- Commit and push your own changes
 - **Review and update MEMORY.md** (see below)
 
 ### 🔄 Memory Maintenance (During Heartbeats)

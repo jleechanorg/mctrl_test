@@ -13,6 +13,12 @@ Things like:
 - Device nicknames
 - Anything environment-specific
 
+## Safety Rules
+
+- Never commit real credentials, auth tokens, private IP inventories, or production hostnames.
+- If examples are needed, use redacted placeholders only.
+- Keep sensitive tool notes in untracked local files.
+
 ## Examples
 
 ```markdown
@@ -23,7 +29,7 @@ Things like:
 
 ### SSH
 
-- home-server → 192.168.1.100, user: admin
+- home-server → host.example.internal, user: your-user
 
 ### TTS
 

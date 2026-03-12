@@ -8,6 +8,7 @@ LOG_DIR="$(dirname "$LOG_FILE")"
 LOCK_DIR="$HOME/.openclaw/locks/monitor-agent.lock"
 LOCK_PID_FILE="$LOCK_DIR/pid"
 LOCK_STALE_SECONDS="${OPENCLAW_MONITOR_LOCK_STALE_SECONDS:-7200}"
+AGENT_TIMEOUT_SECONDS="${OPENCLAW_MONITOR_AGENT_TIMEOUT_SECONDS:-300}"
 
 export PATH="$HOME/.nvm/versions/node/current/bin:$HOME/.nvm/versions/node/v22.22.0/bin:$HOME/Library/pnpm:$HOME/.bun/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
@@ -102,8 +103,26 @@ ACTIVE PROBLEMS:
 HISTORICAL CONTEXT:
 - ... (optional)"
 
-REPORT="$("$OPENCLAW_BIN" agent --agent monitor --message "$PROMPT" 2>&1)"
+run_monitor_agent() {
+  if command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "${AGENT_TIMEOUT_SECONDS}s" "$OPENCLAW_BIN" agent --agent monitor --message "$PROMPT" 2>&1
+    return $?
+  fi
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${AGENT_TIMEOUT_SECONDS}s" "$OPENCLAW_BIN" agent --agent monitor --message "$PROMPT" 2>&1
+    return $?
+  fi
+  perl -e 'alarm shift; exec @ARGV' "$AGENT_TIMEOUT_SECONDS" "$OPENCLAW_BIN" agent --agent monitor --message "$PROMPT" 2>&1
+}
+
+REPORT="$(run_monitor_agent)"
 AGENT_RC=$?
+
+if [ "$AGENT_RC" -eq 124 ] || [ "$AGENT_RC" -eq 142 ]; then
+  log "Monitoring agent timed out after ${AGENT_TIMEOUT_SECONDS}s (suppressed Slack)."
+  append_report
+  exit 124
+fi
 
 if [ "$AGENT_RC" -ne 0 ]; then
   log "Monitoring agent run failed (suppressed Slack). rc=${AGENT_RC}"
