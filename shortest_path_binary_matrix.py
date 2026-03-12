@@ -1,144 +1,115 @@
 """
-Shortest Path in Binary Matrix - LeetCode 1293
+Shortest Path in a Grid with Obstacle Elimination - LeetCode 1293
 
-Given an n x n binary matrix grid, return the length of the shortest
-clear path in the matrix. If there is no clear path, return -1.
+Given an n x n grid and an integer k, you can remove at most k obstacles
+(cells with value 1). Find the shortest path from (0, 0) to (n-1, n-1).
 
-A clear path is a path from the top-left cell (0, 0) to the bottom-right
-cell (n - 1, n - 1) such that:
-- All the path cells contain 0 (not blocked)
-- The path is 8-directionally adjacent (including diagonals)
+Movement is 4-directional (up, down, left, right).
 
-Time Complexity: O(n^2) - each cell visited at most once in BFS
-Space Complexity: O(n^2) - for visited set and queue
+Time Complexity: O(n^2 * k) - BFS with k dimension
+Space Complexity: O(n^2 * k) - visited states
 """
 
 from collections import deque
 from typing import List
 
 
-def shortest_path_binary_matrix(grid: List[List[int]]) -> int:
+def shortest_path_binary_matrix(grid: List[List[int]], k: int) -> int:
     """
-    Find the shortest path from top-left to bottom-right in a binary grid.
+    Find the shortest path from top-left to bottom-right in a grid,
+    removing at most k obstacles.
 
-    Uses BFS to find the shortest path since all edges have equal weight.
+    Uses BFS with 3D visited set (row, col, remaining_k) to track
+    the minimum obstacles used to reach each cell.
 
     Args:
-        grid: n x n binary matrix where 0 = empty, 1 = blocked
+        grid: n x n binary matrix where 0 = empty, 1 = obstacle
+        k: maximum number of obstacles that can be removed
 
     Returns:
-        Length of shortest clear path, or -1 if no path exists
+        Length of shortest path, or -1 if no valid path exists
     """
     n = len(grid)
 
-    # Check if start or end is blocked
-    if grid[0][0] == 1 or grid[n-1][n-1] == 1:
+    # Edge case: empty grid
+    if n == 0:
         return -1
 
-    # BFS initialization
-    queue = deque([(0, 0, 1)])  # (row, col, distance)
-    visited = {(0, 0)}
+    # Edge case: single cell
+    if n == 1:
+        return 1 if grid[0][0] <= k else -1
 
-    # 8 directions: up, down, left, right, and 4 diagonals
-    directions = [
-        (-1, 0), (1, 0), (0, -1), (0, 1),  # cardinal
-        (-1, -1), (-1, 1), (1, -1), (1, 1)  # diagonal
-    ]
+    # Start or end has too many obstacles to remove
+    if grid[0][0] > k or grid[n-1][n-1] > k:
+        return -1
+
+    # BFS: (row, col, obstacles_used, distance)
+    # Track obstacles_used since visiting same cell with fewer used is better
+    queue = deque([(0, 0, grid[0][0], 1)])
+
+    # visited[row][col] = minimum obstacles used to reach this cell
+    # Using list of lists instead of dict for performance
+    visited = [[float('inf')] * n for _ in range(n)]
+    visited[0][0] = grid[0][0]
+
+    # 4 directions: up, down, left, right
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 
     while queue:
-        row, col, dist = queue.popleft()
+        row, col, used, dist = queue.popleft()
 
-        # Check if we reached the target
+        # Early exit if we reached destination
         if row == n - 1 and col == n - 1:
             return dist
 
-        # Explore all 8 neighbors
         for dr, dc in directions:
             new_row, new_col = row + dr, col + dc
 
             # Check bounds
             if 0 <= new_row < n and 0 <= new_col < n:
-                # Check if not visited and not blocked
-                if (new_row, new_col) not in visited and grid[new_row][new_col] == 0:
-                    visited.add((new_row, new_col))
-                    queue.append((new_row, new_col, dist + 1))
+                # Calculate new obstacles used if moving to this cell
+                new_used = used + grid[new_row][new_col]
 
-    # No path found
+                # Only proceed if:
+                # 1. Haven't exceeded k removals
+                # 2. Either haven't visited this cell, or reached with fewer obstacles used
+                if new_used <= k and new_used < visited[new_row][new_col]:
+                    visited[new_row][new_col] = new_used
+                    queue.append((new_row, new_col, new_used, dist + 1))
+
+    # No path found within k obstacle removals
     return -1
-
-
-def shortest_path_binary_matrix_dfs(grid: List[List[int]]) -> int:
-    """
-    Alternative DFS solution using backtracking (less efficient).
-
-    This is included for comparison - BFS is preferred for shortest path.
-
-    Time Complexity: O(8^(n^2)) worst case - exponential
-    Space Complexity: O(n^2) - recursion stack
-    """
-    n = len(grid)
-
-    if grid[0][0] == 1 or grid[n-1][n-1] == 1:
-        return -1
-
-    if n == 1:
-        return 1
-
-    visited = set()
-    min_distance = float('inf')
-
-    directions = [
-        (-1, 0), (1, 0), (0, -1), (0, 1),
-        (-1, -1), (-1, 1), (1, -1), (1, 1)
-    ]
-
-    def dfs(row: int, col: int, dist: int) -> None:
-        nonlocal min_distance
-
-        # Pruning: cannot beat current best
-        if dist >= min_distance:
-            return
-
-        # Reached destination
-        if row == n - 1 and col == n - 1:
-            min_distance = dist
-            return
-
-        visited.add((row, col))
-
-        for dr, dc in directions:
-            new_row, new_col = row + dr, col + dc
-
-            if (0 <= new_row < n and 0 <= new_col < n and
-                (new_row, new_col) not in visited and
-                grid[new_row][new_col] == 0):
-                dfs(new_row, new_col, dist + 1)
-
-        visited.remove((row, col))
-
-    dfs(0, 0, 1)
-
-    return min_distance if min_distance != float('inf') else -1
 
 
 # Example usage and testing
 if __name__ == "__main__":
-    # Example 1: [[0,1],[1,0]] -> 2
-    grid1 = [[0, 1], [1, 0]]
-    print(f"Grid 1: {shortest_path_binary_matrix(grid1)}")  # Expected: 2
-
-    # Example 2: [[0,0,0],[1,1,0],[1,1,0]] -> 4
-    grid2 = [
+    # Example 1: grid = [[0,1,0],[0,0,0],[0,0,0]], k = 1 -> 4
+    # Path: (0,0)->(0,1 remove)->(1,1)->(2,1)->(2,2)
+    grid1 = [
+        [0, 1, 0],
         [0, 0, 0],
-        [1, 1, 0],
-        [1, 1, 0]
+        [0, 0, 0]
     ]
-    print(f"Grid 2: {shortest_path_binary_matrix(grid2)}")  # Expected: 4
+    print(f"Example 1: {shortest_path_binary_matrix(grid1, 1)}")  # Expected: 4
 
-    # Example 3: [[1,1],[1,1]] -> -1
-    grid3 = [[1, 1], [1, 1]]
-    print(f"Grid 3: {shortest_path_binary_matrix(grid3)}")  # Expected: -1
+    # Example 2: grid = [[0,1,0],[0,0,0],[0,0,0]], k = 2 -> 4
+    # Direct diagonal-ish path using 2 removals
+    grid2 = [
+        [0, 1, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+    ]
+    print(f"Example 2: {shortest_path_binary_matrix(grid2, 2)}")  # Expected: 4
 
-    # Example 4: [[0]] -> 1
+    # Example 3: grid = [[0,1,0],[0,0,0],[0,0,0]], k = 0 -> -1
+    # Can't remove the obstacle
+    grid3 = [
+        [0, 1, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+    ]
+    print(f"Example 3: {shortest_path_binary_matrix(grid3, 0)}")  # Expected: -1
+
+    # Example 4: 1x1 grid
     grid4 = [[0]]
-    print(f"Grid 4: {shortest_path_binary_matrix(grid4)}")  # Expected: 1
+    print(f"Example 4: {shortest_path_binary_matrix(grid4, 0)}")  # Expected: 1
