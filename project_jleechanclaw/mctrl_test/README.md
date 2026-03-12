@@ -19,3 +19,4 @@ This repo is intended to stay simple, usually containing:
 ## Why it exists
 
 It provides a low-risk target for testing orchestration reliability before running larger automation tasks on production repositories.
+Loop5 E2E test touchpoint.
