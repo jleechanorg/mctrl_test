@@ -210,11 +210,9 @@ class TestAllMethodsConsistent:
         ],
     )
     def test_all_methods_equal(self, lists):
-        list_nodes = [ListNode.from_list(l) for l in lists]
-
-        result_heap = merge_k_lists_heap(list_nodes)
-        result_dc = merge_k_lists_divide_conquer(list_nodes.copy())
-        result_naive = merge_k_lists_naive(list_nodes.copy())
+        result_heap = merge_k_lists_heap([ListNode.from_list(l) for l in lists])
+        result_dc = merge_k_lists_divide_conquer([ListNode.from_list(l) for l in lists])
+        result_naive = merge_k_lists_naive([ListNode.from_list(l) for l in lists])
 
         assert result_heap.to_list() == result_dc.to_list()
         assert result_heap.to_list() == result_naive.to_list()
