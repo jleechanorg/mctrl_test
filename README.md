@@ -284,3 +284,5 @@ ai_orch run --agent-cli codex "Refactor auth middleware"
 ## License
 
 Private — personal workspace and tools for jleechan's OpenClaw setup.
+
+_E2E loop test marker: README touch on 2026-03-12._
