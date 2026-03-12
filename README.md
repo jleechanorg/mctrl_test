@@ -13,3 +13,5 @@ python hello.py
 ```bash
 pytest test_hello.py -v
 ```
+
+E2E recovery check: README updated via automated test.
