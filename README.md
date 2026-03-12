@@ -1,6 +1,7 @@
 # jleechanclaw
 
 Tools, scripts, and configuration for **jleechanclaw** — an autonomous orchestrator agent that replaces Jeffrey as the day-to-day operator across all jleechanorg projects.
+E2E recovery test marker: README line added.
 
 ## What This Is
 
