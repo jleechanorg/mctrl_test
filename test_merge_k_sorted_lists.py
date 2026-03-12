@@ -174,18 +174,20 @@ class TestAllAlgorithmsEquivalent:
 
     @pytest.fixture
     def test_lists(self):
-        return [
-            ListNode.from_list([1, 4, 7, 10]),
-            ListNode.from_list([2, 5, 8]),
-            ListNode.from_list([3, 6, 9, 11, 12]),
-            None,
-            ListNode.from_list([0]),
-        ]
+        def create_lists():
+            return [
+                ListNode.from_list([1, 4, 7, 10]),
+                ListNode.from_list([2, 5, 8]),
+                ListNode.from_list([3, 6, 9, 11, 12]),
+                None,
+                ListNode.from_list([0]),
+            ]
+        return create_lists
 
     def test_all_produce_same_result(self, test_lists):
-        result_dc = merge_k_lists_divide_conquer(test_lists)
-        result_heap = merge_k_lists_heap(test_lists)
-        result_brute = merge_k_lists_brute_force(test_lists)
+        result_dc = merge_k_lists_divide_conquer(test_lists())
+        result_heap = merge_k_lists_heap(test_lists())
+        result_brute = merge_k_lists_brute_force(test_lists())
 
         assert result_dc.to_list() == result_heap.to_list()
         assert result_dc.to_list() == result_brute.to_list()
