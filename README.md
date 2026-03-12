@@ -1,5 +1,7 @@
 # jleechanclaw
 
+_E2E loop test marker: 2026-03-12._
+
 Tools, scripts, and configuration for **jleechanclaw** — an autonomous orchestrator agent that replaces Jeffrey as the day-to-day operator across all jleechanorg projects.
 
 ## What This Is
