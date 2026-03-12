@@ -39,8 +39,14 @@ class TestCalculator:
         assert multiply(100, 0) == 0
 
     def test_divide_basic(self):
-        """Test basic division."""
-        assert divide(10, 2) == 5.0
+        """Test basic division - expects integer return for whole number division.
+
+        This is an intentionally failing test: the implementation returns float (5.0)
+        but the test expects integer (5) to demonstrate a type mismatch.
+        """
+        result = divide(10, 2)
+        # Strict type check: expects int but gets float
+        assert isinstance(result, int), f"Expected int but got {type(result).__name__}: {result}"
 
     def test_divide_fraction(self):
         """Test division resulting in fraction."""
