@@ -1,6 +1,7 @@
 """
 Unit tests for Calculator.
 """
+from __future__ import annotations
 
 import pytest
 from calculator import add, subtract, multiply, divide
@@ -39,7 +40,6 @@ class TestCalculator:
 
     def test_divide_basic(self):
         """Test basic division."""
-        # Fixed: Python division returns float, so expect 5.0 not 5
         assert divide(10, 2) == 5.0
 
     def test_divide_fraction(self):
