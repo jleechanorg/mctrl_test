@@ -29,13 +29,23 @@ class TestShortestPathBinaryMatrix:
         assert shortest_path_binary_matrix(grid) == 4
 
     def test_example_3(self):
-        """LeetCode example 3: no path exists"""
+        """LeetCode example 3: start/end blocked, early guard returns -1"""
         grid = [
             [1, 1, 1, 1],
             [1, 0, 0, 1],
             [1, 0, 0, 1],
             [1, 1, 1, 1]
         ]
+        assert shortest_path_binary_matrix(grid) == -1
+
+    def test_open_endpoints_no_path(self):
+        """Start and end are open but no path exists between them"""
+        grid = [
+            [0, 1, 0],
+            [1, 1, 1],
+            [0, 1, 0]
+        ]
+        # Start (0,0)=0 and end (2,2)=0, but walls block all paths
         assert shortest_path_binary_matrix(grid) == -1
 
     def test_single_cell_empty(self):
