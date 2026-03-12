@@ -83,29 +83,28 @@ class TestMergeKLists:
         expected = [1, 1, 1, 1, 1]
         assert linkedlist_to_list(result) == expected
 
-    # Intentionally failing tests - will be fixed after initial push
+    # Intentionally failing tests - FIXED
     def test_large_input(self):
-        """Test with larger input - intentionally expects wrong result."""
+        """Test with larger input."""
         lists = [
             list_to_linkedlist([1, 2, 3, 4, 5]),
             list_to_linkedlist([6, 7, 8, 9, 10]),
             list_to_linkedlist([11, 12, 13, 14, 15]),
         ]
         result = merge_k_lists(lists)
-        # Intentionally wrong expected value - will fail initially
-        expected = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        # Fixed: correct expected value (1-15, not 1-16)
+        expected = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
         assert linkedlist_to_list(result) == expected
 
-    def test_unsorted_input_behavior(self):
-        """Test behavior with unsorted input - intentionally expects wrong."""
-        # The algorithm assumes sorted input - let's see what happens
+    def test_multiple_lists_sequential(self):
+        """Test merging multiple sequential lists."""
         lists = [
-            list_to_linkedlist([5, 3, 1]),  # Not sorted!
-            list_to_linkedlist([6, 2]),
+            list_to_linkedlist([1, 3, 5]),  # Properly sorted
+            list_to_linkedlist([2, 4, 6]),   # Properly sorted
         ]
         result = merge_k_lists(lists)
-        # Intentionally expects sorted output despite unsorted input
-        expected = [1, 2, 3, 5, 6]
+        # Fixed: correct expected value for properly sorted input
+        expected = [1, 2, 3, 4, 5, 6]
         assert linkedlist_to_list(result) == expected
 
 
