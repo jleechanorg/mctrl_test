@@ -13,3 +13,5 @@ python hello.py
 ```bash
 pytest test_hello.py -v
 ```
+
+Loop2 E2E README touch.
