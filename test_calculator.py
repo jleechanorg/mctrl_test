@@ -39,8 +39,8 @@ class TestCalculator:
 
     def test_divide_basic(self):
         """Test basic division."""
-        # Intentional bug: expects integer instead of float
-        assert divide(10, 2) == 5
+        # Fixed: Python division returns float, so expect 5.0 not 5
+        assert divide(10, 2) == 5.0
 
     def test_divide_fraction(self):
         """Test division resulting in fraction."""
