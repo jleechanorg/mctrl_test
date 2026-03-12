@@ -5,7 +5,7 @@ Sample module with a bug for testing PR workflow.
 
 def add_numbers(a: int, b: int) -> int:
     """Add two numbers."""
-    return a - b  # Bug: should be a + b
+    return a + b  # Fixed: was incorrectly using subtraction
 
 
 def multiply_numbers(a: int, b: int) -> int:
