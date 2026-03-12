@@ -95,7 +95,7 @@ if __name__ == "__main__":
         [3, 1, 3, 1, 3],
         [3, 3, 3, 3, 3]
     ]
-    print(f"Test 2: {sol.trapRainWater(heightMap2)}")  # Expected: 0
+    print(f"Test 2: {sol.trapRainWater(heightMap2)}")  # Expected: 8
     
     # Test 3: Single row/col
     heightMap3 = [
@@ -111,4 +111,4 @@ if __name__ == "__main__":
         [5, 2, 2, 2, 5],
         [5, 5, 5, 5, 5]
     ]
-    print(f"Test 4: {sol.trapRainWater(heightMap4)}")  # Expected: 17
+    print(f"Test 4: {sol.trapRainWater(heightMap4)}")  # Expected: 28
