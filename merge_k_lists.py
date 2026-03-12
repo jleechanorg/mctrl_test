@@ -132,17 +132,15 @@ def merge_k_lists_divide_conquer(lists: List[Optional[ListNode]]) -> Optional[Li
         return dummy.next
 
     # Continuously merge pairs until one list remains
-    interval = 1
     while len(lists) > 1:
         merged_lists = []
 
-        for i in range(0, len(lists), interval * 2):
-            l1 = lists[i] if i < len(lists) else None
-            l2 = lists[i + interval] if i + interval < len(lists) else None
+        for i in range(0, len(lists), 2):
+            l1 = lists[i]
+            l2 = lists[i + 1] if i + 1 < len(lists) else None
             merged_lists.append(merge_two_lists(l1, l2))
 
         lists = merged_lists
-        interval *= 2
 
     return lists[0] if lists else None
 
