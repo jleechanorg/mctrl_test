@@ -58,8 +58,8 @@
       "apiKey": "minimax-oauth"
     },
     "openai-codex": {
-      "baseUrl": "https://chatgpt.com/backend-api",
-      "api": "openai-codex-responses",
+      "baseUrl": "https://api.openai.com/v1",
+      "api": "responses",
       "models": []
     }
   }

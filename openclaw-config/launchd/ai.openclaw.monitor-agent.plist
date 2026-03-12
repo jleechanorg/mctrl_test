@@ -7,17 +7,17 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/jleechan/.openclaw/monitor-agent.sh</string>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>$HOME/.openclaw/monitor-agent.sh</string>
   </array>
 
   <key>EnvironmentVariables</key>
   <dict>
-    <key>HOME</key>
-    <string>/Users/jleechan</string>
     <key>PATH</key>
-    <string>/Users/jleechan/.nvm/versions/node/current/bin:/Users/jleechan/.nvm/versions/node/v22.22.0/bin:/Users/jleechan/Library/pnpm:/Users/jleechan/.bun/bin:/Users/jleechan/.local/bin:/Users/jleechan/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>OPENCLAW_MONITOR_SLACK_TARGET</key>
-    <string>C0AJQ5M0A0Y</string>
+    <string>${OPENCLAW_MONITOR_SLACK_TARGET}</string>
   </dict>
 
   <key>StartInterval</key>
@@ -27,8 +27,8 @@
   <true/>
 
   <key>StandardOutPath</key>
-  <string>/Users/jleechan/.openclaw/logs/monitor-agent.log</string>
+  <string>/tmp/openclaw-monitor-agent.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/jleechan/.openclaw/logs/monitor-agent.log</string>
+  <string>/tmp/openclaw-monitor-agent.log</string>
 </dict>
 </plist>
