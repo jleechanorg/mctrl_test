@@ -13,5 +13,4 @@ python hello.py
 ```bash
 pytest test_hello.py -v
 ```
-
 Loop5 E2E test touchpoint.
