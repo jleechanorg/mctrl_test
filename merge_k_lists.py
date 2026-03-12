@@ -91,12 +91,20 @@ def merge_k_lists_divide_conquer(lists: list[Optional[ListNode]]) -> Optional[Li
         if not b:
             return a
 
-        if a.val <= b.val:
-            a.next = merge_two(a.next, b)
-            return a
-        else:
-            b.next = merge_two(a, b.next)
-            return b
+        dummy = ListNode()
+        current = dummy
+
+        while a and b:
+            if a.val <= b.val:
+                current.next = a
+                a = a.next
+            else:
+                current.next = b
+                b = b.next
+            current = current.next
+
+        current.next = a if a else b
+        return dummy.next
 
     # Repeatedly merge adjacent pairs until one list remains
     while len(lists) > 1:
