@@ -100,17 +100,21 @@ def merge_k_lists_divide_conquer(lists: List[Optional[ListNode]]) -> Optional[Li
 
     def merge_two(a: Optional[ListNode], b: Optional[ListNode]) -> Optional[ListNode]:
         """Merge two sorted linked lists."""
-        if not a:
-            return b
-        if not b:
-            return a
+        dummy = ListNode(0)
+        current = dummy
 
-        if a.val <= b.val:
-            a.next = merge_two(a.next, b)
-            return a
-        else:
-            b.next = merge_two(a, b.next)
-            return b
+        while a and b:
+            if a.val <= b.val:
+                current.next = a
+                a = a.next
+            else:
+                current.next = b
+                b = b.next
+            current = current.next
+
+        current.next = a if a else b
+
+        return dummy.next
 
     # Repeatedly merge pairs of lists
     while len(lists) > 1:
