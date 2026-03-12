@@ -2,6 +2,8 @@
 
 Python hello-world project used for mctrl orchestration testing.
 
+E2E Loop5 validation line.
+
 ## Usage
 
 ```bash
