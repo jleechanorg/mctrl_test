@@ -16,8 +16,6 @@
   <dict>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-    <key>OPENCLAW_MONITOR_SLACK_TARGET</key>
-    <string>${OPENCLAW_MONITOR_SLACK_TARGET}</string>
   </dict>
 
   <key>StartInterval</key>

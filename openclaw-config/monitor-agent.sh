@@ -12,7 +12,7 @@ LOCK_STALE_SECONDS="${OPENCLAW_MONITOR_LOCK_STALE_SECONDS:-7200}"
 export PATH="$HOME/.nvm/versions/node/current/bin:$HOME/.nvm/versions/node/v22.22.0/bin:$HOME/Library/pnpm:$HOME/.bun/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 OPENCLAW_BIN="$(command -v openclaw || true)"
-ALERT_SLACK_TARGET="${OPENCLAW_MONITOR_SLACK_TARGET:-}"
+ALERT_SLACK_TARGET="${OPENCLAW_MONITOR_SLACK_TARGET:-C0AJQ5M0A0Y}"
 
 ts() {
   date '+%Y-%m-%d %H:%M:%S'
@@ -106,20 +106,20 @@ if [ "$AGENT_RC" -ne 0 ]; then
   exit "$AGENT_RC"
 fi
 
-if grep -q "STATUS=GOOD" <<<"$REPORT"; then
+if grep -q "STATUS=PROBLEM" <<<"$REPORT"; then
   if [ -z "$ALERT_SLACK_TARGET" ]; then
-    log "STATUS=GOOD but OPENCLAW_MONITOR_SLACK_TARGET is unset; Slack delivery skipped."
+    log "STATUS=PROBLEM but OPENCLAW_MONITOR_SLACK_TARGET is unset; Slack delivery skipped."
     printf '%s\n' "$REPORT" >> "$LOG_FILE"
     exit 0
   fi
   if "$OPENCLAW_BIN" message send --channel slack --target "$ALERT_SLACK_TARGET" --message "$REPORT" >> "$LOG_FILE" 2>&1; then
-    log "Monitoring agent reported STATUS=GOOD and delivered to Slack target ${ALERT_SLACK_TARGET}."
+    log "Monitoring agent reported STATUS=PROBLEM and delivered to Slack target ${ALERT_SLACK_TARGET}."
   else
-    log "Monitoring agent reported STATUS=GOOD but Slack delivery failed."
+    log "Monitoring agent reported STATUS=PROBLEM but Slack delivery failed."
     exit 1
   fi
 else
-  log "Monitoring agent reported non-GOOD status; Slack delivery suppressed."
+  log "Monitoring agent reported non-PROBLEM status; Slack delivery suppressed."
   printf '%s\n' "$REPORT" >> "$LOG_FILE"
 fi
 
