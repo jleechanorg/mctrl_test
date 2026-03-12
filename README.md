@@ -101,7 +101,7 @@ Tracked baseline for `~/.openclaw/`. Changes here should be synced to `~/.opencl
 | `SLACK_SETUP_GUIDE.md` | Slack app and token setup |
 | `HEARTBEAT.md` | Heartbeat / health-check protocol |
 | `security-policy.md` | Tool execution security policy |
-| `skills/` | Custom openclaw skills (agent-browser, moltbook) |
+| `skills/` | Custom openclaw skills (agent-browser, moltbook, sym, agento) |
 | `agents/` | Per-agent config and session state |
 | `canvas/`, `completions/`, `extensions/` | OpenClaw runtime dirs |
 
@@ -129,6 +129,10 @@ Tracked baseline for `~/.openclaw/`. Changes here should be synced to `~/.opencl
 | `check-openclaw-cron-guardrail.sh` | CI guardrail: launchd-only scheduling for repo-managed OpenClaw jobs |
 | `setup-openclaw-full.sh` | Full first-time OpenClaw setup |
 | `install-launchagents.sh` | Install all openclaw launchd plists from `openclaw-config/` |
+| `install-symphony-daemon.sh` | Install/start the launchd-managed Symphony daemon used by `sym` routing |
+| `sym-dispatch.sh` | Queue a freeform task or plugin payload into the Symphony daemon |
+| `sym-send-5-leetcode-hard.sh` | Queue the default 5 LeetCode Hard tasks via Symphony plugin |
+| `sym-send-5-swebench-verified.sh` | Queue the default 5 SWE-bench Verified tasks via Symphony plugin |
 | `claude_start.sh` | Start Claude Code agent session |
 | `push.sh` | Safe push with branch verification |
 | `sync_branch.sh` | Sync branch with upstream |

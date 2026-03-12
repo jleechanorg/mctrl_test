@@ -1,0 +1,34 @@
+{
+  "instances": [
+    {
+      "instance_id": "django__django-13757",
+      "repo": "django/django",
+      "base_commit": "abc123def456",
+      "problem_statement": "Fix incorrect handling of queryset slicing in admin changelist."
+    },
+    {
+      "instance_id": "psf__requests-1142",
+      "repo": "psf/requests",
+      "base_commit": "def789abc123",
+      "problem_statement": "Handle malformed chunked transfer responses safely."
+    },
+    {
+      "instance_id": "pallets__flask-5100",
+      "repo": "pallets/flask",
+      "base_commit": "1a2b3c4d5e6f",
+      "problem_statement": "Correct blueprint URL prefix merge edge case."
+    },
+    {
+      "instance_id": "sympy__sympy-24238",
+      "repo": "sympy/sympy",
+      "base_commit": "ffeeddccbbaa",
+      "problem_statement": "Prevent incorrect simplification in nested Piecewise expressions."
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-26125",
+      "repo": "scikit-learn/scikit-learn",
+      "base_commit": "a1b2c3d4e5f6",
+      "problem_statement": "Fix stale estimator tags in meta-estimator wrappers."
+    }
+  ]
+}

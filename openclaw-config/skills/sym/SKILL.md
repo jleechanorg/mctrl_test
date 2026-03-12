@@ -1,0 +1,47 @@
+---
+name: sym
+version: 1.0.0
+description: Route tasks to the launchd-managed Symphony daemon when the user says "sym".
+---
+
+# sym
+
+Use this skill when the user's message contains the word **sym**.
+
+## Goal
+
+Dispatch coding tasks through the local Symphony daemon instead of mctrl/agento.
+
+## Commands
+
+Freeform task dispatch:
+
+```bash
+scripts/sym-dispatch.sh "<task text>"
+```
+
+Plugin dispatch:
+
+```bash
+scripts/sym-dispatch.sh --plugin <plugin_name> <input_json>
+```
+
+Install or repair daemon:
+
+```bash
+scripts/install-symphony-daemon.sh
+```
+
+## Plugin examples
+
+```bash
+scripts/sym-send-5-leetcode-hard.sh
+scripts/sym-send-5-swebench-verified.sh
+```
+
+## Behavior contract
+
+1. Parse the task text that follows `sym`.
+2. Run `scripts/sym-dispatch.sh` with that task.
+3. Reply with a concrete dispatch result (plugin, issue count, queue status).
+4. If daemon metadata is missing, install daemon first via `scripts/install-symphony-daemon.sh`.
