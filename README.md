@@ -13,3 +13,5 @@ python hello.py
 ```bash
 pytest test_hello.py -v
 ```
+
+E2E loop marker: 2026-03-12.
