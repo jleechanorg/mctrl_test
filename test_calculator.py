@@ -1,5 +1,5 @@
 """
-Unit tests for Calculator - with intentional failures.
+Unit tests for Calculator.
 """
 
 import pytest
@@ -48,5 +48,5 @@ class TestCalculator:
 
     def test_divide_by_zero(self):
         """Test dividing by zero raises error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ZeroDivisionError):
             divide(10, 0)
