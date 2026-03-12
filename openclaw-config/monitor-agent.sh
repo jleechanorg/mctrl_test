@@ -52,12 +52,25 @@ ACTIVE PROBLEMS:
 HISTORICAL CONTEXT:
 - ... (optional)"
 
-if "$OPENCLAW_BIN" agent --agent monitor --message "$PROMPT" --deliver --reply-channel slack --reply-to "$ALERT_SLACK_TARGET" >> "$LOG_FILE" 2>&1; then
-  log "Monitoring agent completed and delivered to Slack target ${ALERT_SLACK_TARGET}."
+REPORT="$("$OPENCLAW_BIN" agent --agent monitor --message "$PROMPT" 2>&1)"
+AGENT_RC=$?
+
+if [ "$AGENT_RC" -ne 0 ]; then
+  log "Monitoring agent run failed (suppressed Slack). rc=${AGENT_RC}"
+  printf '%s\n' "$REPORT" >> "$LOG_FILE"
+  exit "$AGENT_RC"
+fi
+
+if grep -q "STATUS=GOOD" <<<"$REPORT"; then
+  if "$OPENCLAW_BIN" message send --channel slack --target "$ALERT_SLACK_TARGET" --message "$REPORT" >> "$LOG_FILE" 2>&1; then
+    log "Monitoring agent reported STATUS=GOOD and delivered to Slack target ${ALERT_SLACK_TARGET}."
+  else
+    log "Monitoring agent reported STATUS=GOOD but Slack delivery failed."
+    exit 1
+  fi
 else
-  log "Monitoring agent run failed. Sending fallback Slack alert."
-  "$OPENCLAW_BIN" message send --channel slack --target "$ALERT_SLACK_TARGET" --message ":warning: OpenClaw monitoring agent failed. Check ~/.openclaw/logs/monitor-agent.log" >> "$LOG_FILE" 2>&1 || true
-  exit 1
+  log "Monitoring agent reported non-GOOD status; Slack delivery suppressed."
+  printf '%s\n' "$REPORT" >> "$LOG_FILE"
 fi
 
 exit 0
