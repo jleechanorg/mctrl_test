@@ -12,8 +12,9 @@ SLICE_INDEX_FILE="$STATE_DIR/stress_test_slice_index"
 OUTCOME_LOG="$STATE_DIR/stress_test_outcomes.jsonl"
 LOG_FILE="$HOME/.openclaw/logs/stress_test.log"
 
-# Create log directory
+# Create log and state directories
 mkdir -p "$(dirname "$LOG_FILE")"
+mkdir -p "$STATE_DIR"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"

@@ -78,7 +78,7 @@ get_pr_state() {
     # Query GitHub API for PRs with this branch as head
     local response
     response=$(curl -s -H "Authorization:Bearer $GH_TOKEN" \
-        "https://api.github.com/repos/$REPO/pulls?head=$branch&state=all" 2>/dev/null)
+        "https://api.github.com/repos/$REPO/pulls?head=jleechanorg:$branch&state=all" 2>/dev/null)
     
     if [[ -z "$response" || "$response" == "[]" ]]; then
         echo "none"
