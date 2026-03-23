@@ -37,7 +37,7 @@ class TestLargestRectangleArea:
     def test_increasing_heights(self):
         """Test with strictly increasing heights."""
         heights = [1, 2, 3, 4, 5]
-        assert largest_rectangle_area(heights) == 9  # 3*3 or 4*2+1
+        assert largest_rectangle_area(heights) == 9  # 3 bars of height 3,4,5: 3*3
 
     def test_decreasing_heights(self):
         """Test with strictly decreasing heights."""

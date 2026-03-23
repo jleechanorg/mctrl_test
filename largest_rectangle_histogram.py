@@ -79,24 +79,13 @@ def largest_rectangle_area_brute(heights: List[int]) -> int:
     return max_area
 
 
-# Definition for ListNode (if we need to compare with merge-k-lists)
-class ListNode:
-    """Definition for singly-linked list node."""
-    def __init__(self, val: int = 0, next: 'ListNode' = None):
-        self.val = val
-        self.next = next
-
-    def __repr__(self):
-        return f"ListNode({self.val})"
-
-
 if __name__ == "__main__":
     # Test cases
     test_cases = [
         ([2, 1, 5, 6, 2, 3], 10),  # Expected: 10
         ([2, 4], 4),               # Expected: 4
         ([1], 1),                  # Expected: 1
-        ([1, 1], 1),               # Expected: 1 (both bars same height)
+        ([1, 1], 2),               # Expected: 2 (both bars height 1, width 2)
         ([0, 0], 0),               # Expected: 0
         ([2, 1, 2], 3),           # Expected: 3
         ([1, 2, 3, 4, 5], 9),     # Expected: 9
