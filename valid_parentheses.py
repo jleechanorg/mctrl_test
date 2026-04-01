@@ -7,8 +7,12 @@ determine if the input string is valid.
 from __future__ import annotations
 
 
-def is_valid(s: str) -> bool:
-    """Stack-based O(n) time, O(n) space."""
+def valid_parentheses(s: str) -> bool:
+    """
+    Return True iff ``s`` is a valid bracket string.
+
+    Only ``()[]{}`` are allowed; any other character makes the string invalid.
+    """
     pairs = {")": "(", "}": "{", "]": "["}
     stack: list[str] = []
     for ch in s:
