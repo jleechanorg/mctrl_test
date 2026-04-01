@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hello import farewell, hello
+from hello import farewell, greet, hello
 
 
 def test_hello_default():
@@ -27,3 +27,11 @@ def test_goodbye_default():
 def test_goodbye_custom_name():
     """Test farewell function with a custom name."""
     assert farewell("Alice") == "Farewell, Alice!"
+
+
+def test_greet_world():
+    assert greet("World") == "Hello, World!"
+
+
+def test_greet_name():
+    assert greet("Jeffrey") == "Hello, Jeffrey!"
