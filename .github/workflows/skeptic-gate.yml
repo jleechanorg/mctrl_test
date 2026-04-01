@@ -90,7 +90,7 @@ jobs:
             while [ $i -lt "$REQ_COUNT" ]; do
               NM=$(echo "$NAMES_JSON" | jq -r ".[$i]")
               # Latest *completed* conclusion per check name (ignores queued in-flight reruns).
-              CONC=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
+              CONC=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
                 --jq --arg n "$NM" '[.check_runs[] | select(.name == $n and .status == "completed")] | sort_by(.completed_at) | reverse | .[0].conclusion // "missing"' 2>/dev/null || echo "__api_error__")
               if [ "$CONC" = "__api_error__" ]; then
                 CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
@@ -101,9 +101,9 @@ jobs:
                   CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
                 fi
               else
-                INFLIGHT=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
+                INFLIGHT=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
                   --jq --arg n "$NM" '[.check_runs[] | select(.name == $n and .status != "completed")] | length' 2>/dev/null || echo "0")
-                ANY=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
+                ANY=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
                   --jq --arg n "$NM" '[.check_runs[] | select(.name == $n)] | length' 2>/dev/null || echo "0")
                 if [ "${INFLIGHT:-0}" -gt 0 ] || [ "${ANY:-0}" -eq 0 ]; then
                   CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
@@ -132,7 +132,7 @@ jobs:
           i=0
           while [ $i -lt "$REQ_COUNT" ]; do
             NM=$(echo "$NAMES_JSON" | jq -r ".[$i]")
-            CONC=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
+            CONC=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
               --jq --arg n "$NM" '[.check_runs[] | select(.name == $n and .status == "completed")] | sort_by(.completed_at) | reverse | .[0].conclusion // "missing"' 2>/dev/null || echo "__api_error__")
             if [ "$CONC" = "__api_error__" ]; then
               CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
@@ -143,9 +143,9 @@ jobs:
                 CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
               fi
             else
-              INFLIGHT=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
+              INFLIGHT=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
                 --jq --arg n "$NM" '[.check_runs[] | select(.name == $n and .status != "completed")] | length' 2>/dev/null || echo "0")
-              ANY=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
+              ANY=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
                 --jq --arg n "$NM" '[.check_runs[] | select(.name == $n)] | length' 2>/dev/null || echo "0")
               if [ "${INFLIGHT:-0}" -gt 0 ] || [ "${ANY:-0}" -eq 0 ]; then
                 CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
@@ -231,7 +231,7 @@ jobs:
           # for "error" produces false positives (review comments about
           # error handling match the pattern).
           # ----------------------------------------------------------------
-          BUGBOT_CONCLUSION=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs \
+          BUGBOT_CONCLUSION=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
             --jq '[.check_runs[] | select(.name == "Cursor Bugbot")] | sort_by(.started_at) | reverse | .[0].conclusion // "none"' \
             2>/dev/null || echo "none")
 
