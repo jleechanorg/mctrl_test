@@ -86,29 +86,32 @@ jobs:
             CHECK_RUNS_FAILED=0
             CHECK_RUNS_PENDING=0
             TOTAL_CHECKS=0
+            CR_JSON=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" 2>/dev/null) || CR_JSON=""
             i=0
             while [ $i -lt "$REQ_COUNT" ]; do
               NM=$(echo "$NAMES_JSON" | jq -r ".[$i]")
-              # Latest *completed* conclusion per check name (ignores queued in-flight reruns).
-              CONC=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
-                --jq --arg n "$NM" '[.check_runs[] | select(.name == $n and .status == "completed")] | sort_by(.completed_at) | reverse | .[0].conclusion // "missing"' 2>/dev/null || echo "__api_error__")
-              if [ "$CONC" = "__api_error__" ]; then
+              # gh --jq --arg is unreliable in GHA; pipe raw JSON to jq.
+              if [ -z "$CR_JSON" ]; then
                 CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
-              elif [ "$CONC" != "missing" ]; then
-                if [ "$CONC" = "success" ] || [ "$CONC" = "skipped" ] || [ "$CONC" = "neutral" ] || [ "$CONC" = "cancelled" ]; then
-                  TOTAL_CHECKS=$((TOTAL_CHECKS+1))
-                else
-                  CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
-                fi
               else
-                INFLIGHT=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
-                  --jq --arg n "$NM" '[.check_runs[] | select(.name == $n and .status != "completed")] | length' 2>/dev/null || echo "0")
-                ANY=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
-                  --jq --arg n "$NM" '[.check_runs[] | select(.name == $n)] | length' 2>/dev/null || echo "0")
-                if [ "${INFLIGHT:-0}" -gt 0 ] || [ "${ANY:-0}" -eq 0 ]; then
+                CONC=$(printf '%s' "$CR_JSON" | jq -r --arg n "$NM" \
+                  '[.check_runs[]? | select(.name == $n and .status == "completed")] | sort_by(.completed_at) | reverse | .[0].conclusion // "missing"' 2>/dev/null || echo "__jq_error__")
+                if [ "$CONC" = "__jq_error__" ]; then
                   CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
+                elif [ "$CONC" != "missing" ]; then
+                  if [ "$CONC" = "success" ] || [ "$CONC" = "skipped" ] || [ "$CONC" = "neutral" ] || [ "$CONC" = "cancelled" ]; then
+                    TOTAL_CHECKS=$((TOTAL_CHECKS+1))
+                  else
+                    CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
+                  fi
                 else
-                  CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
+                  INFLIGHT=$(printf '%s' "$CR_JSON" | jq -r --arg n "$NM" '[.check_runs[]? | select(.name == $n and .status != "completed")] | length' 2>/dev/null || echo "0")
+                  ANY=$(printf '%s' "$CR_JSON" | jq -r --arg n "$NM" '[.check_runs[]? | select(.name == $n)] | length' 2>/dev/null || echo "0")
+                  if [ "${INFLIGHT:-0}" -gt 0 ] || [ "${ANY:-0}" -eq 0 ]; then
+                    CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
+                  else
+                    CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
+                  fi
                 fi
               fi
               i=$((i+1))
@@ -129,28 +132,31 @@ jobs:
           CHECK_RUNS_FAILED=0
           CHECK_RUNS_PENDING=0
           TOTAL_CHECKS=0
+          CR_JSON=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" 2>/dev/null) || CR_JSON=""
           i=0
           while [ $i -lt "$REQ_COUNT" ]; do
             NM=$(echo "$NAMES_JSON" | jq -r ".[$i]")
-            CONC=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
-              --jq --arg n "$NM" '[.check_runs[] | select(.name == $n and .status == "completed")] | sort_by(.completed_at) | reverse | .[0].conclusion // "missing"' 2>/dev/null || echo "__api_error__")
-            if [ "$CONC" = "__api_error__" ]; then
+            if [ -z "$CR_JSON" ]; then
               CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
-            elif [ "$CONC" != "missing" ]; then
-              if [ "$CONC" = "success" ] || [ "$CONC" = "skipped" ] || [ "$CONC" = "neutral" ] || [ "$CONC" = "cancelled" ]; then
-                TOTAL_CHECKS=$((TOTAL_CHECKS+1))
-              else
-                CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
-              fi
             else
-              INFLIGHT=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
-                --jq --arg n "$NM" '[.check_runs[] | select(.name == $n and .status != "completed")] | length' 2>/dev/null || echo "0")
-              ANY=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
-                --jq --arg n "$NM" '[.check_runs[] | select(.name == $n)] | length' 2>/dev/null || echo "0")
-              if [ "${INFLIGHT:-0}" -gt 0 ] || [ "${ANY:-0}" -eq 0 ]; then
+              CONC=$(printf '%s' "$CR_JSON" | jq -r --arg n "$NM" \
+                '[.check_runs[]? | select(.name == $n and .status == "completed")] | sort_by(.completed_at) | reverse | .[0].conclusion // "missing"' 2>/dev/null || echo "__jq_error__")
+              if [ "$CONC" = "__jq_error__" ]; then
                 CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
+              elif [ "$CONC" != "missing" ]; then
+                if [ "$CONC" = "success" ] || [ "$CONC" = "skipped" ] || [ "$CONC" = "neutral" ] || [ "$CONC" = "cancelled" ]; then
+                  TOTAL_CHECKS=$((TOTAL_CHECKS+1))
+                else
+                  CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
+                fi
               else
-                CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
+                INFLIGHT=$(printf '%s' "$CR_JSON" | jq -r --arg n "$NM" '[.check_runs[]? | select(.name == $n and .status != "completed")] | length' 2>/dev/null || echo "0")
+                ANY=$(printf '%s' "$CR_JSON" | jq -r --arg n "$NM" '[.check_runs[]? | select(.name == $n)] | length' 2>/dev/null || echo "0")
+                if [ "${INFLIGHT:-0}" -gt 0 ] || [ "${ANY:-0}" -eq 0 ]; then
+                  CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
+                else
+                  CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
+                fi
               fi
             fi
             i=$((i+1))
@@ -231,9 +237,8 @@ jobs:
           # for "error" produces false positives (review comments about
           # error handling match the pattern).
           # ----------------------------------------------------------------
-          BUGBOT_CONCLUSION=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
-            --jq '[.check_runs[] | select(.name == "Cursor Bugbot")] | sort_by(.started_at) | reverse | .[0].conclusion // "none"' \
-            2>/dev/null || echo "none")
+          CR_BUG=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" 2>/dev/null) || CR_BUG=""
+          BUGBOT_CONCLUSION=$(printf '%s' "$CR_BUG" | jq -r '[.check_runs[]? | select(.name == "Cursor Bugbot")] | sort_by(.started_at) | reverse | .[0].conclusion // "none"' 2>/dev/null || echo "none")
 
           if [ "$BUGBOT_CONCLUSION" = "failure" ]; then
             GATE4="FAIL"
