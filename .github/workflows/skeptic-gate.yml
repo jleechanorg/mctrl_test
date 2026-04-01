@@ -89,18 +89,27 @@ jobs:
             i=0
             while [ $i -lt "$REQ_COUNT" ]; do
               NM=$(echo "$NAMES_JSON" | jq -r ".[$i]")
-              ROW=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
-                --jq --arg n "$NM" '[.check_runs[] | select(.name == $n)] | sort_by(.started_at) | reverse | .[0]' 2>/dev/null || echo "null")
-              STAT=$(echo "$ROW" | jq -r '.status // "missing"')
-              CONC=$(echo "$ROW" | jq -r '.conclusion // "missing"')
-              if [ "$STAT" = "missing" ] || [ "$STAT" = "null" ]; then
+              # Latest *completed* conclusion per check name (ignores queued in-flight reruns).
+              CONC=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
+                --jq --arg n "$NM" '[.check_runs[] | select(.name == $n and .status == "completed")] | sort_by(.completed_at) | reverse | .[0].conclusion // "missing"' 2>/dev/null || echo "__api_error__")
+              if [ "$CONC" = "__api_error__" ]; then
                 CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
-              elif [ "$STAT" != "completed" ]; then
-                CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
-              elif [ "$CONC" != "success" ] && [ "$CONC" != "skipped" ] && [ "$CONC" != "neutral" ] && [ "$CONC" != "cancelled" ]; then
-                CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
+              elif [ "$CONC" != "missing" ]; then
+                if [ "$CONC" = "success" ] || [ "$CONC" = "skipped" ] || [ "$CONC" = "neutral" ] || [ "$CONC" = "cancelled" ]; then
+                  TOTAL_CHECKS=$((TOTAL_CHECKS+1))
+                else
+                  CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
+                fi
               else
-                TOTAL_CHECKS=$((TOTAL_CHECKS+1))
+                INFLIGHT=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
+                  --jq --arg n "$NM" '[.check_runs[] | select(.name == $n and .status != "completed")] | length' 2>/dev/null || echo "0")
+                ANY=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
+                  --jq --arg n "$NM" '[.check_runs[] | select(.name == $n)] | length' 2>/dev/null || echo "0")
+                if [ "${INFLIGHT:-0}" -gt 0 ] || [ "${ANY:-0}" -eq 0 ]; then
+                  CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
+                else
+                  CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
+                fi
               fi
               i=$((i+1))
             done
@@ -123,18 +132,26 @@ jobs:
           i=0
           while [ $i -lt "$REQ_COUNT" ]; do
             NM=$(echo "$NAMES_JSON" | jq -r ".[$i]")
-            ROW=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
-              --jq --arg n "$NM" '[.check_runs[] | select(.name == $n)] | sort_by(.started_at) | reverse | .[0]' 2>/dev/null || echo "null")
-            STAT=$(echo "$ROW" | jq -r '.status // "missing"')
-            CONC=$(echo "$ROW" | jq -r '.conclusion // "missing"')
-            if [ "$STAT" = "missing" ] || [ "$STAT" = "null" ]; then
+            CONC=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
+              --jq --arg n "$NM" '[.check_runs[] | select(.name == $n and .status == "completed")] | sort_by(.completed_at) | reverse | .[0].conclusion // "missing"' 2>/dev/null || echo "__api_error__")
+            if [ "$CONC" = "__api_error__" ]; then
               CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
-            elif [ "$STAT" != "completed" ]; then
-              CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
-            elif [ "$CONC" != "success" ] && [ "$CONC" != "skipped" ] && [ "$CONC" != "neutral" ] && [ "$CONC" != "cancelled" ]; then
-              CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
+            elif [ "$CONC" != "missing" ]; then
+              if [ "$CONC" = "success" ] || [ "$CONC" = "skipped" ] || [ "$CONC" = "neutral" ] || [ "$CONC" = "cancelled" ]; then
+                TOTAL_CHECKS=$((TOTAL_CHECKS+1))
+              else
+                CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
+              fi
             else
-              TOTAL_CHECKS=$((TOTAL_CHECKS+1))
+              INFLIGHT=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
+                --jq --arg n "$NM" '[.check_runs[] | select(.name == $n and .status != "completed")] | length' 2>/dev/null || echo "0")
+              ANY=$(gh api repos/${{ github.repository }}/commits/"$HEAD_SHA"/check-runs --paginate \
+                --jq --arg n "$NM" '[.check_runs[] | select(.name == $n)] | length' 2>/dev/null || echo "0")
+              if [ "${INFLIGHT:-0}" -gt 0 ] || [ "${ANY:-0}" -eq 0 ]; then
+                CHECK_RUNS_PENDING=$((CHECK_RUNS_PENDING+1))
+              else
+                CHECK_RUNS_FAILED=$((CHECK_RUNS_FAILED+1))
+              fi
             fi
             i=$((i+1))
           done
@@ -230,7 +247,13 @@ jobs:
 
           # ----------------------------------------------------------------
           # Gate 5: Inline comments resolved (GraphQL — REST lacks isResolved)
+          # Set SKEPTIC_REQUIRE_INLINE_THREADS_RESOLVED=false to skip (e.g. noisy bot threads).
           # ----------------------------------------------------------------
+          REQUIRE_INLINE_THREADS="${{ vars.SKEPTIC_REQUIRE_INLINE_THREADS_RESOLVED }}"
+          if [ "$REQUIRE_INLINE_THREADS" = "false" ]; then
+            GATE5="PASS"
+            GATE5_DETAIL="skipped (SKEPTIC_REQUIRE_INLINE_THREADS_RESOLVED=false)"
+          else
           PR_AUTHOR=$(gh api repos/${{ github.repository }}/pulls/"$PR_NUM" --jq '.user.login' 2>/dev/null || echo "")
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
           GQL_RESULT=$(gh api graphql -f query='
@@ -293,6 +316,7 @@ jobs:
           else
             GATE5="PASS"
             GATE5_DETAIL="all resolved"
+          fi
           fi
           echo "Gate 5: $GATE5 ($GATE5_DETAIL)"
           GATE_ROWS="${GATE_ROWS}| 5. Comments resolved | ${GATE5} | ${GATE5_DETAIL} |\n"
