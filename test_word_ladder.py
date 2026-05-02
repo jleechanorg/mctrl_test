@@ -28,10 +28,9 @@ def test_longer_words() -> None:
     assert ladderLength(
         "sand", "acne",
         ["sand", "and", "acnd", "acne", "sane", "ane"],
-    ) == 0  # no valid single-letter transformation path from "sand" to "acne"
+    ) == 0  # no valid single-letter transformation path
 
 
 def test_longer_chain() -> None:
-    # Same words as example_1 with "cot" detour — BFS finds hit→hot→dot→cot→cog (length 4),
-    # which is a genuinely different path from the test_example_1 chain
+    # Same words as example_1 plus "cot" — BFS finds hit→hot→dot→cot→cog (4 transformations, 5 words total)
     assert ladderLength("hit", "cog", ["hot", "dot", "dog", "lot", "log", "cot", "cog"]) == 4

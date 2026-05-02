@@ -27,8 +27,6 @@ def ladderLength(beginWord: str, endWord: str, wordList: list[str]) -> int:
     return 0
 
 
-# Snake_case alias for PEP 8 consistency with the rest of the repo
-ladder_length = ladderLength
 
 
 if __name__ == "__main__":
