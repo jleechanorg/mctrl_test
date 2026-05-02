@@ -1,5 +1,5 @@
 ---
-bead_id: placeholder
+bead_id: ORCH-d0w
 cli: claude-code
 note: proof file for ao spawn E2E test
 ---
