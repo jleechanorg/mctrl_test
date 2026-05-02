@@ -4,6 +4,8 @@ from collections import deque
 
 
 def ladderLength(beginWord: str, endWord: str, wordList: list[str]) -> int:
+    if beginWord == endWord:
+        return 1
     word_set = set(wordList)
     if endWord not in word_set:
         return 0
@@ -25,47 +27,17 @@ def ladderLength(beginWord: str, endWord: str, wordList: list[str]) -> int:
     return 0
 
 
-def test_example_1() -> None:
-    assert ladderLength("hit", "cog", ["hot", "dot", "dog", "lot", "log", "cog"]) == 5
-
-
-def test_example_2() -> None:
-    assert ladderLength("hit", "cog", ["hot", "dot", "dog", "lot", "log"]) == 0
-
-
-def test_single_step() -> None:
-    assert ladderLength("hot", "dot", ["dot"]) == 2
-
-
-def test_no_path() -> None:
-    assert ladderLength("abc", "xyz", ["abc", "xyz"]) == 0
-
-
-def test_begin_equals_end_in_list() -> None:
-    # endWord is reachable in one step
-    assert ladderLength("a", "c", ["a", "b", "c"]) == 2
-
-
-def test_longer_words() -> None:
-    assert ladderLength(
-        "sand", "acne",
-        ["sand", "and", "acnd", "acne", "sane", "ane"],
-    ) == 0  # no valid path (different lengths mixed but all same length required)
-
-
-def test_longer_chain() -> None:
-    result = ladderLength(
-        "hit", "cog",
-        ["hot", "dot", "dog", "lot", "log", "cog"],
-    )
-    assert result == 5
+# Snake_case alias for PEP 8 consistency with the rest of the repo
+ladder_length = ladderLength
 
 
 if __name__ == "__main__":
-    # Run basic verification
-    print("Example 1:", ladderLength("hit", "cog", ["hot", "dot", "dog", "lot", "log", "cog"]))
-    print("Example 2:", ladderLength("hit", "cog", ["hot", "dot", "dog", "lot", "log"]))
-    print("All tests passed!" if all([
-        ladderLength("hit", "cog", ["hot", "dot", "dog", "lot", "log", "cog"]) == 5,
-        ladderLength("hit", "cog", ["hot", "dot", "dog", "lot", "log"]) == 0,
-    ]) else "Some tests failed!")
+    # Run basic smoke checks (not a full test suite — see test_word_ladder.py)
+    examples = [
+        ("hit", "cog", ["hot", "dot", "dog", "lot", "log", "cog"], 5),
+        ("hit", "cog", ["hot", "dot", "dog", "lot", "log"], 0),
+    ]
+    for begin, end, words, expected in examples:
+        result = ladderLength(begin, end, words)
+        print(f"ladderLength({begin!r}, {end!r}, …) = {result}  (expected {expected})")
+    print("Smoke checks done.")
