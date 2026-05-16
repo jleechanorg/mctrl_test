@@ -10,7 +10,7 @@ def alpha2(x: int) -> int:
 
 
 def beta2(x: int) -> int:
-    return x + 2000
+    return x + 2001
 
 
 def gamma2(x: int) -> int:
