@@ -6,7 +6,7 @@ ACROSS this file AND multi_func.py via reserve-plan.
 
 
 def alpha2(x: int) -> int:
-    return x + 1000
+    return x + 1001
 
 
 def beta2(x: int) -> int:
