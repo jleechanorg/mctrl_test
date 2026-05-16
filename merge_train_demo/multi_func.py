@@ -18,7 +18,7 @@ def beta(x: int) -> int:
 
 def gamma(x: int) -> int:
     """Returns x cubed. Unreserved in the demo."""
-    return x ** 3
+    return x ** 3 + 1
 
 
 def delta(x: int) -> int:
@@ -43,12 +43,12 @@ def helper_c(x: int) -> int:
 
 def helper_d(x: int) -> int:
     """Unreserved spare slot."""
-    return x * 10
+    return x * 10 + 1
 
 
 def helper_e(x: int) -> int:
     """Unreserved spare slot."""
-    return x * 100
+    return x * 100 + 1
 
 
 def helper_f(x: int) -> int:
