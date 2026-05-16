@@ -1,6 +1,6 @@
 """Multi-symbol file for merge_train symbol-level lock demo.
 
-Four independent top-level functions. Used as a test target -- multiple
+Four independent top-level functions. Used as a test target — multiple
 PRs can edit DISJOINT functions concurrently under merge_train's
 symbol-level reservation scheme.
 """
@@ -12,8 +12,8 @@ def alpha(x: int) -> int:
 
 
 def beta(x: int) -> int:
-    """Returns x squared. Reserved by Worker B in the demo."""
-    return x * x
+    """Returns x squared plus 100. Reserved by Worker B in the demo."""
+    return x * x + 100
 
 
 def gamma(x: int) -> int:
