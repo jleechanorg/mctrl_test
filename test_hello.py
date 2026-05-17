@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hello import goodbye, hello
+from hello import farewell, hello
 
 
 def test_hello_default():
@@ -17,8 +17,8 @@ def test_hello_returns_string():
 
 
 def test_goodbye_default():
-    assert goodbye() == "Goodbye, world!"
+    assert farewell() == "Farewell, world!"
 
 
 def test_goodbye_custom_name():
-    assert goodbye("Alice") == "Goodbye, Alice!"
+    assert farewell("Alice") == "Farewell, Alice!"
