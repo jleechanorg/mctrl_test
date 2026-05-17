@@ -20,3 +20,5 @@
 {"domain":"algo_domain","pr":220,"agent":"claude-9","branch":"feat/release-evidence","opened_at":"2026-05-17T05:03:00Z","status":"active","closed_at":null,"note":null}
 {"domain":"algo_domain","pr":220,"agent":"claude-9","branch":"feat/release-evidence","opened_at":"2026-05-17T05:03:00Z","status":"released","closed_at":"2026-05-17T05:03:11Z","note":null}
 {"domain":"hello_domain","pr":220,"agent":"claude-9","branch":"feat/release-evidence","opened_at":"2026-05-17T05:03:00Z","status":"released","closed_at":"2026-05-17T05:03:15Z","note":null}
+{"domain":"hello_domain","pr":230,"agent":"other-agent","branch":"feat/other-pr","opened_at":"2026-05-17T05:03:41Z","status":"active","closed_at":null,"note":null}
+{"domain":"hello_domain","pr":230,"agent":"other-agent","branch":"feat/other-pr","opened_at":"2026-05-17T05:03:41Z","status":"released","closed_at":"2026-05-17T05:04:06Z","note":null}
