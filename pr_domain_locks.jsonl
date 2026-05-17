@@ -7,3 +7,4 @@
 {"domain":"hello_domain","pr":206,"agent":"claude-5","branch":"feat/hello-uppercase","opened_at":"2026-05-17T04:35:37Z","status":"active","closed_at":null,"note":null,"symbols":["hello"]}
 {"domain":"hello_domain","pr":207,"agent":"claude-6","branch":"feat/hello-goodbye-rename","opened_at":"2026-05-17T04:35:38Z","status":"active","closed_at":null,"note":null,"symbols":["goodbye"]}
 {"domain":"hello_domain","pr":206,"agent":"claude-5","branch":"feat/hello-uppercase","opened_at":"2026-05-17T04:35:37Z","status":"released","closed_at":"2026-05-17T04:36:18Z","note":null,"symbols":["hello"]}
+{"domain":"hello_domain","pr":207,"agent":"claude-6","branch":"feat/hello-goodbye-rename","opened_at":"2026-05-17T04:35:38Z","status":"released","closed_at":"2026-05-17T04:36:45Z","note":null,"symbols":["goodbye"]}
