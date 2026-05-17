@@ -8,3 +8,11 @@
 {"domain":"hello_domain","pr":207,"agent":"claude-6","branch":"feat/hello-goodbye-rename","opened_at":"2026-05-17T04:35:38Z","status":"active","closed_at":null,"note":null,"symbols":["goodbye"]}
 {"domain":"hello_domain","pr":206,"agent":"claude-5","branch":"feat/hello-uppercase","opened_at":"2026-05-17T04:35:37Z","status":"released","closed_at":"2026-05-17T04:36:18Z","note":null,"symbols":["hello"]}
 {"domain":"hello_domain","pr":207,"agent":"claude-6","branch":"feat/hello-goodbye-rename","opened_at":"2026-05-17T04:35:38Z","status":"released","closed_at":"2026-05-17T04:36:45Z","note":null,"symbols":["goodbye"]}
+{"domain":"proofs_domain","pr":210,"agent":"claude-7","branch":"feat/proofs-placeholder","opened_at":"2026-05-17T04:36:50Z","status":"active","closed_at":null,"note":null}
+{"domain":"hello_domain","pr":211,"agent":"claude-8","branch":"feat/plan-rollback-test","opened_at":"2026-05-17T04:36:58Z","status":"active","closed_at":null,"note":null}
+{"domain":"hello_domain","pr":211,"agent":"claude-8","branch":"feat/plan-rollback-test","opened_at":"2026-05-17T04:36:58Z","status":"released","closed_at":"2026-05-17T04:36:58Z","note":"rollback:reserve_plan"}
+{"domain":"proofs_domain","pr":210,"agent":"claude-7","branch":"feat/proofs-placeholder","opened_at":"2026-05-17T04:36:50Z","status":"released","closed_at":"2026-05-17T04:37:04Z","note":null}
+{"domain":"hello_domain","pr":211,"agent":"claude-8","branch":"feat/plan-rollback-test","opened_at":"2026-05-17T04:37:07Z","status":"active","closed_at":null,"note":null}
+{"domain":"proofs_domain","pr":211,"agent":"claude-8","branch":"feat/plan-rollback-test","opened_at":"2026-05-17T04:37:07Z","status":"active","closed_at":null,"note":null}
+{"domain":"hello_domain","pr":211,"agent":"claude-8","branch":"feat/plan-rollback-test","opened_at":"2026-05-17T04:37:07Z","status":"released","closed_at":"2026-05-17T04:37:10Z","note":null}
+{"domain":"proofs_domain","pr":211,"agent":"claude-8","branch":"feat/plan-rollback-test","opened_at":"2026-05-17T04:37:07Z","status":"released","closed_at":"2026-05-17T04:37:10Z","note":null}
