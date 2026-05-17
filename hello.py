@@ -6,9 +6,9 @@ def hello(name: str = "world") -> str:
     return f"HELLO, {name.upper()}!"
 
 
-def goodbye(name: str = "world") -> str:
-    """Return a goodbye greeting."""
-    return f"Goodbye, {name}!"
+def farewell(name: str = "world") -> str:
+    """Return a farewell greeting."""
+    return f"Farewell, {name}!"
 
 
 if __name__ == "__main__":
