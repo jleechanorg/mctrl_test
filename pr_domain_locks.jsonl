@@ -16,3 +16,7 @@
 {"domain":"proofs_domain","pr":211,"agent":"claude-8","branch":"feat/plan-rollback-test","opened_at":"2026-05-17T04:37:07Z","status":"active","closed_at":null,"note":null}
 {"domain":"hello_domain","pr":211,"agent":"claude-8","branch":"feat/plan-rollback-test","opened_at":"2026-05-17T04:37:07Z","status":"released","closed_at":"2026-05-17T04:37:10Z","note":null}
 {"domain":"proofs_domain","pr":211,"agent":"claude-8","branch":"feat/plan-rollback-test","opened_at":"2026-05-17T04:37:07Z","status":"released","closed_at":"2026-05-17T04:37:10Z","note":null}
+{"domain":"hello_domain","pr":220,"agent":"claude-9","branch":"feat/release-evidence","opened_at":"2026-05-17T05:03:00Z","status":"active","closed_at":null,"note":null}
+{"domain":"algo_domain","pr":220,"agent":"claude-9","branch":"feat/release-evidence","opened_at":"2026-05-17T05:03:00Z","status":"active","closed_at":null,"note":null}
+{"domain":"algo_domain","pr":220,"agent":"claude-9","branch":"feat/release-evidence","opened_at":"2026-05-17T05:03:00Z","status":"released","closed_at":"2026-05-17T05:03:11Z","note":null}
+{"domain":"hello_domain","pr":220,"agent":"claude-9","branch":"feat/release-evidence","opened_at":"2026-05-17T05:03:00Z","status":"released","closed_at":"2026-05-17T05:03:15Z","note":null}
