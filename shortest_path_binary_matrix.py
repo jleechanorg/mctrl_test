@@ -17,18 +17,7 @@ from typing import List
 
 
 def shortest_path_binary_matrix(grid: List[List[int]]) -> int:
-    """
-    Find the shortest path from top-left to bottom-right in a binary matrix.
-
-    Uses BFS since all edges have equal weight (unweighted graph).
-    8-directional movement is allowed (including diagonals).
-
-    Args:
-        grid: n x n binary matrix where 0 = empty, 1 = blocked
-
-    Returns:
-        Length of shortest path, or -1 if no valid path exists
-    """
+    """Find shortest path via BFS in a binary matrix (8-directional)."""
     n = len(grid)
 
     # Edge cases: start or end is blocked
