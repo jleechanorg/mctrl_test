@@ -102,11 +102,9 @@ def shortest_path_binary_matrix_dfs(grid: List[List[int]]) -> int:
     def dfs(row: int, col: int, length: int) -> None:
         nonlocal min_path
 
-        # Prune if current path is already longer than best
         if length >= min_path:
             return
 
-        # Found destination
         if row == n - 1 and col == n - 1:
             min_path = length
             return
@@ -123,6 +121,11 @@ def shortest_path_binary_matrix_dfs(grid: List[List[int]]) -> int:
 
     dfs(0, 0, 1)
     return min_path if min_path != float('inf') else -1
+
+
+def has_path(grid: List[List[int]]) -> bool:
+    """Return True if any clear path exists from top-left to bottom-right."""
+    return shortest_path_binary_matrix(grid) != -1
 
 
 if __name__ == "__main__":

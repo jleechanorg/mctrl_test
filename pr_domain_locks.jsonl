@@ -1,2 +1,5 @@
 {"domain":"hello_domain","pr":202,"agent":"claude-1","branch":"feat/hello-greeting-v2","opened_at":"2026-05-17T04:32:52Z","status":"active","closed_at":null,"note":null}
 {"domain":"hello_domain","pr":202,"agent":"claude-1","branch":"feat/hello-greeting-v2","opened_at":"2026-05-17T04:32:52Z","status":"released","closed_at":"2026-05-17T04:34:32Z","note":null}
+{"domain":"algo_domain","pr":203,"agent":"claude-2","branch":"feat/algo-bfs-optimization","opened_at":"2026-05-17T04:34:45Z","status":"active","closed_at":null,"note":null}
+{"domain":"hello_domain","pr":205,"agent":"claude-4","branch":"feat/hello-parallel","opened_at":"2026-05-17T04:34:59Z","status":"active","closed_at":null,"note":null}
+{"domain":"hello_domain","pr":205,"agent":"claude-4","branch":"feat/hello-parallel","opened_at":"2026-05-17T04:34:59Z","status":"released","closed_at":"2026-05-17T04:35:02Z","note":null}
