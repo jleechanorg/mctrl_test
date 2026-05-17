@@ -4,11 +4,11 @@ from hello import goodbye, hello
 
 
 def test_hello_default():
-    assert hello() == "Hello, world!"
+    assert hello() == "HELLO, WORLD!"
 
 
 def test_hello_custom_name():
-    assert hello("Alice") == "Hello, Alice!"
+    assert hello("Alice") == "HELLO, ALICE!"
 
 
 def test_hello_returns_string():
