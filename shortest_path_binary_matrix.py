@@ -128,6 +128,11 @@ def has_path(grid: List[List[int]]) -> bool:
     return shortest_path_binary_matrix(grid) != -1
 
 
+def grid_size(grid: List[List[int]]) -> int:
+    """Return the size N of an NxN grid (0 for empty)."""
+    return len(grid) if grid else 0
+
+
 if __name__ == "__main__":
     # Example 1
     grid1 = [
