@@ -37,7 +37,7 @@ status: pending
 status: pending
 
 ## slot-13
-status: complete by slot-13
+status: complete by ao-slot-13
 
 ## slot-14
 status: complete by slot-14
