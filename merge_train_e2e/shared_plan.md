@@ -31,7 +31,7 @@ status: pending
 status: pending
 
 ## slot-11
-status: pending
+status: complete by slot-11
 
 ## slot-12
 status: pending
