@@ -58,4 +58,4 @@ status: pending
 status: pending
 
 ## slot-20
-status: pending
+status: complete by slot-20
