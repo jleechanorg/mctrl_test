@@ -10,7 +10,7 @@ status: pending
 status: pending
 
 ## slot-04
-status: complete by slot-04
+status: complete by ao-slot-04
 
 ## slot-05
 status: complete by slot-05
