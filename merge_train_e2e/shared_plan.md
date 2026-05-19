@@ -55,7 +55,7 @@ status: pending
 status: pending
 
 ## slot-19
-status: pending
+status: complete by slot-19
 
 ## slot-20
 status: pending
