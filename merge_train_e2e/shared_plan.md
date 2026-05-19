@@ -40,7 +40,7 @@ status: pending
 status: pending
 
 ## slot-14
-status: pending
+status: complete by slot-14
 
 ## slot-15
 status: pending
