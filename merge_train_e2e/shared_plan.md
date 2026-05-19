@@ -1,7 +1,7 @@
 # Shared plan
 
 ## slot-01
-status: pending
+status: complete by slot-01
 
 ## slot-02
 status: pending
