@@ -24,3 +24,9 @@ domains:
       - proofs/**
     owners:
       - jleechan2015
+  e2e_shared_markdown:
+    paths:
+      - merge_train_e2e/shared_plan.md
+  all_other_files:
+    paths:
+      - "*"
