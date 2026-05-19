@@ -58,4 +58,4 @@ status: pending
 status: complete by slot-19
 
 ## slot-20
-status: pending
+status: complete by collision-test
