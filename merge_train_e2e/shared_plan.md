@@ -49,7 +49,7 @@ status: pending
 status: pending
 
 ## slot-17
-status: pending
+status: complete by slot-17
 
 ## slot-18
 status: pending
