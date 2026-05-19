@@ -2,6 +2,31 @@ domains:
   e2e_shared_markdown:
     paths:
       - merge_train_e2e/shared_plan.md
+  hello_domain:
+    paths:
+      - hello.py
+      - test_hello.py
+    owners:
+      - jleechan2015
+  algo_domain:
+    paths:
+      - shortest_path_binary_matrix.py
+      - test_shortest_path_binary_matrix.py
+    owners:
+      - jleechan2015
+  lc_domain:
+    paths:
+      - two_sum.py
+      - valid_parentheses.py
+      - test_two_sum.py
+      - test_valid_parentheses.py
+    owners:
+      - jleechan2015
+  proofs_domain:
+    paths:
+      - proofs/**
+    owners:
+      - jleechan2015
   all_other_files:
     paths:
       - "*"
