@@ -16,7 +16,7 @@ status: pending
 status: pending
 
 ## slot-06
-status: pending
+status: complete by slot-06
 
 ## slot-07
 status: pending
