@@ -22,7 +22,7 @@ status: pending
 status: complete by slot-07
 
 ## slot-08
-status: pending
+status: complete by slot-08
 
 ## slot-09
 status: complete by slot-09
