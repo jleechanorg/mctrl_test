@@ -52,7 +52,7 @@ status: complete by slot-16
 status: pending
 
 ## slot-18
-status: pending
+status: complete by ao-slot-18
 
 ## slot-19
 status: complete by ao-slot-19
