@@ -31,7 +31,7 @@ status: complete by ao-slot-09
 status: complete by ao-slot-10
 
 ## slot-11
-status: pending
+status: complete by ao-slot-11
 
 ## slot-12
 status: complete by ao-slot-12
