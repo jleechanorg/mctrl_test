@@ -22,7 +22,7 @@ status: complete by ao-slot-06
 status: complete by ao-slot-07
 
 ## slot-08
-status: complete by slot-08
+status: complete by ao-slot-08
 
 ## slot-09
 status: complete by ao-slot-09
