@@ -18,7 +18,7 @@ _NUMERAL_MAP = [
 
 
 def to_roman(n: int) -> str:
-    if not isinstance(n, int) or n < 1 or n > 3999:
+    if type(n) is not int or n < 1 or n > 3999:
         raise ValueError(f"n must be an integer between 1 and 3999, got {n!r}")
     result = []
     for value, numeral in _NUMERAL_MAP:
