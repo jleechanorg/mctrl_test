@@ -6,7 +6,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-01
 - required edit: replace `status: pending` with
-  `status: complete by slot-01`
+  `status: complete by ao-slot-01`
 - forbidden edit: any other heading
 
 ## slot-02 task
@@ -17,7 +17,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-02
 - required edit: replace `status: pending` with
-  `status: complete by slot-02`
+  `status: complete by ao-slot-02`
 - forbidden edit: any other heading
 
 ## slot-03 task
@@ -39,7 +39,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-04
 - required edit: replace `status: pending` with
-  `status: complete by slot-04`
+  `status: complete by ao-slot-04`
 - forbidden edit: any other heading
 
 ## slot-05 task
@@ -50,7 +50,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-05
 - required edit: replace `status: pending` with
-  `status: complete by slot-05`
+  `status: complete by ao-slot-05`
 - forbidden edit: any other heading
 
 ## slot-06 task
@@ -61,7 +61,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-06
 - required edit: replace `status: pending` with
-  `status: complete by slot-06`
+  `status: complete by ao-slot-06`
 - forbidden edit: any other heading
 
 ## slot-07 task
@@ -72,7 +72,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-07
 - required edit: replace `status: pending` with
-  `status: complete by slot-07`
+  `status: complete by ao-slot-07`
 - forbidden edit: any other heading
 
 ## slot-08 task
@@ -83,7 +83,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-08
 - required edit: replace `status: pending` with
-  `status: complete by slot-08`
+  `status: complete by ao-slot-08`
 - forbidden edit: any other heading
 
 ## slot-09 task
@@ -94,7 +94,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-09
 - required edit: replace `status: pending` with
-  `status: complete by slot-09`
+  `status: complete by ao-slot-09`
 - forbidden edit: any other heading
 
 ## slot-10 task
@@ -105,7 +105,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-10
 - required edit: replace `status: pending` with
-  `status: complete by slot-10`
+  `status: complete by ao-slot-10`
 - forbidden edit: any other heading
 
 ## slot-11 task
@@ -116,7 +116,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-11
 - required edit: replace `status: pending` with
-  `status: complete by slot-11`
+  `status: complete by ao-slot-11`
 - forbidden edit: any other heading
 
 ## slot-12 task
@@ -127,7 +127,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-12
 - required edit: replace `status: pending` with
-  `status: complete by slot-12`
+  `status: complete by ao-slot-12`
 - forbidden edit: any other heading
 
 ## slot-13 task
@@ -138,7 +138,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-13
 - required edit: replace `status: pending` with
-  `status: complete by slot-13`
+  `status: complete by ao-slot-13`
 - forbidden edit: any other heading
 
 ## slot-14 task
@@ -149,7 +149,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-14
 - required edit: replace `status: pending` with
-  `status: complete by slot-14`
+  `status: complete by ao-slot-14`
 - forbidden edit: any other heading
 
 ## slot-15 task
@@ -171,7 +171,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-16
 - required edit: replace `status: pending` with
-  `status: complete by slot-16`
+  `status: complete by ao-slot-16`
 - forbidden edit: any other heading
 
 ## slot-17 task
@@ -182,7 +182,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-17
 - required edit: replace `status: pending` with
-  `status: complete by slot-17`
+  `status: complete by ao-slot-17`
 - forbidden edit: any other heading
 
 ## slot-18 task
@@ -193,7 +193,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-18
 - required edit: replace `status: pending` with
-  `status: complete by slot-18`
+  `status: complete by ao-slot-18`
 - forbidden edit: any other heading
 
 ## slot-19 task
@@ -204,7 +204,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-19
 - required edit: replace `status: pending` with
-  `status: complete by slot-19`
+  `status: complete by ao-slot-19`
 - forbidden edit: any other heading
 
 ## slot-20 task
@@ -215,5 +215,5 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-20
 - required edit: replace `status: pending` with
-  `status: complete by slot-20`
+  `status: complete by ao-slot-20`
 - forbidden edit: any other heading
