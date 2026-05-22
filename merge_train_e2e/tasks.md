@@ -160,7 +160,7 @@
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-15
 - required edit: replace `status: pending` with
-  `status: complete by slot-15`
+  `status: complete by ao-slot-15`
 - forbidden edit: any other heading
 
 ## slot-16 task
