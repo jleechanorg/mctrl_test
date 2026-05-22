@@ -18,6 +18,17 @@ _NUMERAL_MAP = [
 
 
 def to_roman(n: int) -> str:
+    """Convert an integer to a Roman numeral string.
+
+    Args:
+        n: An integer in the range [1, 3999].
+
+    Returns:
+        The Roman numeral representation of n.
+
+    Raises:
+        ValueError: If n is not a plain int or is outside [1, 3999].
+    """
     if type(n) is not int or n < 1 or n > 3999:
         raise ValueError(f"n must be an integer between 1 and 3999, got {n!r}")
     result = []
