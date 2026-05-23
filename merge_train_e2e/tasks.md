@@ -1,3 +1,11 @@
+# Merge Train E2E Task Specifications
+
+## Naming convention
+
+All slots use `status: complete by ao-slot-XX` except slot-03, which was completed by `slot-03` (without the `ao-` prefix) as a documented exception matching its entry in `shared_plan.md`.
+
+---
+
 ## slot-01 task
 
 - branch: merge-train-e2e/20260519T092144Z/slot-01
