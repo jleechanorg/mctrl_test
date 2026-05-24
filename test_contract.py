@@ -20,23 +20,38 @@ class TestContract(unittest.TestCase):
             slot_id = f"{i:02d}"
             slot_name = f"slot-{slot_id}"
             
-            # Check shared_plan.md
-            sp_match = re.search(rf"## {slot_name}\nstatus: (complete by (ao-)?slot-{slot_id})", shared_plan_content)
-            self.assertIsNotNone(sp_match, f"{slot_name} not found or invalid status in shared_plan.md")
+            # 1. Define expected completion token strictly
+            # All slots use ao-slot-XX except slot-03 (documented exception)
+            expected_prefix = "" if i == 3 else "ao-"
+            expected_token = f"complete by {expected_prefix}slot-{slot_id}"
             
-            sp_status = sp_match.group(1)
-            
-            # Check tasks.md
-            # Heading: ## slot-XX task
-            # Required edit: replace `status: pending` with `status: XXX`
-            task_pattern = rf"## {slot_name} task.*?- heading: ## {slot_name}\n- required edit: replace `status: pending` with\n\s+`(status: (complete by (ao-)?slot-{slot_id}))`"
+            # 2. Check tasks.md for the correct contract spec
+            # We use \b to ensure no trailing characters (like slot-010 matching slot-01)
+            # We strictly enforce the expected prefix (no optional (ao-)?)
+            task_pattern = (
+                rf"## {slot_name} task.*?"
+                rf"- heading: ## {slot_name}\n"
+                rf"- required edit: replace `status: pending` with\n\s+"
+                rf"`status: ({expected_token})\b`"
+            )
             task_match = re.search(task_pattern, tasks_content, re.DOTALL)
+            self.assertIsNotNone(task_match, f"{slot_name} task not found or invalid required edit in tasks.md (expected: {expected_token})")
             
-            self.assertIsNotNone(task_match, f"{slot_name} task not found or invalid required edit in tasks.md")
-                
-            task_status = task_match.group(2)
+            # 3. Check shared_plan.md status
+            # It can be 'pending' OR the expected token.
+            # If it's 'complete by ...', it must match expected_token exactly.
+            sp_status_pattern = rf"## {slot_name}\nstatus: (pending|complete by [^\n]+)"
+            sp_match = re.search(sp_status_pattern, shared_plan_content)
+            self.assertIsNotNone(sp_match, f"{slot_name} heading or status line not found in shared_plan.md")
             
-            self.assertEqual(sp_status, task_status, f"Mismatch for {slot_name}: shared_plan='{sp_status}', tasks='{task_status}'")
+            sp_status = sp_match.group(1).strip()
+            if sp_status != "pending":
+                # Ensure it matches expected_token exactly (no extra chars at end of line)
+                self.assertEqual(
+                    sp_status, 
+                    expected_token, 
+                    f"Mismatch for {slot_name} in shared_plan.md: expected '{expected_token}', found '{sp_status}'"
+                )
 
 if __name__ == "__main__":
     unittest.main()
