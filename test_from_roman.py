@@ -1,5 +1,6 @@
 import pytest
-from df_demo3.roman import from_roman
+from hypothesis import given, strategies as st
+from df_demo3.roman import from_roman, to_roman
 
 
 def test_single_digits():
@@ -50,3 +51,9 @@ def test_invalid_characters_raises():
         from_roman("ABC")
     with pytest.raises(ValueError):
         from_roman("MXM")  # Invalid order (though some might accept it, standard greedy won't)
+
+
+@given(st.integers(min_value=1, max_value=3999))
+def test_roman_round_trip(n):
+    """Verify that from_roman(to_roman(n)) == n for all valid n."""
+    assert from_roman(to_roman(n)) == n
