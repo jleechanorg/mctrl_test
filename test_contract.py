@@ -24,8 +24,8 @@ class TestContract(unittest.TestCase):
             # All slots use ao-slot-XX
             expected_prefix = "ao-"
             expected_token = f"complete by {expected_prefix}slot-{slot_id}"
-            
             # 2. Check tasks.md for the correct contract spec
+
             # We use \b to ensure no trailing characters (like slot-010 matching slot-01)
             # We strictly enforce the expected prefix (no optional (ao-)?)
             task_pattern = (
