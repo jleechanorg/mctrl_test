@@ -4,10 +4,10 @@
 status: complete by ao-slot-01
 
 ## slot-02
-status: complete by slot-02
+status: complete by ao-slot-02
 
 ## slot-03
-status: complete by ao-slot-03
+status: complete by slot-03
 
 ## slot-04
 status: complete by ao-slot-04
@@ -49,7 +49,7 @@ status: complete by ao-slot-15
 status: complete by ao-slot-16
 
 ## slot-17
-status: complete by slot-17
+status: complete by ao-slot-17
 
 ## slot-18
 status: complete by ao-slot-18
