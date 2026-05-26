@@ -1,61 +1,61 @@
 # Shared plan
 
 ## slot-01
-status: pending
+status: complete by ao-slot-01
 
 ## slot-02
-status: pending
+status: complete by ao-slot-02
 
 ## slot-03
-status: pending
+status: complete by slot-03
 
 ## slot-04
-status: pending
+status: complete by ao-slot-04
 
 ## slot-05
-status: pending
+status: complete by ao-slot-05
 
 ## slot-06
-status: complete by slot-06
+status: complete by ao-slot-06
 
 ## slot-07
-status: pending
+status: complete by ao-slot-07
 
 ## slot-08
-status: pending
+status: complete by ao-slot-08
 
 ## slot-09
-status: pending
+status: complete by ao-slot-09
 
 ## slot-10
-status: pending
+status: complete by ao-slot-10
 
 ## slot-11
-status: pending
+status: complete by ao-slot-11
 
 ## slot-12
-status: pending
+status: complete by ao-slot-12
 
 ## slot-13
-status: pending
+status: complete by ao-slot-13
 
 ## slot-14
-status: pending
+status: complete by ao-slot-14
 
 ## slot-15
-status: pending
+status: complete by ao-slot-15
 
 ## slot-16
-status: pending
+status: complete by ao-slot-16
 
 ## slot-17
-status: pending
+status: complete by ao-slot-17
 
 ## slot-18
-status: pending
+status: complete by ao-slot-18
 
 ## slot-19
-status: pending
+status: complete by ao-slot-19
 
 ## slot-20
-status: pending
+status: complete by ao-slot-20
