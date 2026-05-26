@@ -1,3 +1,4 @@
+"""Verification tests for shared_plan.md slot status format and completeness."""
 import os
 import pytest
 import re
