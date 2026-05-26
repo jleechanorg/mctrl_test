@@ -1,3 +1,8 @@
+"""Module for converting integers to Roman numerals and vice versa.
+
+Provides to_roman and from_roman functions for standard Roman numeral conversion.
+"""
+
 __version__ = "1.0.0"
 
 _NUMERAL_MAP = [
@@ -15,6 +20,8 @@ _NUMERAL_MAP = [
     (4, "IV"),
     (1, "I"),
 ]
+
+_ROMAN_TO_INT = {numeral: value for value, numeral in _NUMERAL_MAP}
 
 
 def to_roman(n: int) -> str:
@@ -37,3 +44,39 @@ def to_roman(n: int) -> str:
             result.append(numeral)
             n -= value
     return "".join(result)
+
+
+def from_roman(s: str) -> int:
+    """Convert a Roman numeral string to an integer.
+
+    Args:
+        s: A string representing a Roman numeral.
+
+    Returns:
+        The integer value of the Roman numeral.
+
+    Raises:
+        ValueError: If s is not a string or is not a valid Roman numeral.
+    """
+    if not isinstance(s, str):
+        raise ValueError(f"Input must be a string, got {type(s)!r}")
+
+    i = 0
+    result = 0
+    while i < len(s):
+        # Check for two-character numeral (like CM, IV)
+        if i + 1 < len(s) and s[i : i + 2] in _ROMAN_TO_INT:
+            result += _ROMAN_TO_INT[s[i : i + 2]]
+            i += 2
+        elif s[i] in _ROMAN_TO_INT:
+            result += _ROMAN_TO_INT[s[i]]
+            i += 1
+        else:
+            raise ValueError(f"Invalid Roman numeral character: {s[i]!r}")
+
+    # Validation: re-convert to ensure it's a standard representation
+    # This catches things like 'IIII' or 'MXM' which might otherwise be parsed
+    if result < 1 or result > 3999 or to_roman(result) != s:
+        raise ValueError(f"Invalid Roman numeral: {s!r}")
+
+    return result

@@ -1,4 +1,18 @@
-def fibonacci(n):
+"""Module for calculating Fibonacci numbers."""
+
+
+def fibonacci(n: int) -> int:
+    """Calculate the nth Fibonacci number.
+
+    Args:
+        n: A non-negative integer.
+
+    Returns:
+        The nth Fibonacci number.
+
+    Raises:
+        ValueError: If n is negative.
+    """
     if n < 0:
         raise ValueError("n must be non-negative")
     if n == 0:
