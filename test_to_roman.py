@@ -3,6 +3,7 @@ from to_roman import to_roman
 
 
 def test_single_digits():
+    """Test to_roman with single-digit integers."""
     assert to_roman(1) == "I"
     assert to_roman(4) == "IV"
     assert to_roman(5) == "V"
@@ -10,6 +11,7 @@ def test_single_digits():
 
 
 def test_tens():
+    """Test to_roman with multiples of ten."""
     assert to_roman(10) == "X"
     assert to_roman(40) == "XL"
     assert to_roman(50) == "L"
@@ -17,6 +19,7 @@ def test_tens():
 
 
 def test_hundreds():
+    """Test to_roman with multiples of a hundred."""
     assert to_roman(100) == "C"
     assert to_roman(400) == "CD"
     assert to_roman(500) == "D"
@@ -24,12 +27,14 @@ def test_hundreds():
 
 
 def test_thousands():
+    """Test to_roman with multiples of a thousand and the maximum value."""
     assert to_roman(1000) == "M"
     assert to_roman(3000) == "MMM"
     assert to_roman(3999) == "MMMCMXCIX"
 
 
 def test_compound_values():
+    """Test to_roman with compound integer values."""
     assert to_roman(2) == "II"
     assert to_roman(3) == "III"
     assert to_roman(14) == "XIV"
@@ -39,6 +44,7 @@ def test_compound_values():
 
 
 def test_out_of_range_raises():
+    """Verify that to_roman raises ValueError for values outside [1, 3999]."""
     with pytest.raises(ValueError):
         to_roman(0)
     with pytest.raises(ValueError):
