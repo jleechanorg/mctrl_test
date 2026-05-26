@@ -1,3 +1,8 @@
+"""Module for converting integers to Roman numerals and vice versa.
+
+Provides to_roman and from_roman functions for standard Roman numeral conversion.
+"""
+
 __version__ = "1.0.0"
 
 _NUMERAL_MAP = [

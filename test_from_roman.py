@@ -4,6 +4,7 @@ from df_demo3.roman import from_roman, to_roman
 
 
 def test_single_digits():
+    """Test conversion of single-character Roman numerals."""
     assert from_roman("I") == 1
     assert from_roman("IV") == 4
     assert from_roman("V") == 5
@@ -11,6 +12,7 @@ def test_single_digits():
 
 
 def test_tens():
+    """Test conversion of Roman numerals representing tens."""
     assert from_roman("X") == 10
     assert from_roman("XL") == 40
     assert from_roman("L") == 50
@@ -18,6 +20,7 @@ def test_tens():
 
 
 def test_hundreds():
+    """Test conversion of Roman numerals representing hundreds."""
     assert from_roman("C") == 100
     assert from_roman("CD") == 400
     assert from_roman("D") == 500
@@ -25,12 +28,14 @@ def test_hundreds():
 
 
 def test_thousands():
+    """Test conversion of Roman numerals representing thousands."""
     assert from_roman("M") == 1000
     assert from_roman("MMM") == 3000
     assert from_roman("MMMCMXCIX") == 3999
 
 
 def test_compound_values():
+    """Test conversion of compound Roman numerals."""
     assert from_roman("II") == 2
     assert from_roman("III") == 3
     assert from_roman("XIV") == 14
@@ -40,6 +45,7 @@ def test_compound_values():
 
 
 def test_invalid_type_raises():
+    """Verify that from_roman raises ValueError for invalid input types."""
     with pytest.raises(ValueError):
         from_roman(123)
     with pytest.raises(ValueError):
@@ -47,6 +53,7 @@ def test_invalid_type_raises():
 
 
 def test_invalid_characters_raises():
+    """Verify that from_roman raises ValueError for invalid Roman numerals or characters."""
     with pytest.raises(ValueError):
         from_roman("ABC")
     with pytest.raises(ValueError):
