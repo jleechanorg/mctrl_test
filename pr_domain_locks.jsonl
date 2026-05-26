@@ -26,3 +26,6 @@
 {"domain":"algo_domain","pr":241,"agent":"claude-b","branch":"feat/diff-mode-b","opened_at":"2026-05-17T05:04:41Z","status":"active","closed_at":null,"note":null,"symbols":["shortest_path_binary_matrix"]}
 {"domain":"algo_domain","pr":240,"agent":"claude-a","branch":"feat/diff-mode-a","opened_at":"2026-05-17T05:04:38Z","status":"released","closed_at":"2026-05-17T05:05:44Z","note":null,"symbols":["grid_size","has_path"]}
 {"domain":"algo_domain","pr":241,"agent":"claude-b","branch":"feat/diff-mode-b","opened_at":"2026-05-17T05:04:41Z","status":"released","closed_at":"2026-05-17T05:05:44Z","note":null,"symbols":["shortest_path_binary_matrix"]}
+{"domain":"all_other_files","pr":118,"agent":"mt-118","branch":"session/mt-118","opened_at":"2026-05-23T23:10:25Z","status":"active","closed_at":null,"note":null}
+{"domain":"all_other_files","pr":118,"agent":"mt-118","branch":"session/mt-118","opened_at":"2026-05-23T23:10:25Z","status":"released","closed_at":"2026-05-23T23:13:29Z","note":null}
+{"domain":"all_other_files","pr":438,"agent":"mt-118","branch":"feat/from-roman","opened_at":"2026-05-23T23:13:29Z","status":"active","closed_at":null,"note":null}
