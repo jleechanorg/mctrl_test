@@ -45,7 +45,7 @@ def test_compound_values():
 
 
 def test_invalid_type_raises():
-    """Verify that from_roman raises ValueError for invalid input types."""
+    """Verify that from_roman raises ValueError for invalid input types (integers, None, etc.)."""
     with pytest.raises(ValueError):
         from_roman(123)
     with pytest.raises(ValueError):
