@@ -1,8 +1,11 @@
+"""Contract tests verifying slot naming conventions in tasks.md match shared_plan.md."""
 import re
 import os
 import unittest
 
 class TestContract(unittest.TestCase):
+    """Verify all 20 merge-train slots follow the ao-slot-XX naming convention."""
+
     def test_all_slots_match(self):
         shared_plan_path = 'merge_train_e2e/shared_plan.md'
         tasks_path = 'merge_train_e2e/tasks.md'
