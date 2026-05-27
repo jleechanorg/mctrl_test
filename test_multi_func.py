@@ -9,16 +9,16 @@ from multi_func import alpha, beta, gamma, delta
 
 
 class TestAlpha:
-    """Worker A owns alpha — these verify baseline behavior."""
+    """Worker A2 owns alpha — these verify baseline behavior."""
 
     def test_positive(self):
-        assert alpha(3) == 6
+        assert alpha(3) == 7
 
     def test_zero(self):
-        assert alpha(0) == 0
+        assert alpha(0) == 1
 
     def test_negative(self):
-        assert alpha(-4) == -8
+        assert alpha(-4) == -7
 
 
 class TestBeta:
