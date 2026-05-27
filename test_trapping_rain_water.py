@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Tests for LeetCode 42 - Trapping Rain Water."""
 
 from trapping_rain_water import trap
@@ -49,9 +51,3 @@ def test_single_peak() -> None:
 
 def test_large_values() -> None:
     assert trap([100000, 0, 100000]) == 100000
-
-
-if __name__ == "__main__":
-    import sys
-    import pytest
-    sys.exit(pytest.main([__file__, "-v"]))
