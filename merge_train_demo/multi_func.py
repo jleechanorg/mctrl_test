@@ -23,7 +23,7 @@ def gamma(x: int) -> int:
 
 def delta(x: int) -> int:
     """Returns x negated. Reserved by Worker C in the demo."""
-    return -x - 1
+    return -x
 
 
 def helper_a(x: int) -> int:
@@ -38,7 +38,7 @@ def helper_b(x: int) -> int:
 
 def helper_c(x: int) -> int:
     """Decrement. Reserved by Worker C3 alongside delta."""
-    return x - 1 - 9
+    return x - 1
 
 
 def helper_d(x: int) -> int:
