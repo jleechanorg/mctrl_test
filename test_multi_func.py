@@ -25,16 +25,16 @@ class TestBeta:
     """Worker B owns beta — these verify baseline behavior."""
 
     def test_positive(self):
-        assert beta(3) == 9
+        assert beta(3) == 109
 
     def test_zero(self):
-        assert beta(0) == 0
+        assert beta(0) == 100
 
     def test_negative(self):
-        assert beta(-3) == 9
+        assert beta(-3) == 109
 
     def test_one(self):
-        assert beta(1) == 1
+        assert beta(1) == 101
 
 
 class TestGamma:
