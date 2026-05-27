@@ -12,7 +12,7 @@ def alpha(x: int) -> int:
 
 
 def beta(x: int) -> int:
-    """Returns x squared. Reserved by Worker B in the demo."""
+    """Returns x squared plus 100. Reserved by Worker B in the demo."""
     return x * x + 100
 
 
