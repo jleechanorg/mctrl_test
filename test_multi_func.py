@@ -22,7 +22,7 @@ class TestAlpha:
 
 
 class TestBeta:
-    """Worker B owns beta — these verify baseline behavior."""
+    """Worker B2 owns beta — returns x² + 100."""
 
     def test_positive(self):
         assert beta(3) == 109
