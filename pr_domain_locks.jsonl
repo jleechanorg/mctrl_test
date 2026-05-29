@@ -30,3 +30,4 @@
 {"domain":"all_other_files","pr":118,"agent":"mt-118","branch":"session/mt-118","opened_at":"2026-05-23T23:10:25Z","status":"released","closed_at":"2026-05-23T23:13:29Z","note":null}
 {"domain":"all_other_files","pr":438,"agent":"mt-118","branch":"feat/from-roman","opened_at":"2026-05-23T23:13:29Z","status":"active","closed_at":null,"note":null}
 {"domain":"all_other_files","pr":438,"agent":"mt-118","branch":"feat/from-roman","opened_at":"2026-05-23T23:13:29Z","status":"released","closed_at":"2026-05-26T22:59:06Z","note":null}
+{"domain":"demo","pr":192,"agent":"worker-A2","branch":"mt-test/worker-A2","opened_at":"2026-05-29T22:34:18Z","status":"active","closed_at":null,"note":null,"symbols":["alpha"]}
