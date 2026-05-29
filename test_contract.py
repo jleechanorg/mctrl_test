@@ -21,8 +21,8 @@ class TestContract(unittest.TestCase):
             slot_name = f"slot-{slot_id}"
             
             # 1. Define expected completion token strictly
-            # All slots use ao-slot-XX except slot-03 (documented exception)
-            expected_prefix = "" if i == 3 else "ao-"
+            # All slots use ao-slot-XX
+            expected_prefix = "ao-"
             expected_token = f"complete by {expected_prefix}slot-{slot_id}"
             
             # 2. Check tasks.md for the correct contract spec
