@@ -35,3 +35,10 @@ def test_greet_world():
 
 def test_greet_name():
     assert greet("Jeffrey") == "Hello, Jeffrey!"
+
+
+def test_greet_docstring_references_hello():
+    """Verify that greet's docstring documents its difference from hello."""
+    assert greet.__doc__ is not None
+    assert "hello" in greet.__doc__.lower()
+
