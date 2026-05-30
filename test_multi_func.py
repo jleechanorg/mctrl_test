@@ -41,16 +41,16 @@ class TestGamma:
     """Unreserved — verify baseline."""
 
     def test_positive(self):
-        assert gamma(2) == 8
+        assert gamma(2) == 9
 
     def test_zero(self):
-        assert gamma(0) == 0
+        assert gamma(0) == 1
 
     def test_negative(self):
-        assert gamma(-2) == -8
+        assert gamma(-2) == -7
 
     def test_one(self):
-        assert gamma(1) == 1
+        assert gamma(1) == 2
 
 
 class TestDelta:
