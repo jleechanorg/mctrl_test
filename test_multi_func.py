@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "merge_train_demo"))
 
-from multi_func import alpha, beta, gamma, delta
+from multi_func import alpha, beta, gamma, delta, helper_a
 
 
 class TestAlpha:
@@ -73,3 +73,16 @@ class TestDelta:
 
     def test_large(self):
         assert delta(1000) == -1001
+
+
+class TestHelperA:
+    """Worker A3 owns helper_a — these verify baseline behavior."""
+
+    def test_positive(self):
+        assert helper_a(3) == 10
+
+    def test_zero(self):
+        assert helper_a(0) == 7
+
+    def test_negative(self):
+        assert helper_a(-4) == 3
