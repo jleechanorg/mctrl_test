@@ -17,13 +17,13 @@ def beta(x: int) -> int:
 
 
 def gamma(x: int) -> int:
-    """Returns x cubed. Unreserved in the demo."""
+    """Returns x cubed plus one. Unreserved in the demo."""
     return x ** 3 + 1
 
 
 def delta(x: int) -> int:
-    """Returns x negated. Reserved by Worker C in the demo."""
-    return -x
+    """Returns -(x + 1). Reserved by Worker C in the demo."""
+    return -x - 1
 
 
 def helper_a(x: int) -> int:
