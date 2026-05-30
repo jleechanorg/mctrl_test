@@ -99,7 +99,7 @@ class TestMultiFunc2:
 
     def test_beta2_green(self):
         # Green phase of TDD
-        assert beta2(3) == 2004
+        assert beta2(3) == 2003
 
     def test_gamma2(self):
         assert gamma2(10) == 3010

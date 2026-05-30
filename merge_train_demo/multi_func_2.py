@@ -11,8 +11,8 @@ def alpha2(x: int) -> int:
 
 
 def beta2(x: int) -> int:
-    """Add 2001 to x."""
-    return x + 2001
+    """Add 2000 to x."""
+    return x + 2000
 
 
 def gamma2(x: int) -> int:
