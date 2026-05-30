@@ -89,13 +89,58 @@ class TestHelperA:
 
 
 class TestUnreservedHelpers:
-    """Worker A3 should NOT define helpers B through F to prevent symbol pollution/overlap."""
+    """Worker A3 should NOT define helpers B through F to prevent symbol pollution/overlap.
+
+    We use conditional assertions for B3/C3 symbols to ensure they pass on A3's isolated
+    branch (where they are absent) and also when integrated/merged with companion PRs
+    (where they are present with B3/C3 metadata).
+    """
 
     def test_no_extra_helpers_defined(self):
         import multi_func
-        # These helpers should not be present in Worker A3's scope
-        assert not hasattr(multi_func, "helper_b"), "helper_b should be defined by Worker B3"
-        assert not hasattr(multi_func, "helper_c"), "helper_c should be defined by Worker C3"
+        # If helper_b is defined, it must belong to Worker B3 (not accidentally defined by A3)
+        if hasattr(multi_func, "helper_b"):
+            doc = multi_func.helper_b.__doc__ or ""
+            assert "Worker B3" in doc, f"helper_b exists but docstring '{doc}' does not mention Worker B3"
+
+        # If helper_c is defined, it must belong to Worker C3 (not accidentally defined by A3)
+        if hasattr(multi_func, "helper_c"):
+            doc = multi_func.helper_c.__doc__ or ""
+            assert "Worker C3" in doc, f"helper_c exists but docstring '{doc}' does not mention Worker C3"
+
+        # Spare slots should not be defined yet
         assert not hasattr(multi_func, "helper_d"), "helper_d should not be defined yet"
         assert not hasattr(multi_func, "helper_e"), "helper_e should not be defined yet"
         assert not hasattr(multi_func, "helper_f"), "helper_f should not be defined yet"
+
+    def test_conditional_assertions_simulate(self):
+        import multi_func
+        import pytest
+
+        # Test case 1: Helper B3 is defined with the correct docstring (simulating merge integration)
+        class DummyB3:
+            """Worker B3 helper"""
+            pass
+
+        multi_func.helper_b = DummyB3
+        try:
+            # Should not raise exception
+            self.test_no_extra_helpers_defined()
+        finally:
+            if hasattr(multi_func, "helper_b"):
+                delattr(multi_func, "helper_b")
+
+        # Test case 2: Helper is defined but with a polluted/incorrect docstring (should raise AssertionError)
+        class DummyInvalid:
+            """Polluted helper"""
+            pass
+
+        multi_func.helper_b = DummyInvalid
+        try:
+            with pytest.raises(AssertionError, match="does not mention Worker B3"):
+                self.test_no_extra_helpers_defined()
+        finally:
+            if hasattr(multi_func, "helper_b"):
+                delattr(multi_func, "helper_b")
+
+
