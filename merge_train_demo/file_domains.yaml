@@ -1,10 +1,15 @@
 # Registry for the merge_train symbol-level lock demo run against
-# this repo. The single 'demo' domain covers multi_func.py — workers
-# coordinate on it via symbol-level reservations.
+# this repo. Two domains for cross-file contention testing.
 
 domains:
   demo:
     paths:
       - "merge_train_demo/multi_func.py"
+    owners:
+      - "@jleechan2015"
+
+  demo2:
+    paths:
+      - "merge_train_demo/multi_func_2.py"
     owners:
       - "@jleechan2015"
