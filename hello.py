@@ -17,7 +17,7 @@ def greet(name: str) -> str:
     Unlike hello(), which returns an uppercase greeting, this function
     returns a standard title-case formatting (e.g., "Hello, name!").
     """
-    return f"Hello, {name}!"
+    return f"Hello, {name.title()}!"
 
 
 if __name__ == "__main__":

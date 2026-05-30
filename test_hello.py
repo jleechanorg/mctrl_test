@@ -42,3 +42,10 @@ def test_greet_docstring_references_hello():
     assert greet.__doc__ is not None
     assert "hello" in greet.__doc__.lower()
 
+
+def test_greet_title_cases_lowercase_name():
+    """Verify that greet function formats name in title-case."""
+    assert greet("jeffrey") == "Hello, Jeffrey!"
+    assert greet("bob smith") == "Hello, Bob Smith!"
+
+
