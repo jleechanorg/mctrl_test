@@ -1,0 +1,7 @@
+plan:
+  - domain: demo2
+    symbols:
+      - beta2
+  - domain: demo
+    symbols:
+      - helper_f

@@ -30,3 +30,11 @@
 {"domain":"all_other_files","pr":118,"agent":"mt-118","branch":"session/mt-118","opened_at":"2026-05-23T23:10:25Z","status":"released","closed_at":"2026-05-23T23:13:29Z","note":null}
 {"domain":"all_other_files","pr":438,"agent":"mt-118","branch":"feat/from-roman","opened_at":"2026-05-23T23:13:29Z","status":"active","closed_at":null,"note":null}
 {"domain":"all_other_files","pr":438,"agent":"mt-118","branch":"feat/from-roman","opened_at":"2026-05-23T23:13:29Z","status":"released","closed_at":"2026-05-26T22:59:06Z","note":null}
+{"domain":"demo","pr":197,"agent":"mt-197","branch":"mt-test/worker-C3","opened_at":"2026-05-29T21:00:00Z","status":"active","closed_at":null,"note":null,"symbols":["delta","helper_c"]}
+{"domain":"demo","pr":199,"agent":"mt-199","branch":"mt-test/worker-M1","opened_at":"2026-05-29T21:05:00Z","status":"active","closed_at":null,"note":null,"symbols":["helper_e"]}
+{"domain":"demo2","pr":199,"agent":"mt-199","branch":"mt-test/worker-M1","opened_at":"2026-05-29T21:05:00Z","status":"active","closed_at":null,"note":null,"symbols":["alpha2"]}
+
+{"domain":"demo2","pr":200,"agent":"mt-200","branch":"mt-test/worker-M2","opened_at":"2026-05-30T05:06:03Z","status":"active","closed_at":null,"note":null,"symbols":["beta2"]}
+{"domain":"demo2","pr":200,"agent":"mt-200","branch":"mt-test/worker-M2","opened_at":"2026-05-30T05:06:03Z","status":"released","closed_at":"2026-05-30T05:06:03Z","note":"rollback:reserve_plan","symbols":["beta2"]}
+{"domain":"demo2","pr":200,"agent":"mt-200","branch":"mt-test/worker-M2","opened_at":"2026-05-30T05:06:13Z","status":"active","closed_at":null,"note":null,"symbols":["beta2"]}
+{"domain":"demo","pr":200,"agent":"mt-200","branch":"mt-test/worker-M2","opened_at":"2026-05-30T05:06:13Z","status":"active","closed_at":null,"note":null,"symbols":["helper_f"]}
