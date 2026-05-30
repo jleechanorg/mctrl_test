@@ -6,6 +6,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "merge_train_demo"))
 
 from multi_func import alpha, beta, gamma, delta
+from multi_func_2 import alpha2, beta2, gamma2, delta2, epsilon2, zeta2
 
 
 class TestAlpha:
@@ -73,3 +74,26 @@ class TestDelta:
 
     def test_large(self):
         assert delta(1000) == -1001
+
+
+class TestMultiFunc2:
+    """Worker M2 owns multi_func_2 functions — verify all of them."""
+
+    def test_alpha2(self):
+        assert alpha2(5) == 1005
+
+    def test_beta2_green(self):
+        # Green phase of TDD
+        assert beta2(3) == 2004
+
+    def test_gamma2(self):
+        assert gamma2(10) == 3010
+
+    def test_delta2(self):
+        assert delta2(0) == 4000
+
+    def test_epsilon2(self):
+        assert epsilon2(-5) == 4995
+
+    def test_zeta2(self):
+        assert zeta2(100) == 6100
