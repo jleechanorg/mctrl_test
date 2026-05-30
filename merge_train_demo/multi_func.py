@@ -22,8 +22,8 @@ def gamma(x: int) -> int:
 
 
 def delta(x: int) -> int:
-    """Returns -(x + 1). Reserved by Worker C in the demo."""
-    return -x - 1
+    """Returns x negated. Reserved by Worker C in the demo."""
+    return -x
 
 
 def helper_a(x: int) -> int:
@@ -52,5 +52,5 @@ def helper_e(x: int) -> int:
 
 
 def helper_f(x: int) -> int:
-    """Unreserved spare slot."""
-    return x * 1000
+    """Unreserved spare slot. Reserved and modified by Worker M2 (PR #200)."""
+    return x * 1000 + 1

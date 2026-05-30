@@ -5,8 +5,23 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "merge_train_demo"))
 
-from multi_func import alpha, beta, gamma, delta
+from multi_func import alpha, beta, gamma, delta, helper_f
 from multi_func_2 import alpha2, beta2, gamma2, delta2, epsilon2, zeta2
+
+
+class TestHelperF:
+    """Worker M2 owns helper_f — verify its mutated behavior."""
+
+    def test_helper_f_green(self):
+        # Green phase of TDD
+        assert helper_f(2) == 2001
+
+    def test_helper_f_zero(self):
+        assert helper_f(0) == 1
+
+    def test_helper_f_negative(self):
+        assert helper_f(-3) == -2999
+
 
 
 class TestAlpha:
@@ -58,22 +73,22 @@ class TestDelta:
     """Worker C2 owns delta — primary test surface for this PR."""
 
     def test_positive(self):
-        assert delta(5) == -6
+        assert delta(5) == -5
 
     def test_zero(self):
-        assert delta(0) == -1
+        assert delta(0) == 0
 
     def test_negative(self):
-        assert delta(-5) == 4
+        assert delta(-5) == 5
 
     def test_one(self):
-        assert delta(1) == -2
+        assert delta(1) == -1
 
     def test_minus_one(self):
-        assert delta(-1) == 0
+        assert delta(-1) == 1
 
     def test_large(self):
-        assert delta(1000) == -1001
+        assert delta(1000) == -1000
 
 
 class TestMultiFunc2:
