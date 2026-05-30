@@ -1,0 +1,10 @@
+plan:
+  - domain: demo
+    symbols:
+      - helper_d
+  - domain: demo
+    symbols:
+      - helper_e
+  - domain: demo
+    symbols:
+      - gamma
