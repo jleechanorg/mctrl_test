@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hello import farewell, hello
+from hello import farewell, greet, hello
 
 
 def test_hello_default():
@@ -27,3 +27,25 @@ def test_goodbye_default():
 def test_goodbye_custom_name():
     """Test farewell function with a custom name."""
     assert farewell("Alice") == "Farewell, Alice!"
+
+
+def test_greet_world():
+    assert greet("World") == "Hello, World!"
+
+
+def test_greet_name():
+    assert greet("Jeffrey") == "Hello, Jeffrey!"
+
+
+def test_greet_docstring_references_hello():
+    """Verify that greet's docstring documents its difference from hello."""
+    assert greet.__doc__ is not None
+    assert "hello" in greet.__doc__.lower()
+
+
+def test_greet_title_cases_lowercase_name():
+    """Verify that greet function formats name in title-case."""
+    assert greet("jeffrey") == "Hello, Jeffrey!"
+    assert greet("bob smith") == "Hello, Bob Smith!"
+
+
