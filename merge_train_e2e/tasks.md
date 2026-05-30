@@ -2,7 +2,7 @@
 
 ## Naming convention
 
-All slots use `status: complete by ao-slot-XX`.
+All slots use `status: complete by ao-slot-XX` except slot-03, which was completed by `slot-03` (without the `ao-` prefix) as a documented exception matching its entry in `shared_plan.md`.
 
 ---
 
@@ -36,7 +36,7 @@ All slots use `status: complete by ao-slot-XX`.
 - file: merge_train_e2e/shared_plan.md
 - heading: ## slot-03
 - required edit: replace `status: pending` with
-  `status: complete by ao-slot-03`
+  `status: complete by slot-03`
 - forbidden edit: any other heading
 
 ## slot-04 task

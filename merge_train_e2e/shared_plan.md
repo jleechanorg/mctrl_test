@@ -7,7 +7,7 @@ status: complete by ao-slot-01
 status: complete by ao-slot-02
 
 ## slot-03
-status: complete by ao-slot-03
+status: complete by slot-03
 
 ## slot-04
 status: complete by ao-slot-04
