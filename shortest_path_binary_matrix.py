@@ -17,18 +17,7 @@ from typing import List
 
 
 def shortest_path_binary_matrix(grid: List[List[int]]) -> int:
-    """
-    Find the shortest path from top-left to bottom-right in a binary matrix.
-
-    Uses BFS since all edges have equal weight (unweighted graph).
-    8-directional movement is allowed (including diagonals).
-
-    Args:
-        grid: n x n binary matrix where 0 = empty, 1 = blocked
-
-    Returns:
-        Length of shortest path, or -1 if no valid path exists
-    """
+    """Find shortest path via BFS in a binary matrix (8-directional)."""
     n = len(grid)
 
     # Edge cases: start or end is blocked
@@ -77,12 +66,7 @@ def shortest_path_binary_matrix(grid: List[List[int]]) -> int:
 
 
 def shortest_path_binary_matrix_dfs(grid: List[List[int]]) -> int:
-    """
-    Find shortest path using DFS (less efficient but included for comparison).
-
-    Time Complexity: O(n^2 * 8^n) - exponential in worst case
-    Space Complexity: O(n^2) - recursion stack and visited set
-    """
+    """Find shortest path using DFS (for comparison only)."""
     n = len(grid)
 
     if not grid or grid[0][0] == 1 or grid[n - 1][n - 1] == 1:
@@ -102,11 +86,9 @@ def shortest_path_binary_matrix_dfs(grid: List[List[int]]) -> int:
     def dfs(row: int, col: int, length: int) -> None:
         nonlocal min_path
 
-        # Prune if current path is already longer than best
         if length >= min_path:
             return
 
-        # Found destination
         if row == n - 1 and col == n - 1:
             min_path = length
             return
@@ -123,6 +105,16 @@ def shortest_path_binary_matrix_dfs(grid: List[List[int]]) -> int:
 
     dfs(0, 0, 1)
     return min_path if min_path != float('inf') else -1
+
+
+def has_path(grid: List[List[int]]) -> bool:
+    """Return True if any clear path exists from top-left to bottom-right."""
+    return shortest_path_binary_matrix(grid) != -1
+
+
+def grid_size(grid: List[List[int]]) -> int:
+    """Return the size N of an NxN grid (0 for empty)."""
+    return len(grid) if grid else 0
 
 
 if __name__ == "__main__":
