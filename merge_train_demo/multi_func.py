@@ -1,6 +1,6 @@
 """Multi-symbol file for merge_train symbol-level lock demo.
 
-Four independent top-level functions. Used as a test target -- multiple
+Four independent top-level functions. Used as a test target — multiple
 PRs can edit DISJOINT functions concurrently under merge_train's
 symbol-level reservation scheme.
 """
@@ -22,5 +22,5 @@ def gamma(x: int) -> int:
 
 
 def delta(x: int) -> int:
-    """Returns -(x + 1). Reserved by Worker C in the demo."""
+    """Returns x bitwise NOTed (i.e., -x - 1). Reserved by Worker C in the demo."""
     return -x - 1

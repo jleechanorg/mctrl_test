@@ -54,7 +54,7 @@ class TestGamma:
 
 
 class TestDelta:
-    """Worker C2 owns delta — primary test surface for this PR."""
+    """Worker C owns delta — primary test surface for this PR."""
 
     def test_positive(self):
         assert delta(5) == -6
@@ -73,3 +73,8 @@ class TestDelta:
 
     def test_large(self):
         assert delta(1000) == -1001
+
+    def test_docstring(self):
+        doc = delta.__doc__ or ""
+        assert doc == "Returns x bitwise NOTed (i.e., -x - 1). Reserved by Worker C in the demo."
+
