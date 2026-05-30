@@ -54,22 +54,22 @@ class TestGamma:
 
 
 class TestDelta:
-    """Worker C2 owns delta — primary test surface for this PR."""
+    """Worker C3 owns delta — primary test surface for this PR."""
 
     def test_positive(self):
-        assert delta(5) == -6
+        assert delta(5) == -5
 
     def test_zero(self):
-        assert delta(0) == -1
+        assert delta(0) == 0
 
     def test_negative(self):
-        assert delta(-5) == 4
+        assert delta(-5) == 5
 
     def test_one(self):
-        assert delta(1) == -2
+        assert delta(1) == -1
 
     def test_minus_one(self):
-        assert delta(-1) == 0
+        assert delta(-1) == 1
 
     def test_large(self):
-        assert delta(1000) == -1001
+        assert delta(1000) == -1000
