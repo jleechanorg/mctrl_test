@@ -76,4 +76,5 @@ class TestDelta:
 
     def test_docstring(self):
         doc = delta.__doc__ or ""
-        assert "negated" not in doc, f"Docstring still contains outdated term: {doc}"
+        assert doc == "Returns x bitwise NOTed (i.e., -x - 1). Reserved by Worker C in the demo."
+
