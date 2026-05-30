@@ -30,3 +30,13 @@
 {"domain":"all_other_files","pr":118,"agent":"mt-118","branch":"session/mt-118","opened_at":"2026-05-23T23:10:25Z","status":"released","closed_at":"2026-05-23T23:13:29Z","note":null}
 {"domain":"all_other_files","pr":438,"agent":"mt-118","branch":"feat/from-roman","opened_at":"2026-05-23T23:13:29Z","status":"active","closed_at":null,"note":null}
 {"domain":"all_other_files","pr":438,"agent":"mt-118","branch":"feat/from-roman","opened_at":"2026-05-23T23:13:29Z","status":"released","closed_at":"2026-05-26T22:59:06Z","note":null}
+{"domain":"demo","pr":195,"agent":"mt-195","branch":"mt-test/worker-A3","opened_at":"2026-05-30T19:55:18Z","status":"active","closed_at":null,"note":null,"symbols":["alpha","helper_a"]}
+{"domain":"demo","pr":196,"agent":"mt-196","branch":"mt-test/worker-B3","opened_at":"2026-05-30T19:55:20Z","status":"active","closed_at":null,"note":null,"symbols":["beta","helper_b"]}
+{"domain":"demo","pr":197,"agent":"mt-197","branch":"mt-test/worker-C3","opened_at":"2026-05-30T19:55:20Z","status":"active","closed_at":null,"note":null,"symbols":["delta","helper_c"]}
+{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-05-30T19:55:25Z","status":"active","closed_at":null,"note":null,"symbols":["helper_d"]}
+{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-05-30T19:55:25Z","status":"active","closed_at":null,"note":null,"symbols":["helper_e"]}
+{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-05-30T19:55:25Z","status":"released","closed_at":"2026-05-30T19:55:25Z","note":"rollback:reserve_plan","symbols":["helper_d"]}
+{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-05-30T19:55:25Z","status":"released","closed_at":"2026-05-30T19:55:25Z","note":"rollback:reserve_plan","symbols":["helper_e"]}
+{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-05-30T19:55:29Z","status":"active","closed_at":null,"note":null,"symbols":["helper_d"]}
+{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-05-30T19:55:29Z","status":"active","closed_at":null,"note":null,"symbols":["helper_e"]}
+{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-05-30T19:55:29Z","status":"active","closed_at":null,"note":null,"symbols":["gamma"]}
