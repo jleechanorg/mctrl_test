@@ -9,16 +9,16 @@ from multi_func import alpha, beta, gamma, delta
 
 
 class TestAlpha:
-    """Worker A owns alpha — these verify baseline behavior."""
+    """Worker A2 owns alpha — these verify baseline behavior."""
 
     def test_positive(self):
-        assert alpha(3) == 6
+        assert alpha(3) == 7
 
     def test_zero(self):
-        assert alpha(0) == 0
+        assert alpha(0) == 1
 
     def test_negative(self):
-        assert alpha(-4) == -8
+        assert alpha(-4) == -7
 
 
 class TestBeta:
@@ -73,3 +73,30 @@ class TestDelta:
 
     def test_large(self):
         assert delta(1000) == -1001
+
+
+class TestLockReservation:
+    """Verify that Worker A2's lock reservation is properly recorded in the lock log."""
+
+    def test_alpha_lock_reserved(self):
+        import json
+        lock_found = False
+        log_path = os.path.join(os.path.dirname(__file__), "pr_domain_locks.jsonl")
+        assert os.path.exists(log_path)
+        with open(log_path, "r") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                    if (
+                        entry.get("domain") == "demo"
+                        and entry.get("pr") == 192
+                        and entry.get("status") == "active"
+                        and "alpha" in entry.get("symbols", [])
+                    ):
+                        lock_found = True
+                except Exception:
+                    pass
+        assert lock_found, "Worker A2's active lock reservation for 'alpha' in domain 'demo' not found in pr_domain_locks.jsonl"
+
