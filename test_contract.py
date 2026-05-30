@@ -3,7 +3,10 @@ import os
 import unittest
 
 class TestContract(unittest.TestCase):
+    """Verify all slot completion tokens match the ao-slot-XX naming convention."""
+
     def test_all_slots_match(self):
+        """Assert every slot in shared_plan.md and tasks.md uses the ao- prefix."""
         shared_plan_path = 'merge_train_e2e/shared_plan.md'
         tasks_path = 'merge_train_e2e/tasks.md'
         
