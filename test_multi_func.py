@@ -23,7 +23,6 @@ class TestHelperF:
         assert helper_f(-3) == -2999
 
 
-
 class TestAlpha:
     """Worker A owns alpha — these verify baseline behavior."""
 
@@ -73,42 +72,98 @@ class TestDelta:
     """Worker C2 owns delta — primary test surface for this PR."""
 
     def test_positive(self):
-        assert delta(5) == -5
+        assert delta(5) == -6
 
     def test_zero(self):
-        assert delta(0) == 0
+        assert delta(0) == -1
 
     def test_negative(self):
-        assert delta(-5) == 5
+        assert delta(-5) == 4
 
     def test_one(self):
-        assert delta(1) == -1
+        assert delta(1) == -2
 
     def test_minus_one(self):
-        assert delta(-1) == 1
+        assert delta(-1) == 0
 
     def test_large(self):
-        assert delta(1000) == -1000
+        assert delta(1000) == -1001
+
+
+class TestHelpers:
+    """Tests for the helper functions in multi_func.py."""
+
+    def test_helper_a(self):
+        from multi_func import helper_a
+        assert helper_a(3) == 3
+        assert helper_a(0) == 0
+        assert helper_a(-5) == -5
+
+    def test_helper_b(self):
+        from multi_func import helper_b
+        assert helper_b(3) == 4
+        assert helper_b(0) == 1
+        assert helper_b(-5) == -4
+
+    def test_helper_c(self):
+        from multi_func import helper_c
+        assert helper_c(3) == 2
+        assert helper_c(0) == -1
+        assert helper_c(-5) == -6
+
+    def test_helper_d(self):
+        from multi_func import helper_d
+        assert helper_d(3) == 30
+        assert helper_d(0) == 0
+        assert helper_d(-5) == -50
+
+    def test_helper_e(self):
+        from multi_func import helper_e
+        assert helper_e(3) == 300
+        assert helper_e(0) == 0
+        assert helper_e(-5) == -500
+
+    def test_helper_f(self):
+        from multi_func import helper_f
+        # Mutated behavior for Worker M2
+        assert helper_f(3) == 3001
+        assert helper_f(0) == 1
+        assert helper_f(-5) == -4999
 
 
 class TestMultiFunc2:
-    """Worker M2 owns multi_func_2 functions — verify all of them."""
+    """Tests for the functions in multi_func_2.py (Worker M2 owns beta2)."""
 
     def test_alpha2(self):
+        from multi_func_2 import alpha2
         assert alpha2(5) == 1005
+        assert alpha2(0) == 1000
+
+    def test_beta2(self):
+        from multi_func_2 import beta2
+        assert beta2(5) == 2005
+        assert beta2(0) == 2000
 
     def test_beta2_green(self):
         # Green phase of TDD
         assert beta2(3) == 2003
 
     def test_gamma2(self):
-        assert gamma2(10) == 3010
+        from multi_func_2 import gamma2
+        assert gamma2(5) == 3005
+        assert gamma2(0) == 3000
 
     def test_delta2(self):
+        from multi_func_2 import delta2
+        assert delta2(5) == 4005
         assert delta2(0) == 4000
 
     def test_epsilon2(self):
-        assert epsilon2(-5) == 4995
+        from multi_func_2 import epsilon2
+        assert epsilon2(5) == 5005
+        assert epsilon2(0) == 5000
 
     def test_zeta2(self):
-        assert zeta2(100) == 6100
+        from multi_func_2 import zeta2
+        assert zeta2(5) == 6005
+        assert zeta2(0) == 6000
