@@ -86,3 +86,16 @@ class TestHelperA:
 
     def test_negative(self):
         assert helper_a(-4) == 3
+
+
+class TestUnreservedHelpers:
+    """Worker A3 should NOT define helpers B through F to prevent symbol pollution/overlap."""
+
+    def test_no_extra_helpers_defined(self):
+        import multi_func
+        # These helpers should not be present in Worker A3's scope
+        assert not hasattr(multi_func, "helper_b"), "helper_b should be defined by Worker B3"
+        assert not hasattr(multi_func, "helper_c"), "helper_c should be defined by Worker C3"
+        assert not hasattr(multi_func, "helper_d"), "helper_d should not be defined yet"
+        assert not hasattr(multi_func, "helper_e"), "helper_e should not be defined yet"
+        assert not hasattr(multi_func, "helper_f"), "helper_f should not be defined yet"
