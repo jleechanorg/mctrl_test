@@ -11,8 +11,12 @@ def alpha(x: int) -> int:
     return x * 2
 
 
-def beta(x: int) -> int:
+from typing import Union
+
+def beta(x: Union[int, str]) -> int:
     """Returns x squared plus 100. Reserved by Worker B in the demo."""
+    if isinstance(x, str):
+        x = int(x)
     return x * x + 100
 
 

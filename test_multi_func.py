@@ -36,6 +36,9 @@ class TestBeta:
     def test_one(self):
         assert beta(1) == 101
 
+    def test_string_input(self):
+        assert beta("3") == 109
+
 
 class TestGamma:
     """Unreserved — verify baseline."""
