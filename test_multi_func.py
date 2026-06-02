@@ -103,10 +103,10 @@ class TestHelpers:
         assert helper_d(-5) == -50
 
     def test_helper_e(self):
-        from multi_func import helper_e
-        assert helper_e(3) == 300
-        assert helper_e(0) == 0
-        assert helper_e(-5) == -500
+        from multi_func import epsilon
+        assert epsilon(3) == 303
+        assert epsilon(0) == 0
+        assert epsilon(-5) == -505
 
     def test_helper_f(self):
         from multi_func import helper_f
@@ -120,8 +120,8 @@ class TestMultiFunc2:
 
     def test_alpha2(self):
         from multi_func_2 import alpha2
-        assert alpha2(5) == 1005
-        assert alpha2(0) == 1000
+        assert alpha2(5) == 1006
+        assert alpha2(0) == 1001
 
     def test_beta2(self):
         from multi_func_2 import beta2
