@@ -5,21 +5,21 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "merge_train_demo"))
 
-from multi_func import helper_e
+from multi_func import epsilon
 from multi_func_2 import alpha2
 
 
-class TestHelperE:
-    """Worker M1 owns helper_e — these verify behavior."""
+class TestEpsilon:
+    """Worker M1 owns epsilon — these verify behavior."""
 
-    def test_helper_e_positive(self):
-        assert helper_e(3) == 303
+    def test_epsilon_positive(self):
+        assert epsilon(3) == 303
 
-    def test_helper_e_zero(self):
-        assert helper_e(0) == 0
+    def test_epsilon_zero(self):
+        assert epsilon(0) == 0
 
-    def test_helper_e_negative(self):
-        assert helper_e(-5) == -505
+    def test_epsilon_negative(self):
+        assert epsilon(-5) == -505
 
 
 class TestAlpha2:

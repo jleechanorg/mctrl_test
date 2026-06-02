@@ -46,7 +46,7 @@ def helper_d(x: int) -> int:
     return x * 10
 
 
-def helper_e(x: int) -> int:
+def epsilon(x: int) -> int:
     """Unreserved spare slot."""
     return x * 101
 
