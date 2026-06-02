@@ -54,7 +54,7 @@ class TestGamma:
 
 
 class TestDelta:
-    """Worker C2 owns delta — primary test surface for this PR."""
+    """Worker C2 owns delta — verified in PR #194."""
 
     def test_positive(self):
         assert delta(5) == -6
@@ -73,3 +73,86 @@ class TestDelta:
 
     def test_large(self):
         assert delta(1000) == -1001
+
+
+class TestLockReservation:
+    """Programmatic verification of domain lock coexistence and isolation."""
+
+    def test_locks_exist(self):
+        import json
+        log_path = os.path.join(os.path.dirname(__file__), "pr_domain_locks.jsonl")
+        assert os.path.exists(log_path)
+        
+        expected_locks = {
+            192: "alpha",
+            193: "beta",
+            194: "delta"
+        }
+        found_locks = {}
+        
+        with open(log_path, "r") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                    if entry.get("domain") == "demo" and entry.get("status") == "active":
+                        pr = entry.get("pr")
+                        symbols = entry.get("symbols", [])
+                        if pr in expected_locks and expected_locks[pr] in symbols:
+                            found_locks[pr] = expected_locks[pr]
+                except Exception:
+                    pass
+        
+        for pr, symbol in expected_locks.items():
+            assert pr in found_locks, f"Active reservation for PR #{pr} holding symbol '{symbol}' not found in pr_domain_locks.jsonl"
+
+    def test_domain_lock_check_programmatic(self):
+        from merge_train.domain_lock import load_registry, LockLog, check
+        
+        registry_path = os.path.join(os.path.dirname(__file__), "merge_train_demo", "file_domains.yaml")
+        log_path = os.path.join(os.path.dirname(__file__), "pr_domain_locks.jsonl")
+        
+        registry = load_registry(registry_path)
+        log = LockLog(log_path)
+        
+        target_file = "merge_train_demo/multi_func.py"
+        
+        # 1. Verification for Owner (PR 193 owns beta)
+        res_beta_owner = check(
+            log, registry,
+            files=[target_file],
+            pr=193,
+            touched_symbols_by_path={target_file: {"beta"}}
+        )
+        assert res_beta_owner.ok, "Beta should be free to modify for PR #193"
+        
+        # 2. Verification for Non-Owner (PR 999 blocks on beta)
+        res_beta_blocked = check(
+            log, registry,
+            files=[target_file],
+            pr=999,
+            touched_symbols_by_path={target_file: {"beta"}}
+        )
+        assert not res_beta_blocked.ok, "Beta should be blocked for PR #999"
+        assert res_beta_blocked.held[0][1].pr == 193, "Beta should be held by PR #193"
+        
+        # 3. Verification for Sibling Worker A2 (PR 999 blocks on alpha, held by PR 192)
+        res_alpha_blocked = check(
+            log, registry,
+            files=[target_file],
+            pr=999,
+            touched_symbols_by_path={target_file: {"alpha"}}
+        )
+        assert not res_alpha_blocked.ok, "Alpha should be blocked for PR #999"
+        assert res_alpha_blocked.held[0][1].pr == 192, "Alpha should be held by PR #192"
+        
+        # 4. Verification for Sibling Worker C2 (PR 999 blocks on delta, held by PR 194)
+        res_delta_blocked = check(
+            log, registry,
+            files=[target_file],
+            pr=999,
+            touched_symbols_by_path={target_file: {"delta"}}
+        )
+        assert not res_delta_blocked.ok, "Delta should be blocked for PR #999"
+        assert res_delta_blocked.held[0][1].pr == 194, "Delta should be held by PR #194"

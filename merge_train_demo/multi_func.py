@@ -7,7 +7,7 @@ symbol-level reservation scheme.
 
 
 def alpha(x: int) -> int:
-    """Returns x doubled. Reserved by Worker A in the demo."""
+    """Returns x doubled. Reserved by Worker A2 in the demo."""
     return x * 2
 
 
@@ -22,5 +22,5 @@ def gamma(x: int) -> int:
 
 
 def delta(x: int) -> int:
-    """Returns -(x + 1). Reserved by Worker C in the demo."""
+    """Returns -(x + 1). Reserved by Worker C2 in the demo."""
     return -x - 1
