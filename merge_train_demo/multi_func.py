@@ -17,7 +17,7 @@ def beta(x: Union[int, str]) -> int:
     """Returns x squared plus 100. Reserved by Worker B in the demo."""
     if isinstance(x, str):
         x = int(x)
-    return x * x + 100
+    return int(x * x + 100)
 
 
 def gamma(x: int) -> int:
@@ -30,19 +30,9 @@ def delta(x: int) -> int:
     return -x - 1
 
 
-def helper_a(x: int) -> int:
-    """Identity. Reserved by Worker A3 alongside alpha."""
-    return x
-
-
 def helper_b(x: int) -> int:
     """Increment. Reserved by Worker B3 alongside beta."""
     return x + 1
-
-
-def helper_c(x: int) -> int:
-    """Decrement. Reserved by Worker C3 alongside delta."""
-    return x - 1
 
 
 def helper_d(x: int) -> int:

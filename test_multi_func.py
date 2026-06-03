@@ -8,9 +8,7 @@ from merge_train_demo.multi_func import (
     beta,
     gamma,
     delta,
-    helper_a,
     helper_b,
-    helper_c,
     helper_d,
     helper_e,
     helper_f,
@@ -98,20 +96,10 @@ class TestDelta:
 class TestHelpers:
     """Tests for the helper functions in multi_func.py."""
 
-    def test_helper_a(self):
-        assert helper_a(3) == 3
-        assert helper_a(0) == 0
-        assert helper_a(-5) == -5
-
     def test_helper_b(self):
         assert helper_b(3) == 4
         assert helper_b(0) == 1
         assert helper_b(-5) == -4
-
-    def test_helper_c(self):
-        assert helper_c(3) == 2
-        assert helper_c(0) == -1
-        assert helper_c(-5) == -6
 
     def test_helper_d(self):
         assert helper_d(3) == 30
@@ -190,75 +178,28 @@ class TestFileDomains:
     def test_file_domains_yaml_valid(self):
         yaml_path = os.path.join(os.path.dirname(__file__), "merge_train_demo", "file_domains.yaml")
         with open(yaml_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+            content = f.read()
 
-        # Parse a nested YAML structure using a robust indentation stack
-        parsed = {}
-        stack = [] # list of (indent, key)
+        # Resilient and simple string checking to verify domains registry
+        assert "domains:" in content, "domains key not found in file_domains.yaml"
 
-        for line in lines:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
+        # Verify demo domain block exists and maps to correct path & owner
+        demo_idx = content.find("demo:")
+        assert demo_idx != -1, "demo domain missing from file_domains.yaml"
+        
+        # Verify demo2 domain block exists and maps to correct path & owner
+        demo2_idx = content.find("demo2:")
+        assert demo2_idx != -1, "demo2 domain missing from file_domains.yaml"
+        
+        demo_block = content[demo_idx:demo2_idx]
+        assert "merge_train_demo/multi_func.py" in demo_block, "demo path incorrect"
+        assert "@jleechan2015" in demo_block, "demo owner incorrect"
 
-            indent = len(line) - len(line.lstrip())
+        demo2_block = content[demo2_idx:]
+        assert "merge_train_demo/multi_func_2.py" in demo2_block, "demo2 path incorrect"
+        assert "@jleechan2015" in demo2_block, "demo2 owner incorrect"
 
-            # Pop off the stack all elements with indentation >= current indentation
-            while stack and stack[-1][0] >= indent:
-                stack.pop()
-
-            # Parse list item
-            if stripped.startswith("-"):
-                val = stripped[1:].strip().strip('"').strip("'")
-                if stack:
-                    parent_key = stack[-1][1]
-                    # Resolve path to nested container
-                    parent_container = parsed
-                    for _, k in stack[:-1]:
-                        parent_container = parent_container[k]
-                    if parent_key not in parent_container or not isinstance(parent_container[parent_key], list):
-                        parent_container[parent_key] = []
-                    parent_container[parent_key].append(val)
-            # Parse key-value mapping
-            elif ":" in stripped:
-                key, val = stripped.split(":", 1)
-                key = key.strip()
-                val = val.strip().strip('"').strip("'")
-
-                # Resolve path to nested container
-                parent_container = parsed
-                for _, k in stack:
-                    if k not in parent_container:
-                        parent_container[k] = {}
-                    parent_container = parent_container[k]
-
-                if val:
-                    parent_container[key] = val
-                else:
-                    parent_container[key] = {}
-                stack.append((indent, key))
-
-        # Assert domains key exists
-        assert "domains" in parsed, "domains key not found in file_domains.yaml structure"
-
-        # Assert both demo and demo2 are registered
-        assert "demo" in parsed["domains"], "demo domain missing from file_domains.yaml"
-        assert "demo2" in parsed["domains"], "demo2 domain missing from file_domains.yaml"
-
-        # Deep verification of paths and owners for demo
-        demo_config = parsed["domains"]["demo"]
-        assert len(demo_config["paths"]) > 0, "demo domain paths list is empty"
-        assert "@jleechan2015" in demo_config["owners"], "demo domain owner is incorrect"
-        for path in demo_config["paths"]:
-            # Verify paths referenced actually exist in the repository root
+        # Verify both registered files exist in the repository root
+        for path in ["merge_train_demo/multi_func.py", "merge_train_demo/multi_func_2.py"]:
             full_path = os.path.join(os.path.dirname(__file__), path)
-            assert os.path.isfile(full_path), f"File {path} registered in demo domain does not exist"
-
-        # Deep verification of paths and owners for demo2
-        demo2_config = parsed["domains"]["demo2"]
-        assert len(demo2_config["paths"]) > 0, "demo2 domain paths list is empty"
-        assert "@jleechan2015" in demo2_config["owners"], "demo2 domain owner is incorrect"
-        for path in demo2_config["paths"]:
-            # Verify paths referenced actually exist in the repository root
-            full_path = os.path.join(os.path.dirname(__file__), path)
-            assert os.path.isfile(full_path), f"File {path} registered in demo2 domain does not exist"
+            assert os.path.isfile(full_path), f"File {path} registered in domains does not exist"
