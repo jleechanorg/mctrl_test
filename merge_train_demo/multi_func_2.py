@@ -1,4 +1,4 @@
-"""Second file for multi-file contention demo.
+"""Second file for multi-file contention symbol-level lock demo.
 
 Six functions in a separate domain. Workers will reserve symbols
 ACROSS this file AND multi_func.py via reserve-plan.
