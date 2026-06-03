@@ -5,13 +5,13 @@ PRs can edit DISJOINT functions concurrently under merge_train's
 symbol-level reservation scheme.
 """
 
+from typing import Union
+
 
 def alpha(x: int) -> int:
     """Returns x doubled. Reserved by Worker A in the demo."""
     return x * 2
 
-
-from typing import Union
 
 def beta(x: Union[int, str]) -> int:
     """Returns x squared plus 100. Reserved by Worker B in the demo."""

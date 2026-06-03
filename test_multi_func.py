@@ -151,3 +151,22 @@ class TestMultiFunc2:
         assert zeta2(5) == 6005
         assert zeta2(0) == 6000
 
+
+class TestCodeQuality:
+    """Verifies PEP 8 and quality constraints on the source files."""
+
+    def test_imports_at_top_of_file(self):
+        import ast
+        
+        file_path = os.path.join(os.path.dirname(__file__), "merge_train_demo", "multi_func.py")
+        with open(file_path, "r") as f:
+            tree = ast.parse(f.read())
+            
+        seen_function = False
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef):
+                seen_function = True
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                assert not seen_function, f"Import statement found after a function definition at line {node.lineno}"
+
+
