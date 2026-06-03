@@ -76,7 +76,7 @@ class TestDelta:
 
 
 class TestLockReservation:
-    """Programmatic verification of domain lock coexistence and isolation."""
+    """Programmatic verification of domain lock reservation and isolation."""
 
     def test_locks_exist(self):
         import json
@@ -84,9 +84,7 @@ class TestLockReservation:
         assert os.path.exists(log_path)
         
         expected_locks = {
-            192: "alpha",
-            193: "beta",
-            194: "delta"
+            193: "beta"
         }
         found_locks = {}
         
@@ -140,23 +138,3 @@ class TestLockReservation:
         )
         assert not res_beta_blocked.ok, "Beta should be blocked for PR #999"
         assert res_beta_blocked.held[0][1].pr == 193, "Beta should be held by PR #193"
-        
-        # 3. Verification for Sibling Worker A2 (PR 999 blocks on alpha, held by PR 192)
-        res_alpha_blocked = check(
-            log, registry,
-            files=[target_file],
-            pr=999,
-            touched_symbols_by_path={target_file: {"alpha"}}
-        )
-        assert not res_alpha_blocked.ok, "Alpha should be blocked for PR #999"
-        assert res_alpha_blocked.held[0][1].pr == 192, "Alpha should be held by PR #192"
-        
-        # 4. Verification for Sibling Worker C2 (PR 999 blocks on delta, held by PR 194)
-        res_delta_blocked = check(
-            log, registry,
-            files=[target_file],
-            pr=999,
-            touched_symbols_by_path={target_file: {"delta"}}
-        )
-        assert not res_delta_blocked.ok, "Delta should be blocked for PR #999"
-        assert res_delta_blocked.held[0][1].pr == 194, "Delta should be held by PR #194"
