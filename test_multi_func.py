@@ -163,7 +163,7 @@ class TestCodeQuality:
     def test_imports_at_top_of_file(self):
         for name in ["multi_func.py", "multi_func_2.py"]:
             file_path = os.path.join(os.path.dirname(__file__), "merge_train_demo", name)
-            with open(file_path, "r") as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 tree = ast.parse(f.read())
                 
             seen_function = False
@@ -177,7 +177,7 @@ class TestCodeQuality:
         # Every demo module docstring must contain the phrase "symbol-level lock demo"
         for name in ["multi_func.py", "multi_func_2.py"]:
             file_path = os.path.join(os.path.dirname(__file__), "merge_train_demo", name)
-            with open(file_path, "r") as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
             tree = ast.parse(content)
             docstring = ast.get_docstring(tree)
@@ -189,14 +189,12 @@ class TestFileDomains:
 
     def test_file_domains_yaml_valid(self):
         yaml_path = os.path.join(os.path.dirname(__file__), "merge_train_demo", "file_domains.yaml")
-        with open(yaml_path, "r") as f:
+        with open(yaml_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
-        # Parse a minimal YAML structure manually to avoid dependency issues on CI.
+        # Parse a nested YAML structure using a robust indentation stack
         parsed = {}
-        current_domain = None
-        current_section = None
-        in_domains = False
+        stack = [] # list of (indent, key)
 
         for line in lines:
             stripped = line.strip()
@@ -205,22 +203,40 @@ class TestFileDomains:
 
             indent = len(line) - len(line.lstrip())
 
-            if indent == 0 and stripped.startswith("domains:"):
-                in_domains = True
-                parsed["domains"] = {}
-                continue
+            # Pop off the stack all elements with indentation >= current indentation
+            while stack and stack[-1][0] >= indent:
+                stack.pop()
 
-            if in_domains:
-                if indent == 2 and stripped.endswith(":"):
-                    current_domain = stripped[:-1]
-                    parsed["domains"][current_domain] = {"paths": [], "owners": []}
-                    current_section = None
-                elif indent == 4 and stripped.endswith(":"):
-                    current_section = stripped[:-1]
-                elif indent == 6 and stripped.startswith("-"):
-                    val = stripped[1:].strip().strip('"').strip("'")
-                    if current_domain and current_section:
-                        parsed["domains"][current_domain][current_section].append(val)
+            # Parse list item
+            if stripped.startswith("-"):
+                val = stripped[1:].strip().strip('"').strip("'")
+                if stack:
+                    parent_key = stack[-1][1]
+                    # Resolve path to nested container
+                    parent_container = parsed
+                    for _, k in stack[:-1]:
+                        parent_container = parent_container[k]
+                    if parent_key not in parent_container or not isinstance(parent_container[parent_key], list):
+                        parent_container[parent_key] = []
+                    parent_container[parent_key].append(val)
+            # Parse key-value mapping
+            elif ":" in stripped:
+                key, val = stripped.split(":", 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+
+                # Resolve path to nested container
+                parent_container = parsed
+                for _, k in stack:
+                    if k not in parent_container:
+                        parent_container[k] = {}
+                    parent_container = parent_container[k]
+
+                if val:
+                    parent_container[key] = val
+                else:
+                    parent_container[key] = {}
+                stack.append((indent, key))
 
         # Assert domains key exists
         assert "domains" in parsed, "domains key not found in file_domains.yaml structure"
