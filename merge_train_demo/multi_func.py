@@ -1,6 +1,6 @@
 """Multi-symbol file for merge_train symbol-level lock demo.
 
-Four independent top-level functions. Used as a test target — multiple
+Several top-level functions and helper utilities. Used as a test target — multiple
 PRs can edit DISJOINT functions concurrently under merge_train's
 symbol-level reservation scheme.
 """

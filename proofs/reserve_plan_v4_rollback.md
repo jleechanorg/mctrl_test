@@ -59,10 +59,10 @@ The command failed with exit status `1`.
 ### Verification of Log Entries (Atomic Rollback):
 The lock log confirms that the first two legs (`helper_d` and `helper_e`) were initially reserved but immediately released with `note="rollback:reserve_plan"` when the third leg failed, leaving no active locks for PR #198:
 ```json
-{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-05-30T19:55:25Z","status":"active","closed_at":null,"note":null,"symbols":["helper_d"]}
-{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-05-30T19:55:25Z","status":"active","closed_at":null,"note":null,"symbols":["helper_e"]}
-{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-05-30T19:55:25Z","status":"released","closed_at":"2026-05-30T19:55:25Z","note":"rollback:reserve_plan","symbols":["helper_d"]}
-{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-05-30T19:55:25Z","status":"released","closed_at":"2026-05-30T19:55:25Z","note":"rollback:reserve_plan","symbols":["helper_e"]}
+{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-06-04T15:17:02Z","status":"active","closed_at":null,"note":null,"symbols":["helper_d"]}
+{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-06-04T15:17:02Z","status":"active","closed_at":null,"note":null,"symbols":["helper_e"]}
+{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-06-04T15:17:02Z","status":"released","closed_at":"2026-06-04T15:17:02Z","note":"rollback:reserve_plan","symbols":["helper_d"]}
+{"domain":"demo","pr":198,"agent":"mt-198","branch":"mt-test/worker-rollback","opened_at":"2026-06-04T15:17:02Z","status":"released","closed_at":"2026-06-04T15:17:02Z","note":"rollback:reserve_plan","symbols":["helper_e"]}
 ```
 
 ---
@@ -91,9 +91,9 @@ plan:
 ### Execution Command & Output:
 ```bash
 $ domain_lock --registry merge_train_demo/file_domains.yaml --log pr_domain_locks.jsonl reserve-plan --pr 198 --agent mt-198 --branch mt-test/worker-rollback --plan proofs/plan_rollback_attempt2.yaml
-RESERVED: demo	PR#198	mt-198	mt-test/worker-rollback	2026-05-30T19:55:29Z	active	symbols=helper_d
-RESERVED: demo	PR#198	mt-198	mt-test/worker-rollback	2026-05-30T19:55:29Z	active	symbols=helper_e
-RESERVED: demo	PR#198	mt-198	mt-test/worker-rollback	2026-05-30T19:55:29Z	active	symbols=gamma
+RESERVED: demo	PR#198	mt-198	mt-test/worker-rollback	2026-06-04T15:17:03Z	active	symbols=helper_d
+RESERVED: demo	PR#198	mt-198	mt-test/worker-rollback	2026-06-04T15:17:03Z	active	symbols=helper_e
+RESERVED: demo	PR#198	mt-198	mt-test/worker-rollback	2026-06-04T15:17:03Z	active	symbols=gamma
 ```
 
 ### Final Lock Registry Verification:
@@ -102,9 +102,9 @@ $ domain_lock --registry merge_train_demo/file_domains.yaml --log pr_domain_lock
 demo	PR#195	mt-195	mt-test/worker-A3	2026-05-30T19:55:18Z	active	symbols=alpha,helper_a
 demo	PR#196	mt-196	mt-test/worker-B3	2026-05-30T19:55:20Z	active	symbols=beta,helper_b
 demo	PR#197	mt-197	mt-test/worker-C3	2026-05-30T19:55:20Z	active	symbols=delta,helper_c
-demo	PR#198	mt-198	mt-test/worker-rollback	2026-05-30T19:55:29Z	active	symbols=helper_d
-demo	PR#198	mt-198	mt-test/worker-rollback	2026-05-30T19:55:29Z	active	symbols=helper_e
-demo	PR#198	mt-198	mt-test/worker-rollback	2026-05-30T19:55:29Z	active	symbols=gamma
+demo	PR#198	mt-198	mt-test/worker-rollback	2026-06-04T15:17:03Z	active	symbols=helper_d
+demo	PR#198	mt-198	mt-test/worker-rollback	2026-06-04T15:17:03Z	active	symbols=helper_e
+demo	PR#198	mt-198	mt-test/worker-rollback	2026-06-04T15:17:03Z	active	symbols=gamma
 ```
 
 All 3 legs of the disjoint plan succeeded atomically and were correctly recorded in the registry log.
