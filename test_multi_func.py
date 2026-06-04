@@ -84,7 +84,9 @@ class TestLockReservation:
         assert os.path.exists(log_path)
         
         expected_locks = {
-            193: "beta"
+            193: "beta",
+            192: "alpha",
+            194: "delta"
         }
         found_locks = {}
         
