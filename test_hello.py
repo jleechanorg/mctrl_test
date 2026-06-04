@@ -49,3 +49,10 @@ def test_greet_title_cases_lowercase_name():
     assert greet("bob smith") == "Hello, Bob Smith!"
 
 
+def test_greet_docstring_example_consistent():
+    """Verify that greet's docstring contains a consistent example."""
+    assert greet.__doc__ is not None
+    assert "Hello, Name!" in greet.__doc__
+
+
+
