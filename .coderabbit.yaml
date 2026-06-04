@@ -1,7 +1,6 @@
 # CodeRabbit configuration for mctrl_test
 language: en-US
 reviews:
-  approve: true
   request_changes_workflow: true
   auto_review:
     enabled: true
