@@ -2,6 +2,13 @@
 
 This document records authoritative evidence that the v4 `reserve-plan` command correctly implements atomic, all-or-nothing multi-leg symbol reservation with rollback under contention.
 
+## 🎥 Video Evidence (Mandatory)
+
+The live execution of the saturated state, rollback, and successful retry was captured using asciinema:
+- [Asciinema Cast File](reserve_plan_v4_rollback.cast)
+- Animated GIF of the session:
+  ![reserve-plan Rollback & Retry Playback](reserve_plan_v4_rollback.gif)
+
 ## 1. Saturated Demo State (Active Locks)
 
 To simulate a realistic concurrent workflow, the lock registry was populated with active locks for the three parallel v3 worker PRs:
