@@ -62,6 +62,15 @@ def test_greet_differs_from_hello():
     assert hello("jeffrey") == "HELLO, JEFFREY!"
 
 
+def test_greet_default_argument():
+    """Verify that greet supports a default argument of 'world'."""
+    assert greet() == "Hello, World!"
+
+
+def test_greet_mixed_and_uppercase_name():
+    """Verify that greet title-cases mixed-case and uppercase inputs."""
+    assert greet("jEfFrEy") == "Hello, Jeffrey!"
+    assert greet("JEFFREY") == "Hello, Jeffrey!"
 
 
 

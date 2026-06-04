@@ -11,7 +11,7 @@ def farewell(name: str = "world") -> str:
     return f"Farewell, {name}!"
 
 
-def greet(name: str) -> str:
+def greet(name: str = "world") -> str:
     """Return a title-case greeting for the given name.
 
     Unlike hello(), which returns an uppercase greeting, this function
