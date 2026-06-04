@@ -55,4 +55,13 @@ def test_greet_docstring_example_consistent():
     assert "Hello, Name!" in greet.__doc__
 
 
+def test_greet_differs_from_hello():
+    """Verify that greet output is different from hello output."""
+    assert greet("jeffrey") != hello("jeffrey")
+    assert greet("jeffrey") == "Hello, Jeffrey!"
+    assert hello("jeffrey") == "HELLO, JEFFREY!"
+
+
+
+
 
