@@ -94,16 +94,42 @@ class TestLockReservation:
                     continue
                 try:
                     entry = json.loads(line)
-                    if entry.get("domain") == "demo" and entry.get("status") == "active":
-                        pr = entry.get("pr")
-                        symbols = entry.get("symbols", [])
-                        if pr in expected_locks and expected_locks[pr] in symbols:
-                            found_locks[pr] = expected_locks[pr]
-                except Exception:
-                    pass
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("domain") == "demo" and entry.get("status") == "active":
+                    pr = entry.get("pr")
+                    symbols = entry.get("symbols", [])
+                    if pr in expected_locks and expected_locks[pr] in symbols:
+                        found_locks[pr] = expected_locks[pr]
         
         for pr, symbol in expected_locks.items():
             assert pr in found_locks, f"Active reservation for PR #{pr} holding symbol '{symbol}' not found in pr_domain_locks.jsonl"
+
+    def test_json_parsing_propagates_other_exceptions(self):
+        import unittest.mock as mock
+        import json
+        import pytest
+
+        class CustomException(Exception):
+            pass
+
+        log_path = os.path.join(os.path.dirname(__file__), "pr_domain_locks.jsonl")
+        
+        with mock.patch("json.loads", side_effect=CustomException("propagate me")):
+            with pytest.raises(CustomException):
+                with open(log_path, "r") as f:
+                    for line in f:
+                        if not line.strip():
+                            continue
+                        try:
+                            entry = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if entry.get("domain") == "demo" and entry.get("status") == "active":
+                            pr = entry.get("pr")
+                            symbols = entry.get("symbols", [])
+                            if pr in {193: "beta"} and "beta" in symbols:
+                                pass
 
     def test_domain_lock_check_programmatic(self):
         try:
