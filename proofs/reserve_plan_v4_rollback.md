@@ -16,6 +16,9 @@ To simulate a realistic concurrent workflow, the lock registry was populated wit
 - **PR #196 (Worker B3)**: holds `demo::beta` and `demo::helper_b`
 - **PR #197 (Worker C3)**: holds `demo::delta` and `demo::helper_c`
 
+![Saturated active locks listing](reserve_plan_v4_saturated.png)
+*Figure 1: Saturated active lock registry showing PR #195, #196, and #197.*
+
 ```bash
 $ domain_lock --registry merge_train_demo/file_domains.yaml --log pr_domain_locks.jsonl list --status active
 demo	PR#195	mt-195	mt-test/worker-A3	2026-05-30T19:55:18Z	active	symbols=alpha,helper_a
@@ -28,6 +31,9 @@ demo	PR#197	mt-197	mt-test/worker-C3	2026-05-30T19:55:20Z	active	symbols=delta,h
 ## 2. First Attempt: Contention & Atomic Rollback
 
 Worker rollback (PR #198) attempted to reserve a 3-leg plan containing `demo::helper_d` (free), `demo::helper_e` (free), and `demo::alpha` (deliberately conflicting with PR #195's lock).
+
+![reserve-plan rollback due to contention on alpha](reserve_plan_v4_rollback.png)
+*Figure 2: Atomic rollback on PR #198 first attempt due to alpha symbol contention.*
 
 ### Plan File (`proofs/plan_rollback_attempt1.yaml`):
 ```yaml
@@ -64,6 +70,9 @@ The lock log confirms that the first two legs (`helper_d` and `helper_e`) were i
 ## 3. Second Attempt: Successful Retry with Disjoint Plan
 
 PR #198 retried with a disjoint 3-leg plan containing `demo::helper_d` (free), `demo::helper_e` (free), and `demo::gamma` (free).
+
+![reserve-plan success on disjoint plan](reserve_plan_v4_success.png)
+*Figure 3: Successful 3-leg reservation for PR #198 disjoint retry plan.*
 
 ### Plan File (`proofs/plan_rollback_attempt2.yaml`):
 ```yaml
