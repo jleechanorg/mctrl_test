@@ -16,6 +16,10 @@ def greet(name: str = "world") -> str:
 
     Unlike hello(), which returns an uppercase greeting, this function
     returns a standard title-case formatting (e.g., "Hello, Name!").
+
+    Note: This function uses Python's standard `str.title()`, which has a
+    known limitation where names with internal capitalization (e.g., "McGregor")
+    are downcased to "Mcgregor".
     """
     return f"Hello, {name.title()}!"
 

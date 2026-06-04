@@ -73,4 +73,13 @@ def test_greet_mixed_and_uppercase_name():
     assert greet("JEFFREY") == "Hello, Jeffrey!"
 
 
+def test_greet_internal_capitalization_limitation():
+    """Verify how greet handles names with internal capitalization.
+
+    Note: This test documents the known limitation of using Python's str.title(),
+    where internal capitalization is lost (e.g., 'McGregor' becomes 'Mcgregor').
+    """
+    assert greet("McGregor") == "Hello, Mcgregor!"
+
+
 
