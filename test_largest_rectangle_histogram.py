@@ -49,6 +49,11 @@ class TestLargestRectangleArea:
         heights = [2, 1, 2]
         assert largest_rectangle_area(heights) == 3
 
+    def test_mountain(self):
+        """Test with mountain shape - max in middle."""
+        heights = [1, 2, 1]
+        assert largest_rectangle_area(heights) == 3
+
     def test_empty(self):
         """Test with empty array."""
         assert largest_rectangle_area([]) == 0
