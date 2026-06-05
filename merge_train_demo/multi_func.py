@@ -7,8 +7,8 @@ symbol-level reservation scheme.
 
 
 def alpha(x: int) -> int:
-    """Returns x doubled. Reserved by Worker A in the demo."""
-    return x * 2
+    """Returns x doubled plus one. Reserved by Worker A in the demo."""
+    return x * 2 + 1
 
 
 def beta(x: int) -> int:
