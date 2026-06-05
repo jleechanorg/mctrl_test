@@ -52,5 +52,5 @@ def helper_e(x: int) -> int:
 
 
 def helper_f(x: int) -> int:
-    """Unreserved spare slot."""
-    return x * 1000
+    """Unreserved spare slot. Reserved and modified by Worker M2 (PR #200)."""
+    return x * 1000 + 1

@@ -5,7 +5,22 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "merge_train_demo"))
 
-from multi_func import alpha, beta, gamma, delta
+from multi_func import alpha, beta, gamma, delta, helper_f
+from multi_func_2 import alpha2, beta2, gamma2, delta2, epsilon2, zeta2
+
+
+class TestHelperF:
+    """Worker M2 owns helper_f — verify its mutated behavior."""
+
+    def test_helper_f_green(self):
+        # Green phase of TDD
+        assert helper_f(2) == 2001
+
+    def test_helper_f_zero(self):
+        assert helper_f(0) == 1
+
+    def test_helper_f_negative(self):
+        assert helper_f(-3) == -2999
 
 
 class TestAlpha:
@@ -110,13 +125,14 @@ class TestHelpers:
 
     def test_helper_f(self):
         from multi_func import helper_f
-        assert helper_f(3) == 3000
-        assert helper_f(0) == 0
-        assert helper_f(-5) == -5000
+        # Mutated behavior for Worker M2
+        assert helper_f(3) == 3001
+        assert helper_f(0) == 1
+        assert helper_f(-5) == -4999
 
 
 class TestMultiFunc2:
-    """Tests for the functions in multi_func_2.py."""
+    """Tests for the functions in multi_func_2.py (Worker M2 owns beta2)."""
 
     def test_alpha2(self):
         from multi_func_2 import alpha2
@@ -127,6 +143,10 @@ class TestMultiFunc2:
         from multi_func_2 import beta2
         assert beta2(5) == 2005
         assert beta2(0) == 2000
+
+    def test_beta2_green(self):
+        # Green phase of TDD
+        assert beta2(3) == 2003
 
     def test_gamma2(self):
         from multi_func_2 import gamma2
@@ -147,4 +167,3 @@ class TestMultiFunc2:
         from multi_func_2 import zeta2
         assert zeta2(5) == 6005
         assert zeta2(0) == 6000
-
