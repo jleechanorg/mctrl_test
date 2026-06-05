@@ -4,7 +4,13 @@ This document provides the Red-Green TDD evidence for verifying the slot-04 stat
 
 ## Red Phase (Initial Failure)
 
+**Commit**: `d72228e34dc2ae9f42b6beada1e914ccd1e5639f`
+**Git Status**:
+```text
+?? test_slot04.py
 ```
+
+```console
 ============================= test session starts ==============================
 platform darwin -- Python 3.13.7, pytest-9.0.3, pluggy-1.6.0
 rootdir: /Users/jleechan/projects/mctrl_test
@@ -36,7 +42,14 @@ FAILED test_slot04.py::test_slot_04_verification_comment - AssertionError: as...
 
 ## Green Phase (Successful Verification)
 
+**Commit**: `799a01947f61c220f4d46265fca789b74777a2c6`
+**Git Status**:
+```text
+# branch: merge-train-e2e/20260519T082805Z/slot-04
+# clean
 ```
+
+```console
 ============================= test session starts ==============================
 platform darwin -- Python 3.13.7, pytest-9.0.3, pluggy-1.6.0
 rootdir: /Users/jleechan/projects/mctrl_test
