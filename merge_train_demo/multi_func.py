@@ -1,14 +1,14 @@
 """Multi-symbol file for merge_train symbol-level lock demo.
 
-Four independent top-level functions. Used as a test target — multiple
+Several top-level functions and helper utilities. Used as a test target — multiple
 PRs can edit DISJOINT functions concurrently under merge_train's
 symbol-level reservation scheme.
 """
 
 
 def alpha(x: int) -> int:
-    """Returns x doubled. Reserved by Worker A in the demo."""
-    return x * 2
+    """Returns x doubled plus one. Reserved by Worker A in the demo."""
+    return x * 2 + 1
 
 
 def beta(x: int) -> int:
@@ -17,8 +17,8 @@ def beta(x: int) -> int:
 
 
 def gamma(x: int) -> int:
-    """Returns x cubed. Unreserved in the demo."""
-    return x ** 3
+    """Returns x cubed plus one. Unreserved in the demo."""
+    return x ** 3 + 1
 
 
 def delta(x: int) -> int:
@@ -43,12 +43,12 @@ def helper_c(x: int) -> int:
 
 def helper_d(x: int) -> int:
     """Unreserved spare slot."""
-    return x * 10
+    return x * 10 + 1
 
 
 def helper_e(x: int) -> int:
     """Unreserved spare slot."""
-    return x * 100
+    return x * 100 + 1
 
 
 def helper_f(x: int) -> int:

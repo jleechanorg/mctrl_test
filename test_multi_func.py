@@ -27,13 +27,13 @@ class TestAlpha:
     """Worker A owns alpha — these verify baseline behavior."""
 
     def test_positive(self):
-        assert alpha(3) == 6
+        assert alpha(3) == 7
 
     def test_zero(self):
-        assert alpha(0) == 0
+        assert alpha(0) == 1
 
     def test_negative(self):
-        assert alpha(-4) == -8
+        assert alpha(-4) == -7
 
 
 class TestBeta:
@@ -56,16 +56,16 @@ class TestGamma:
     """Unreserved — verify baseline."""
 
     def test_positive(self):
-        assert gamma(2) == 8
+        assert gamma(2) == 9
 
     def test_zero(self):
-        assert gamma(0) == 0
+        assert gamma(0) == 1
 
     def test_negative(self):
-        assert gamma(-2) == -8
+        assert gamma(-2) == -7
 
     def test_one(self):
-        assert gamma(1) == 1
+        assert gamma(1) == 2
 
 
 class TestDelta:
@@ -113,15 +113,15 @@ class TestHelpers:
 
     def test_helper_d(self):
         from multi_func import helper_d
-        assert helper_d(3) == 30
-        assert helper_d(0) == 0
-        assert helper_d(-5) == -50
+        assert helper_d(3) == 31
+        assert helper_d(0) == 1
+        assert helper_d(-5) == -49
 
     def test_helper_e(self):
         from multi_func import helper_e
-        assert helper_e(3) == 300
-        assert helper_e(0) == 0
-        assert helper_e(-5) == -500
+        assert helper_e(3) == 301
+        assert helper_e(0) == 1
+        assert helper_e(-5) == -499
 
     def test_helper_f(self):
         from multi_func import helper_f
