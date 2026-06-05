@@ -37,7 +37,7 @@ def largest_rectangle_area(heights: List[int]) -> int:
     max_area = 0
 
     # Add sentinel to flush remaining bars in stack
-    for i, height in enumerate(heights + [0]):
+    for i, height in enumerate(heights):
         # While current bar is shorter than stack top, calculate areas
         while stack and heights[stack[-1]] > height:
             h = heights[stack.pop()]
