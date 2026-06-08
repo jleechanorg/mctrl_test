@@ -46,3 +46,14 @@ def test_division_by_zero_and_underflow():
     # Division resulting in zero (1 // 2 = 0) which is invalid in Roman numerals
     with pytest.raises(ValueError):
         divide("I", "II")
+
+def test_inline_comments_exist():
+    import inspect
+    import df_demo3.roman_calc as rc
+    for func in [rc.add, rc.subtract, rc.multiply, rc.divide]:
+        source = inspect.getsource(func)
+        # Look for a comment line (starts with #, ignoring whitespace) within the function body
+        lines = [line.strip() for line in source.splitlines()]
+        has_comment = any(line.startswith("#") for line in lines)
+        assert has_comment, f"Function {func.__name__} has no inline comments"
+
