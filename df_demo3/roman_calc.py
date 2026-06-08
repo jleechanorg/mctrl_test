@@ -75,6 +75,5 @@ def divide(a: str, b: str) -> str:
     """
     val_a = from_roman(a)
     val_b = from_roman(b)
-    if val_b == 0:
-        raise ValueError("Division by zero is not defined")
     return to_roman(val_a // val_b)
+
