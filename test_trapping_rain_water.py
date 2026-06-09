@@ -63,3 +63,17 @@ def test_single_peak() -> None:
 def test_large_values() -> None:
     """Large-height valley [100000,0,100000] traps 100000 units."""
     assert trap([100000, 0, 100000]) == 100000
+
+
+def test_invalid_inputs() -> None:
+    """Validate input type and values."""
+    import pytest
+    with pytest.raises(TypeError):
+        trap("not a list")  # type: ignore
+    with pytest.raises(TypeError):
+        trap([1, 2, "three"])  # type: ignore
+    with pytest.raises(TypeError):
+        trap([1, 2.5, 3])  # type: ignore
+    with pytest.raises(ValueError):
+        trap([1, -2, 3])
+
