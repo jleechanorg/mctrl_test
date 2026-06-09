@@ -11,6 +11,15 @@ Solution uses two-pointer approach: O(n) time, O(1) space.
 
 def trap(height: list[int]) -> int:
     """Calculate trapped rain water using two pointers."""
+    if not isinstance(height, list):
+        raise TypeError("Input 'height' must be a list")
+
+    for x in height:
+        if type(x) is not int:
+            raise TypeError("All elements in 'height' must be integers")
+        if x < 0:
+            raise ValueError("All elements in 'height' must be non-negative")
+
     if len(height) < 3:
         return 0
 
